@@ -875,7 +875,7 @@ def test_script_set_run_submits_batch(ctx, monkeypatch) -> None:
         USER,
     )
 
-    assert result["run_batch_id"] == batch_id
+    assert result.run_batch_id == str(batch_id)
     assert submitted == [
         (("job", batch_id), f"teacher_judge_script_run_batch:{batch_id}")
     ]
@@ -893,7 +893,7 @@ def test_run_batch_and_run_listing_routes(ctx, monkeypatch) -> None:
     runs = routes.list_session_runs(class_id, item.id, db, USER, 5, 10)
 
     assert batch["run_batch_id"] == batch_id
-    assert runs == [class_id, item.id, 5, 10]
+    assert runs == [class_id, item.id, 5, 10, None]
 
 
 def _artifact_getter(db, monkeypatch, artifact):

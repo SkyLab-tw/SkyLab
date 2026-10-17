@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.ai.teacher_judge import script_run_service as svc
+from app.ai.teacher_judge.run_record_service import update_batch
 from app.ai.teacher_judge.schemas import TeacherJudgeScriptSetRunRequest
 from app.models import TeachingClass, User, UserRole
 from app.models.teacher_judge_script_artifact import (
@@ -28,7 +29,7 @@ from app.models.teacher_judge_student_submission import (
 )
 from app.models.teaching_class import TeachingClassStudent
 from app.services.course import ai_assignment_service
-from tests.ai.teacher_judge.helpers import make_session
+from tests.ai.teacher_judge.helpers import make_script_workspace, make_session
 
 
 def _user(email: str) -> User:
@@ -50,12 +51,14 @@ def test_progress_lists_every_student_with_their_reported_items() -> None:
         [TeachingClassStudent(class_id=teaching_class.id, user_id=user.id) for user in (done, partial, silent)]
         + [TeachingClassStudent(class_id=teaching_class.id, user_id=teacher.id, status="instructor")]
     )
-    judge = TeacherJudgeSession(teaching_class_id=teaching_class.id, title="第 3 週")
+    judge = make_script_workspace(db, teaching_class.id)
+    judge.active_artifact_set_id = uuid.uuid4()
     db.add(judge)
     db.flush()
     db.add(
         TeacherJudgeScriptArtifact(
             teaching_class_id=teaching_class.id, session_id=judge.id, name="第 3 週",
+            artifact_set_id=judge.active_artifact_set_id, target_node_key="web",
             template_key="linux", script_content="print('{}')",
             status=TeacherJudgeScriptStatus.approved,
             rubric_snapshot_json={"items": [
@@ -103,10 +106,13 @@ def test_set_run_request_requires_students_only_for_student_scope() -> None:
 
 def _two_machine_set(db, class_id: uuid.UUID) -> uuid.UUID:
     set_id = uuid.uuid4()
+    workspace = make_script_workspace(db, class_id)
+    workspace.active_artifact_set_id = set_id
+    db.add(workspace)
     for node in ("web", "db"):
         db.add(
             TeacherJudgeScriptArtifact(
-                teaching_class_id=class_id, artifact_set_id=set_id, target_node_key=node,
+                teaching_class_id=class_id, artifact_set_id=set_id, target_node_key=node, session_id=workspace.id,
                 name=node, template_key="linux", script_content="print('{}')",
                 rubric_snapshot_json={"items": []}, status=TeacherJudgeScriptStatus.approved,
             )
@@ -128,27 +134,18 @@ def test_student_scoped_batch_only_runs_machines_those_students_have(
         "_class_member_by_node_key",
         lambda **_: {"web": [{"user_id": alice}], "db": [{"user_id": bob}]},
     )
-    calls: list[dict[str, Any]] = []
-
-    def fake_create(**kwargs: Any) -> None:
-        calls.append(kwargs)
-        db.add(
-            TeacherJudgeScriptRun(
-                artifact_id=kwargs["artifact_id"],
-                run_batch_id=kwargs["run_batch_id"],
-                status=TeacherJudgeScriptRunStatus.pending,
-            )
-        )
-
-    monkeypatch.setattr(svc, "create_script_run", fake_create)
-
-    svc.create_script_run_batch(
+    batch = svc.create_script_run_batch(
         session=db, teaching_class_id=class_id, artifact_set_id=set_id,
         started_by=None, user_ids=[uuid.UUID(alice)],
     )
 
-    assert [call["target_node_key"] for call in calls] == ["web"]
-    assert calls[0]["user_ids"] == {alice}
+    assert [node.target_node_key for node in batch.nodes] == ["web"]
+    run = db.get(TeacherJudgeScriptRun, uuid.UUID(batch.nodes[0].run_id))
+    assert run.target_snapshot_json["preflight_results"][0]["user"]["id"] == alice
+    run.status = TeacherJudgeScriptRunStatus.failed
+    db.add(run)
+    update_batch(db, uuid.UUID(batch.run_batch_id))
+    db.commit()
 
     # 選到的學生在這組腳本的機器上都沒有 VM：不建立空的批次
     with pytest.raises(HTTPException) as exc:

@@ -32,6 +32,8 @@ function deferred() {
 }
 
 function fixture({ alreadyTyped = false } = {}) {
+  vi.spyOn(AiJudgeService, "getSessionProgress").mockResolvedValue({ items: [], students: [] });
+  vi.spyOn(AiJudgeService, "listSessionRunBatches").mockResolvedValue([]);
   const version = {
     id: "item-version",
     title: "Python 版本檢查",
@@ -140,7 +142,7 @@ function mountRubrics(state) {
 }
 
 function saveButton(container) {
-  return [...container.querySelectorAll("button")].find((button) => button.textContent.includes("儲存並製作"));
+  return [...container.querySelectorAll("button")].find((button) => button.textContent.includes("製作腳本"));
 }
 
 async function clickSave(container) {
@@ -150,7 +152,7 @@ async function clickSave(container) {
   await act(async () => button.click());
 }
 
-describe("一鍵儲存並製作", () => {
+describe("一鍵製作腳本", () => {
   test("自動保存 AI 與導師取證的 typed 更新，保留未變更項目，以新版本製作並通知跳頁", async () => {
     const state = fixture();
     const { container } = await mountRubrics(state);
@@ -294,7 +296,7 @@ describe("一鍵儲存並製作", () => {
     const state = fixture();
     // 一週一個對話：側邊欄列週次，選到第 1 週就是這個對話
     vi.spyOn(AiJudgeService, "listSessions").mockResolvedValue([{ id: "session-1", title: "測試檢查", selected_file_id: "file-1", status: "active", teaching_class_week_id: "week-1" }]);
-    const listSets = vi.spyOn(AiJudgeService, "listSessionScriptSets").mockResolvedValue([state.artifact]);
+    const listSets = vi.spyOn(AiJudgeService, "listSessionScriptSets").mockResolvedValue([{ ...state.artifact, is_active: true }]);
     vi.spyOn(AiJudgeService, "listSessionRuns").mockResolvedValue([]);
     const weeks = [{ id: "week-1", week_number: 1, session_date: "2026-09-01", title: "Linux 權限" }];
     const { container } = await mount(

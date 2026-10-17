@@ -1425,10 +1425,6 @@ def _generate_script_set(
             created_by=current_user.id,
         )
         raise
-    item.last_activity_at = get_datetime_utc()
-    item.updated_at = item.last_activity_at
-    session.add(item)
-    session.commit()
     return script_set
 
 
@@ -1565,26 +1561,28 @@ def create_session_script_set_run(
         started_by=current_user.id,
         session_id=session_id,
         user_ids=payload.user_ids if payload.target_scope == "students" else None,
+        run_batch_id=payload.run_batch_id,
     )
-    item.last_activity_at = get_datetime_utc()
-    item.updated_at = item.last_activity_at
-    session.add(item)
-    session.commit()
-    task_id = submit(
-        execute_script_run_batch(uuid.UUID(batch.run_batch_id)),
-        name=f"teacher_judge_script_run_batch:{batch.run_batch_id}",
-        task_id=f"teacher_judge_script_run_batch:{batch.run_batch_id}",
-    )
+    execution = execute_script_run_batch(uuid.UUID(batch.run_batch_id))
+    try:
+        task_id = submit(
+            execution,
+            name=f"teacher_judge_script_run_batch:{batch.run_batch_id}",
+            task_id=f"teacher_judge_script_run_batch:{batch.run_batch_id}",
+        )
+    except Exception:
+        execution.close()
+        logger.exception("Teacher Judge batch dispatch failed batch=%s", batch.run_batch_id)
+        task_id = ""
     if task_id == "":
         for node in batch.nodes:
             _mark_run_executor_failed(uuid.UUID(node.run_id), "背景執行器未接受任務。", reason_code="executor_unavailable")
         session.expire_all()
-    return get_script_run_batch_public(
-        session=session,
-        teaching_class_id=teaching_class_id,
-        run_batch_id=uuid.UUID(batch.run_batch_id),
-        session_id=session_id,
-    )
+        return get_script_run_batch_public(
+            session=session, teaching_class_id=teaching_class_id,
+            run_batch_id=uuid.UUID(batch.run_batch_id), session_id=session_id,
+        )
+    return batch
 
 
 @router.get(
@@ -1655,10 +1653,11 @@ def list_session_batches(
     teaching_class_id: uuid.UUID, session_id: uuid.UUID,
     session: SessionDep, current_user: InstructorUser,
     skip: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100),
+    artifact_set_id: uuid.UUID | None = None,
 ) -> list[TeacherJudgeRunBatchSummary]:
     _access(session, teaching_class_id, current_user)
     get_session(session, teaching_class_id, session_id)
-    return list_session_batch_summaries(session, teaching_class_id, session_id, skip, limit)
+    return list_session_batch_summaries(session, teaching_class_id, session_id, skip, limit, artifact_set_id)
 
 
 @router.get("/{session_id}/runs/{run_id}/targets", response_model=TeacherJudgeRunTargetPage)
@@ -1682,11 +1681,12 @@ def list_session_runs(
     current_user: InstructorUser,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    artifact_set_id: uuid.UUID | None = None,
 ) -> list[TeacherJudgeScriptRunSummary]:
     _access(session, teaching_class_id, current_user)
     get_session(session, teaching_class_id, session_id)
     return list_session_run_summaries(
-        session, teaching_class_id, session_id, skip, limit
+        session, teaching_class_id, session_id, skip, limit, artifact_set_id
     )
 
 

@@ -22,7 +22,7 @@ from app.models.teacher_judge_script_run import (
     TeacherJudgeScriptRunTargetScope,
 )
 from app.models.teaching_class import TeachingClassMachineNode
-from tests.ai.teacher_judge.helpers import make_session
+from tests.ai.teacher_judge.helpers import activate_script, make_session
 
 
 class _Result:
@@ -279,6 +279,7 @@ def _review_run(status: TeacherJudgeScriptRunStatus) -> TeacherJudgeScriptRun:
                 {
                     "vmid": 101,
                     "student_id": "s1",
+                    "status": status.value,
                     "parsed_result": {"checks": [{"id": "c1", "status": "warning"}]},
                     "teacher_review": {"feedback": "old"},
                 }
@@ -773,6 +774,8 @@ def _create(
     **kwargs: Any,
 ) -> Any:
     monkeypatch.setattr(svc, "get_artifact", lambda **_: artifact)
+    # These unit tests isolate target preparation; admission has integration tests.
+    monkeypatch.setattr(svc, "require_active_artifact", lambda *args, **kwargs: None)
     session = kwargs.pop("session", None) or _QueueSession(artifact=artifact)
     return svc.create_script_run(
         session=session,
@@ -1005,6 +1008,7 @@ def test_create_script_run_batch_paths(monkeypatch: pytest.MonkeyPatch) -> None:
 
     set_id = uuid.uuid4()
     artifact.artifact_set_id = set_id
+    activate_script(session, artifact)
     session.add(artifact)
     session.commit()
     with pytest.raises(HTTPException) as exc:
@@ -1036,7 +1040,11 @@ def test_create_script_run_batch_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     def failing_create(**_: Any) -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(svc, "create_script_run", failing_create)
+    monkeypatch.setattr(svc, "_class_member_by_node_key", lambda **kwargs: {
+        "web": [{"student_id": "student-1", "user_id": "user-1", "vmid": None, "node_key": "web"}],
+    })
+    create_record = svc._create_script_run_record
+    monkeypatch.setattr(svc, "_create_script_run_record", failing_create)
     with pytest.raises(RuntimeError):
         svc.create_script_run_batch(
             session=session,
@@ -1045,16 +1053,7 @@ def test_create_script_run_batch_paths(monkeypatch: pytest.MonkeyPatch) -> None:
             started_by=None,
         )
 
-    def fake_create(**kwargs: Any) -> None:
-        session.add(
-            TeacherJudgeScriptRun(
-                artifact_id=kwargs["artifact_id"],
-                run_batch_id=kwargs["run_batch_id"],
-                status=TeacherJudgeScriptRunStatus.pending,
-            )
-        )
-
-    monkeypatch.setattr(svc, "create_script_run", fake_create)
+    monkeypatch.setattr(svc, "_create_script_run_record", create_record)
     result = svc.create_script_run_batch(
         session=session,
         teaching_class_id=class_id,
