@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   pytest:
-    name: pytest (Python ${{ matrix.python-version }})
+    name: Backend Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

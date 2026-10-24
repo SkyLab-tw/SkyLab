@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   vitest:
-    name: vitest + build
+    name: Frontend Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
