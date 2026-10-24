@@ -283,6 +283,7 @@
   "AuditLogsTab.action.firewall_rule_create": "新增防火牆規則",
   "AuditLogsTab.action.firewall_rule_update": "更新防火牆規則",
   "AuditLogsTab.action.firewall_rule_delete": "刪除防火牆規則",
+  "AuditLogsTab.action.reverse_proxy_rule_update": "更新反向代理規則",
   "AuditLogsTab.action.reverse_proxy_rule_delete": "刪除反向代理規則",
   "AuditLogsTab.action.reverse_proxy_rule_sync": "同步反向代理規則",
   "AuditLogsTab.action.credential_update": "更新登入憑證",
