@@ -293,6 +293,7 @@
   "AuditLogsTab.action.firewall_rule_create": "ファイアウォールルールを追加",
   "AuditLogsTab.action.firewall_rule_update": "ファイアウォールルールを更新",
   "AuditLogsTab.action.firewall_rule_delete": "ファイアウォールルールを削除",
+  "AuditLogsTab.action.reverse_proxy_rule_update": "リバースプロキシルールを更新",
   "AuditLogsTab.action.reverse_proxy_rule_delete": "リバースプロキシルールを削除",
   "AuditLogsTab.action.reverse_proxy_rule_sync": "リバースプロキシルールを同期",
   "AuditLogsTab.action.credential_update": "ログイン資格情報を更新",
