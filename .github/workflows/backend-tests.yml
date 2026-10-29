@@ -139,8 +139,8 @@ jobs:
 
   # Concurrency stress tests (marker `performance`) time requests on a shared
   # GitHub runner, so they swing with the runner image: 20261025 pushed the
-  # p95 past the limit with no code change. They stay out of ci-pass; a
-  # failure leaves a warning annotation instead of blocking the merge.
+  # p95 past the limit with no code change. They stay out of ci-pass, so a
+  # failure shows as a red check on the PR but does not block the merge.
   performance:
     name: pytest performance (non-blocking)
     runs-on: ubuntu-latest
@@ -207,13 +207,7 @@ jobs:
         run: uv run bash scripts/prestart.sh
 
       - name: Run performance tests
-        id: perf
-        continue-on-error: true
         run: uv run pytest tests/ -v --tb=short -m performance
-
-      - name: Flag performance failures
-        if: steps.perf.outcome == 'failure'
-        run: echo "::warning title=Performance tests failed::See the 'Run performance tests' step log. This job does not block merging."
 
   lint:
     name: ruff + mypy
