@@ -249,7 +249,9 @@ export default function LifecycleCard({ vmid, resource, canManage, onChanged }) 
                   ? t("LifecycleCard.notIdle")
                   : idleHours >= 24
                     ? t("LifecycleCard.idleForDays", { count: Math.floor(idleHours / 24) })
-                    : t("LifecycleCard.idleForHours", { count: idleHours })}
+                    : idleHours >= 1
+                      ? t("LifecycleCard.idleForHours", { count: idleHours })
+                      : t("LifecycleCard.idleUnderHour")}
               </span>
               {idleHours != null && (
                 <span className={styles.mutedText}>
