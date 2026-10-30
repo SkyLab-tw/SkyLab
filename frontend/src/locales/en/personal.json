@@ -1226,6 +1226,7 @@
   "LifecycleCard.idleForDays_other": "Idle for {{count}} days",
   "LifecycleCard.idleForHours_one": "Idle for {{count}} hour",
   "LifecycleCard.idleForHours_other": "Idle for {{count}} hours",
+  "LifecycleCard.idleUnderHour": "Idle for less than an hour",
   "LifecycleCard.deletionLabel": "Scheduled deletion",
   "LifecycleCard.deletionHint": "Queued for deletion; data cannot be recovered",
   "LifecycleCard.extendTitle": "Request an expiry extension",

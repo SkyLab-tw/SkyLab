@@ -1201,6 +1201,7 @@
   "LifecycleCard.idleHint": "自 {{since}} 起 CPU 持續偏低，超過寬限時間會被關機",
   "LifecycleCard.idleForDays": "已閒置 {{count}} 天",
   "LifecycleCard.idleForHours": "已閒置 {{count}} 小時",
+  "LifecycleCard.idleUnderHour": "已閒置不到 1 小時",
   "LifecycleCard.deletionLabel": "預定刪除",
   "LifecycleCard.deletionHint": "已排入刪除佇列，資料將無法復原",
   "LifecycleCard.extendTitle": "申請延長到期日",
