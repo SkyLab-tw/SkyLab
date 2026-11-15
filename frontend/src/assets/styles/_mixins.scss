@@ -536,3 +536,20 @@
     box-shadow: $shadow;
   }
 }
+
+/* 側欄延伸出來的彈出（語言、帳號、背景任務）：跟側欄同一套玻璃，介面風格切到白底／黑底時自動變實色。
+   這類彈出疊在頁面內容上，液態玻璃的 2px 折射太清透、深色液態塗層太淡，背後的字會干擾閱讀：
+   這兩種改回毛玻璃濾鏡、加重塗層。頁面內容裡的選單（⋮、換週、開關機）仍用不透明的 var(--color-surface) */
+@mixin popover-glass($shadow: var(--shadow-lg)) {
+  @include glass-surface($shadow: $shadow);
+
+  :global(body[data-style="liquid"]) & {
+    --color-surface-glass-border: rgba(255, 255, 255, 0.5);
+    --glass-backdrop-filter: blur(12px) saturate(1.4);
+  }
+
+  :global(body.dark[data-style="liquid"]) & {
+    --color-surface-glass: rgba(22, 27, 38, 0.85);
+    --color-surface-glass-border: rgba(255, 255, 255, 0.07);
+  }
+}

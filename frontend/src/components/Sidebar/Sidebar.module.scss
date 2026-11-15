@@ -403,73 +403,6 @@
   }
 }
 
-/* ===== Popup animations ===== */
-@keyframes popupIn {
-  from { opacity: 0; transform: translateY(6px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
-}
-
-@keyframes popupOut {
-  from { opacity: 1; transform: translateY(0)   scale(1); }
-  to   { opacity: 0; transform: translateY(6px) scale(0.97); }
-}
-
-.popupOpening {
-  animation: popupIn 0.15s ease forwards;
-}
-
-.popupClosing {
-  animation: popupOut 0.15s ease forwards;
-}
-
-/* ===== Appearance Popup ===== */
-.appearanceWrap {
-  position: relative;
-}
-
-/* portal 到 body，位置由 usePopupPosition 以 inline style 決定
-   （側欄 overflow 裁切 + 收合時 72px 寬，彈窗留在側欄內必破版） */
-.appearancePopup {
-  position: fixed;
-  @include glass-surface($shadow: var(--shadow-md));
-  border-radius: $radius-12;
-  padding: $spacing-4;
-  @include flex-column;
-  gap: 2px;
-  z-index: 200;
-}
-
-.optionFlag {
-  font-size: 16px;
-  line-height: 1;
-  width: 18px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.appearanceOption {
-  display: flex;
-  align-items: center;
-  gap: $spacing-8;
-  padding: 7px $spacing-8;
-  border-radius: $radius-8;
-  font-size: $font-size-14;
-  color: var(--color-text-secondary);
-  width: 100%;
-  text-align: left;
-  transition: background $transition-base, color $transition-base;
-
-  &:hover {
-    background: var(--color-hover);
-    color: var(--color-text);
-  }
-
-  &.appearanceOptionActive {
-    background: var(--color-primary);
-    color: var(--color-text-on-primary);
-  }
-}
-
 /* ===== Bottom ===== */
 /* 分隔線由上方的 .divider 負責（原本的 border-top 吃玻璃邊框色，
    在淺色底上是白線，等於看不見） */
@@ -480,90 +413,30 @@
   flex-shrink: 0;
 }
 
-/* ===== User Popup ===== */
-/* portal 到 body，定位同 .appearancePopup 的說明 */
-.userPopup {
-  position: fixed;
-  @include glass-surface($shadow: var(--shadow-md));
-  border-radius: $radius-12;
-  padding: $spacing-4;
-  z-index: 200;
-}
-
-/* 液態玻璃的折射濾鏡會讓彈窗被背後的側欄文字干擾，
-   彈窗改用毛玻璃預設濾鏡確保可讀性
-   （表面塗層 liquid 已不覆寫、即為預設值，這裡毋須再蓋回） */
-:global(body[data-style="liquid"]) {
-  .userPopup,
-  .appearancePopup {
-    --color-surface-glass-border: rgba(255, 255, 255, 0.5);
-    --glass-backdrop-filter: blur(12px) saturate(1.4);
-  }
-}
-
-/* 深色底加重塗層，蓋住彈窗背後的側欄文字 */
-:global(body.dark[data-style="liquid"]) {
-  .userPopup,
-  .appearancePopup {
-    --color-surface-glass: rgba(22, 27, 38, 0.85);
-    --color-surface-glass-border: rgba(255, 255, 255, 0.07);
-  }
-}
-
-.userPopupHeader {
+/* ===== 帳號選單的頭（共用 ActionMenu 的 header） ===== */
+.menuUser {
   display: flex;
   align-items: center;
   gap: $spacing-8;
-  padding: $spacing-8;
+  min-width: 0;
 }
 
-.userPopupInfo {
+.menuUserText {
   @include flex-column;
   min-width: 0;
-
-  .userName {
-    font-size: $font-size-14;
-    font-weight: $font-weight-500;
-    color: var(--color-text);
-    @include text-truncate;
-  }
-
-  .userEmail {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    @include text-truncate;
-  }
 }
 
-.userPopupDivider {
-  height: 1px;
-  background: var(--color-border);
-  margin: $spacing-4 0;
-}
-
-.userPopupItem {
-  display: flex;
-  align-items: center;
-  gap: $spacing-8;
-  padding: 7px $spacing-8;
-  border-radius: $radius-8;
+.menuUserName {
   font-size: $font-size-14;
-  color: var(--color-text-secondary);
-  width: 100%;
-  text-align: left;
-  transition: background $transition-base, color $transition-base;
+  font-weight: $font-weight-500;
+  color: var(--color-text-primary);
+  @include text-truncate;
+}
 
-  &:hover {
-    background: var(--color-hover);
-    color: var(--color-text);
-  }
-
-  &.userPopupItemDanger {
-    color: var(--color-danger);
-    &:hover {
-      background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
-    }
-  }
+.menuUserEmail {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  @include text-truncate;
 }
 
 /* ===== User ===== */

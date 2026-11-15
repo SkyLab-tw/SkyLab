@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
@@ -10,6 +9,8 @@ import { baseFeatures } from "../../../components/DataTable/features";
 import LoadingState, { LoadingSpinner } from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import ErrorState from "../../../components/ErrorState/ErrorState";
+import ActionMenu from "../../../components/ActionMenu/ActionMenu";
+import ListboxPopover from "../../../components/ListboxPopover/ListboxPopover";
 import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
 import OctoAvatar from "../../../components/OctoPet/OctoAvatar";
@@ -18,6 +19,7 @@ import { useToast } from "../../../hooks/useToast";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useUnsavedChanges, useUnsavedChangesGuard } from "../../../contexts/UnsavedChangesContext";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import useElementWidth from "../../../hooks/useElementWidth";
 import useFileDrop from "../../../hooks/useFileDrop";
 import { useQueryErrorEffect, useQueryView } from "../../../hooks/useQueryLoadState";
 import {
@@ -146,11 +148,14 @@ export function ScriptGenerationNotice({
       data-workflow-status={workflowStatus}
     >
       <p className={styles.noticeProgressTitle}>
-        {isCreatingScript ? (
-          <Spinner size={16} />
-        ) : (
-          <MIcon name={isError ? "error_outline" : isSuccess ? "check_circle" : "autorenew"} size={16} />
-        )}
+        {/* 狀態色只在圖示：進行中藍、完成綠、失敗紅（提示框本身白底灰框） */}
+        <span className={styles.noticeIcon}>
+          {isCreatingScript ? (
+            <Spinner size={16} />
+          ) : (
+            <MIcon name={isError ? "error_outline" : isSuccess ? "check_circle" : "autorenew"} size={16} />
+          )}
+        </span>
         <strong>{title}</strong>
       </p>
       <p>{message}</p>
@@ -239,33 +244,46 @@ function getDetectableInfo(detectable) {
   return DETECTABLE_INFO[detectable] ?? DETECTABLE_INFO.manual;
 }
 
-/** 把單一 check step 的 parameters 轉成老師可讀的唯讀 chip 資料。 */
-function stepParameterChips(step) {
+/* 檢查步驟「做什麼」的白話說法；collector.type 是給系統看的代號，不直接露給老師 */
+const STEP_ACTIONS = {
+  command: { get label() { return jt("stepRunCommand"); }, icon: "terminal" },
+  file_text: { get label() { return jt("stepReadFile"); }, icon: "description" },
+  file_stat: { get label() { return jt("stepCheckFile"); }, icon: "folder" },
+  localhost_http: { get label() { return jt("stepOpenUrl"); }, icon: "language" },
+  peer_ping: { get label() { return jt("stepPeerPing"); }, icon: "hub" },
+};
+
+/**
+ * 單一檢查步驟轉成老師看得懂的一段：做什麼、對象（整行指令／路徑／網址）、補充說明（讀幾行、怎樣算通過、時限）。
+ * 沒有 collector 的舊格式步驟沿用範本名稱＋指令名稱。
+ */
+export function describeCheckStep(step) {
   const collector = step?.collector ?? null;
   const parameters = collector ?? step?.parameters ?? {};
-  const chips = [];
-  const argv = Array.isArray(parameters.argv)
-    ? parameters.argv.filter((part) => typeof part === "string" && part.trim())
-    : [];
-  if (argv.length > 0) {
-    chips.push({ key: "argv", label: jt("chipCommand"), mono: true, parts: argv });
+  const action = STEP_ACTIONS[collector?.type] ?? null;
+  const argv = Array.isArray(parameters.argv) ? formatCommandArguments(parameters.argv) : "";
+  const target = argv
+    || [parameters.path, parameters.url].find((value) => typeof value === "string" && value.trim())?.trim()
+    || "";
+  const notes = [];
+  if (collector?.type === "file_text" && Number.isInteger(parameters.lines)) {
+    if (parameters.read_mode === "head") notes.push(jt("stepReadHead", { count: parameters.lines }));
+    if (parameters.read_mode === "tail") notes.push(jt("stepReadTail", { count: parameters.lines }));
   }
-  if (typeof parameters.path === "string" && parameters.path.trim()) {
-    chips.push({ key: "path", label: jt("chipPath"), mono: true, parts: [parameters.path.trim()] });
+  const assertion = getAssertionSummary(step?.assertion);
+  if (assertion) notes.push(jt("stepPass", { value: assertion }));
+  if (Number.isInteger(parameters.timeout_seconds) && parameters.timeout_seconds >= 1) {
+    notes.push(jt("stepTimeout", { count: parameters.timeout_seconds }));
   }
-  if (typeof parameters.url === "string" && parameters.url.trim()) {
-    chips.push({ key: "url", label: "URL", mono: true, parts: [parameters.url.trim()] });
-  }
-  if (collector?.type === "file_text") {
-    const mode = parameters.read_mode ?? "full";
-    const lineText = Number.isInteger(parameters.lines) ? jt("chipReadLines", { count: parameters.lines }) : "";
-    chips.push({ key: "read_mode", label: jt("chipRead"), mono: false, parts: [`${mode}${lineText}`] });
-  }
-  if (Number.isInteger(parameters.timeout_seconds)
-    && parameters.timeout_seconds >= 1) {
-    chips.push({ key: "timeout_seconds", label: jt("chipTimeout"), mono: false, parts: [jt("chipSeconds", { count: parameters.timeout_seconds })] });
-  }
-  return chips;
+  const legacyLabel = [getTemplateLabel(step?.template_key), step?.command_label ?? step?.command_key]
+    .filter(Boolean)
+    .join(" / ");
+  return {
+    icon: action?.icon ?? "rule",
+    label: action?.label ?? (legacyLabel || collector?.type || ""),
+    target,
+    notes,
+  };
 }
 
 const TARGET_TYPE_INFO = {
@@ -392,9 +410,10 @@ function getExecutionNodeSummary(item, machineNodes = []) {
     ?? (Number.isFinite(sortOrder) ? `P${sortOrder + 1}` : null);
   const name = String(node.name ?? node.node_name ?? "").trim();
   const label = [name || jt("nodeUnnamed"), displayLabel ? jt("nodeDisplayLabel", { label: displayLabel }) : ""].join("");
+  // 角色是老師在環境裡取的名字、類型是 VM／LXC，兩個本身就看得懂，不再加「角色：」「類型：」前綴
   const detail = [
-    node.role ? jt("nodeRole", { value: node.role }) : "",
-    node.resource_type ? jt("nodeType", { value: String(node.resource_type).toUpperCase() }) : "",
+    String(node.role ?? "").trim(),
+    node.resource_type ? String(node.resource_type).toUpperCase() : "",
     node.template_name ? jt("nodeImage", { value: node.template_name }) : "",
   ].filter(Boolean).join(" · ");
   return { label, detail };
@@ -482,33 +501,6 @@ export function getRubricDisplayName(file, fallback = jt("defaultRubricName")) {
     .replace(RUBRIC_FILE_EXTENSION, "")
     .trim();
   return title || fallback;
-}
-
-const SESSION_MENU_WIDTH = 220;
-const SESSION_MENU_HEIGHT = 280;
-const SESSION_MENU_MARGIN = 12;
-
-/**
- * 將 session 的更多功能選單定位在觸發按鈕附近，同時限制在視窗可見範圍內。
- * 使用 fixed/portal 顯示時，這個位置不會受 session sidebar 的 overflow 影響。
- */
-export function getSessionMenuPosition(anchorRect, options = {}) {
-  const viewportWidth = options.width ?? (typeof window !== "undefined" ? window.innerWidth : 1024);
-  const viewportHeight = options.height ?? (typeof window !== "undefined" ? window.innerHeight : 768);
-  const menuWidth = options.menuWidth ?? SESSION_MENU_WIDTH;
-  const menuHeight = options.menuHeight ?? SESSION_MENU_HEIGHT;
-  const margin = options.margin ?? SESSION_MENU_MARGIN;
-  const maxLeft = Math.max(margin, viewportWidth - menuWidth - margin);
-  const preferredLeft = anchorRect.right - menuWidth;
-  const left = Math.min(Math.max(margin, preferredLeft), maxLeft);
-  const belowTop = anchorRect.bottom + margin;
-  const aboveTop = anchorRect.top - menuHeight - margin;
-  const fitsBelow = belowTop + menuHeight <= viewportHeight - margin;
-  const fitsAbove = aboveTop >= margin;
-  const preferredTop = fitsBelow ? belowTop : fitsAbove ? aboveTop : belowTop;
-  const maxTop = Math.max(margin, viewportHeight - menuHeight - margin);
-  const top = Math.min(Math.max(margin, preferredTop), maxTop);
-  return { top: Math.round(top), left: Math.round(left) };
 }
 
 /** 選到的週次還沒有檢查：一週只會有一份，按下去才建立（重複按也只會有一份）。 */
@@ -881,11 +873,11 @@ function RubricHeader({ index }) {
   return useRubricHeaders()[index];
 }
 
+/* 表格版：展開鈕在前、序號緊貼著標題；卡片版由樣式把兩者拆開，序號在左上、展開鈕跟刪除鈕一組在右上 */
 function RubricIndexCell({ index, expanded, detailId, onToggle }) {
   const { t } = useTranslation("teaching");
   return (
     <div className={styles.rubricIndex}>
-      <span className={styles.rubricNumber}>{index + 1}</span>
       <button
         type="button"
         className={styles.detailToggle}
@@ -897,6 +889,7 @@ function RubricIndexCell({ index, expanded, detailId, onToggle }) {
       >
         <MIcon name={expanded ? "expand_less" : "expand_more"} size={17} aria-hidden="true" />
       </button>
+      <span className={styles.rubricNumber}>{index + 1}</span>
     </div>
   );
 }
@@ -1001,11 +994,13 @@ const rubricColumns = rubricColumnHelper.columns([
   rubricColumnHelper.accessor("detectable", {
     header: () => <RubricHeader index={3} />,
     cell: ({ row, rowState }) => (
-      <DetectabilityBadge
-        detectable={row.original.detectable}
-        judgementMode={row.original.judgement_mode}
-        needsReview={rowState.needsReview}
-      />
+      <div className={styles.rubricCellLine}>
+        <DetectabilityBadge
+          detectable={row.original.detectable}
+          judgementMode={row.original.judgement_mode}
+          needsReview={rowState.needsReview}
+        />
+      </div>
     ),
     meta: { thProps: RUBRIC_TH_PROPS, tdClassName: styles.rubricDetectabilityCell },
   }),
@@ -1043,9 +1038,17 @@ function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsR
     needsReview,
   };
 
+  /* 整列可點來展開／收合（滑鼠的捷徑；鍵盤與報讀器走展開鈕）。
+     標題欄是編輯區、按鈕各有自己的動作，正在反白選字（例如複製指令）時也不切換 */
+  function handleRowClick(event) {
+    if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select, label")) return;
+    if (window.getSelection?.()?.toString()) return;
+    setExpanded((current) => !current);
+  }
+
   return (
     <>
-      <tr className={`${styles.rubricTableRow} ${expanded ? styles.rubricTableRowExpanded : ""}`}>
+      <tr className={`${styles.rubricTableRow} ${expanded ? styles.rubricTableRowExpanded : ""}`} onClick={handleRowClick}>
         <DataTableCells row={row} rowState={rowState} />
       </tr>
       {expanded && (
@@ -1061,78 +1064,60 @@ function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsR
               {!hasDetails ? (
                 <p className={styles.rubricDetailEmpty}>{t("AiJudgePanel.detailEmpty")}</p>
               ) : (
-                <div className={styles.detectGrid}>
+                /* 左欄名稱、右欄內容的對照清單：缺什麼 → 在哪台機器 → 怎麼檢查 → 誰判定 → 腳本查不到時 */
+                <dl className={styles.detailFacts}>
                   {item.detectable === "partial" && (
-                    <div className={`${styles.detectItem} ${styles.detectItemWide}`}>
-                      <span>{t("AiJudgePanel.detectablePartial")}</span>
-                      <p>{missingInformation.length
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detectablePartial")}</dt>
+                      <dd>{missingInformation.length
                         ? joinList(missingInformation)
-                        : t("AiJudgePanel.detailMissingFallback")}</p>
+                        : t("AiJudgePanel.detailMissingFallback")}</dd>
                     </div>
                   )}
-                  {item.fallback && (
-                    <div className={styles.detectItem}>
-                      <span>{t("AiJudgePanel.detailFallback")}</span>
-                      <p>{item.fallback}</p>
+                  {checkSteps.length > 0 && executionNode && (
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailMachine")}</dt>
+                      <dd>
+                        {executionNode.label}
+                        {executionNode.detail && <small>{executionNode.detail}</small>}
+                      </dd>
                     </div>
                   )}
                   {checkSteps.length > 0 && (
-                    <div className={`${styles.detectItem} ${styles.detectItemWide}`}>
-                      <span>{t("AiJudgePanel.detailSteps")}</span>
-                      <div className={styles.executionContract} aria-label={t("AiJudgePanel.contractTitle")}>
-                        <span className={styles.executionContractTitle}>
-                          <MIcon name="rule" size={14} aria-hidden="true" />
-                          {t("AiJudgePanel.contractTitle")}
-                        </span>
-                        {executionNode && (
-                          <span className={styles.executionContractItem}>
-                            <span>{t("AiJudgePanel.contractNode")}</span>
-                            <strong>{executionNode.label}</strong>
-                            {executionNode.detail && <small>{executionNode.detail}</small>}
-                          </span>
-                        )}
-                        <span className={styles.executionContractItem}>
-                          <span>{t("AiJudgePanel.contractJudgement")}</span>
-                          <strong>{item.judgement_mode === "teacher" ? t("AiJudgePanel.judgeTeacher") : t("AiJudgePanel.judgeSystem")}</strong>
-                        </span>
-                      </div>
-                      <div className={styles.stepPlanList}>
-                        {checkSteps.map((step, stepIndex) => (
-                          <div
-                            key={`${step.template_key}-${step.command_key}-${stepIndex}`}
-                            className={styles.stepPlanRow}
-                          >
-                            <span className={styles.chip}>
-                              {step.collector
-                                ? t("AiJudgePanel.managedCollector", { type: step.collector.type })
-                                : <>
-                                  {getTemplateLabel(step.template_key)} /{" "}
-                                  {step.command_label ?? step.command_key}
-                                  <code>{step.command_key}</code>
-                                </>}
-                            </span>
-                            {stepParameterChips(step).map((chip) => (
-                              <span key={chip.key} className={styles.chip}>
-                                <span className={styles.chipLabel}>{chip.label}</span>
-                                {chip.mono
-                                  ? chip.parts.map((part, partIndex) => (
-                                    <code key={partIndex}>{part}</code>
-                                  ))
-                                  : <span className={styles.chipText}>{chip.parts.join(" ")}</span>}
-                              </span>
-                            ))}
-                            {getAssertionSummary(step.assertion) && (
-                              <span className={styles.chip}>
-                                <span className={styles.chipLabel}>{t("AiJudgePanel.passCondition")}</span>
-                                <span className={styles.chipText}>{getAssertionSummary(step.assertion)}</span>
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailSteps")}</dt>
+                      <dd>
+                        <ol className={checkSteps.length > 1 ? styles.stepListNumbered : styles.stepList}>
+                          {checkSteps.map((step, stepIndex) => {
+                            const described = describeCheckStep(step);
+                            return (
+                              <li key={`${step.template_key}-${step.command_key}-${stepIndex}`} className={styles.stepItem}>
+                                <span className={styles.stepAction}>
+                                  <MIcon name={described.icon} size={16} aria-hidden="true" />
+                                  {described.label}
+                                </span>
+                                {described.target && <code className={styles.stepTarget}>{described.target}</code>}
+                                {described.notes.length > 0 && <span className={styles.stepNotes}>{described.notes.join(" · ")}</span>}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </dd>
                     </div>
                   )}
-                </div>
+                  {checkSteps.length > 0 && (
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailJudgement")}</dt>
+                      <dd>{item.judgement_mode === "teacher" ? t("AiJudgePanel.judgeTeacher") : t("AiJudgePanel.judgeSystem")}</dd>
+                    </div>
+                  )}
+                  {item.fallback && (
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailFallback")}</dt>
+                      <dd>{item.fallback}</dd>
+                    </div>
+                  )}
+                </dl>
               )}
             </div>
           </td>
@@ -1573,6 +1558,12 @@ export function SaveAndCreateAction({
 
 const JUDGE_MAIN_MIN_WIDTH = 480;
 const RESIZE_KEY_STEP = 16;
+
+/**
+ * 工作區寬到這裡，週次清單才排在左邊一欄；更窄時清單會疊在工作區上面、把它推出首屏，
+ * 所以改成只放目前這週＋換週清單。需與 AiJudgePanel.module.scss 的 @container judge-layout (min-width: 1100px) 一致。
+ */
+export const JUDGE_SIDE_BY_SIDE_MIN_WIDTH = 1100;
 
 export const JUDGE_COLUMN_WIDTHS = {
   week: { cssVar: "--judge-week-w", storageKey: "aiJudge.weekColumnWidth", min: 180, max: 360 },
@@ -2580,6 +2571,7 @@ export function RubricsTab({
           data-autosave-status="unsaved"
         >
           <p>
+            <MIcon name="error_outline" size={16} className={`${styles.noticeIcon} ${styles.noticeInlineIcon}`} />
             <strong>{t("AiJudgePanel.unsavedTitle")}</strong>{" "}
             {t("AiJudgePanel.unsavedMessage", {
               reason: autosaveStatus.error?.message ?? t("AiJudgePanel.updateRubricFailed"),
@@ -4285,11 +4277,12 @@ export function TeacherReviewTab({
 
   return (
     <div className={styles.tabBody} data-guide="ai-judge-review">
-      <div className={`${styles.card} ${styles.reviewOverview}`}>
+      {/* 總覽直接排在分頁裡，不再包一張玻璃卡（工作區本身已是玻璃面板）；
+          分頁列已經寫「導師核查」，這裡不重複標題，只留動作鈕 */}
+      <div className={styles.reviewOverview}>
         {publicationNotice}
         {recoveryNotice}
         <div className={styles.reviewOverviewHead}>
-          <h4 className={styles.cardTitle}><MIcon name="rate_review" size={19} />{t("AiJudgePanel.tabReview")}</h4>
           <div className={styles.sectionActions}>
             {activeBatch && batchRunning && (
               <span className={styles.mutedText}>
@@ -4347,8 +4340,9 @@ export function TeacherReviewTab({
               <span className={styles.reviewStackPending} style={{ width: `${percentOf(summary.pending)}%` }} />
             </div>
             <span className={styles.reviewStatValue}>
-              <em className={styles.reviewStatPass}>{t("AiJudgePanel.metricPassCount", { count: summary.pass })}</em>
-              <em className={styles.reviewStatFail}>{t("AiJudgePanel.metricFailCount", { count: summary.fail })}</em>
+              {/* 數量是 0 時不上狀態色：還沒檢查就出現紅字會讓人以為有問題 */}
+              <em className={summary.pass > 0 ? styles.reviewStatPass : styles.reviewStatZero}>{t("AiJudgePanel.metricPassCount", { count: summary.pass })}</em>
+              <em className={summary.fail > 0 ? styles.reviewStatFail : styles.reviewStatZero}>{t("AiJudgePanel.metricFailCount", { count: summary.fail })}</em>
               {summary.error > 0 && <em className={styles.reviewStatFail}>{t("AiJudgePanel.metricErrorCount", { count: summary.error })}</em>}
               {summary.pending > 0 && <em className={styles.reviewStatPending}>{t("AiJudgePanel.metricPendingCount", { count: summary.pending })}</em>}
               <small>{t("AiJudgePanel.metricCheckedOf", { checked: checkedCount, total: summary.total })}</small>
@@ -4445,14 +4439,16 @@ export function TeacherReviewTab({
                 aria-expanded={isOpen}
               >
                 <span className={styles.reviewStudentIdentity}>
+                  {/* 20px 狀態圖示（不做成像勾選框的大圓圈）：完成＝綠勾、做到一半＝橘色進行中、未回報＝小空心點；
+                      n/m 的數字在姓名旁的文字裡 */}
                   <span
                     className={`${styles.reportTick} ${styles[`reportTick_${reportKind}`] ?? ""}`}
                     title={reportLabel}
                     aria-label={reportLabel}
                     role="img"
                   >
-                    {reportKind === "ready" && <MIcon name="check" size={18} />}
-                    {reportKind === "partial" && <small>{`${student.report.done}/${student.report.total}`}</small>}
+                    {reportKind === "ready" && <MIcon name="check_circle" size={20} filled />}
+                    {reportKind === "partial" && <MIcon name="timelapse" size={20} />}
                   </span>
                   <span className={styles.reviewStudentMain}>
                     <span className={styles.reviewStudentName}>
@@ -4555,7 +4551,10 @@ export function TeacherReviewTab({
                             }
                           }}
                         />
-                        {value.length > REPLY_COUNTER_FROM && <small className={styles.replyCount}>{value.length} / {REPLY_MAX_LENGTH}</small>}
+                        <span className={styles.replyFoot}>
+                          <small>{t("AiJudgePanel.replyHint")}</small>
+                          {value.length > REPLY_COUNTER_FROM && <small className={styles.replyCount}>{value.length} / {REPLY_MAX_LENGTH}</small>}
+                        </span>
                       </label>
                     );
                   })()}
@@ -4618,9 +4617,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   const [activeWeekId, setActiveWeekId] = useState(null);
   const [creatingWeekId, setCreatingWeekId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
-  const [sessionMenuPosition, setSessionMenuPosition] = useState(null);
-  // 選單離場動畫：關閉時保留最後的目標與位置 130ms
-  const sessionMenuPos = useDialogPresence(sessionMenuPosition, 130);
+  // 週次 ⋮ 選單的觸發鈕：清單每一列各有一顆，按下去時記住是哪一顆
+  const sessionMenuAnchorRef = useRef(null);
   const [busySessionIds, setBusySessionIds] = useState(() => new Set());
   // 移到／複製到其他週：{ mode: "move" | "copy", item }
   const [weekPicker, setWeekPicker] = useState(null);
@@ -4628,10 +4626,16 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   // 只在第一次掛上時讀；之後拖拉直接改 DOM 上的 CSS 變數，不經過 React
   const [initialColumnWidths] = useState(readStoredColumnWidths);
   const classIdRef = useRef(classId);
-  const closeSessionMenu = useCallback(() => {
-    setOpenMenuId(null);
-    setSessionMenuPosition(null);
-  }, []);
+  const closeSessionMenu = useCallback(() => setOpenMenuId(null), []);
+  // 窄版（週次不能排在左邊一欄時）只放目前這週＋換週清單
+  const panelRef = useRef(null);
+  const panelWidth = useElementWidth(panelRef);
+  const compactWeeks = panelWidth !== null && panelWidth < JUDGE_SIDE_BY_SIDE_MIN_WIDTH;
+  const [weekSwitcherOpen, setWeekSwitcherOpen] = useState(false);
+  const weekSwitcher = useDialogPresence(weekSwitcherOpen && compactWeeks, 130);
+  const weekSwitcherAnchorRef = useRef(null);
+  const weekSwitcherListId = useId();
+  const closeWeekSwitcher = useCallback(() => setWeekSwitcherOpen(false), []);
 
   const sortedWeeks = useMemo(
     () => [...weeks].sort((a, b) => (a.week_number ?? 0) - (b.week_number ?? 0)),
@@ -4656,6 +4660,7 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
     () => sessions.find((item) => item.id === openMenuId) ?? null,
     [openMenuId, sessions],
   );
+  // 選單離場動畫：關閉時保留最後的目標 130ms
   const sessionMenuItemKeep = useDialogPresence(openSessionMenuItem, 130);
   const tabsIdPrefix = useId();
 
@@ -4701,7 +4706,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
     setWeekPicker(null);
     setActiveWeekId(null);
     closeSessionMenu();
-  }, [classId, closeSessionMenu]);
+    closeWeekSwitcher();
+  }, [classId, closeSessionMenu, closeWeekSwitcher]);
 
   // 預設選週次：網址指定的有效週次 > 第一週；目前選的週次不見了才重選
   useEffect(() => {
@@ -4714,7 +4720,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
 
   useEffect(() => {
     closeSessionMenu();
-  }, [activeWeekId, closeSessionMenu]);
+    closeWeekSwitcher();
+  }, [activeWeekId, closeSessionMenu, closeWeekSwitcher]);
 
   // 選中的週次寫進網址（?week=），重新整理或分享連結都會回到同一週；用 replace 不塞歷史紀錄
   useEffect(() => {
@@ -4727,56 +4734,6 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
       return next;
     }, { replace: true });
   }, [activeWeekId, loading, requestedWeekId, setSearchParams]);
-
-  useEffect(() => {
-    if (!openMenuId) return undefined;
-    const menuId = `check-menu-${openMenuId}`;
-    function updateMenuPosition() {
-      const trigger = document.querySelector(`[aria-controls="${menuId}"]`);
-      if (!(trigger instanceof HTMLElement)) return;
-      setSessionMenuPosition(getSessionMenuPosition(trigger.getBoundingClientRect()));
-    }
-    updateMenuPosition();
-    const focusTimer = window.setTimeout(() => {
-      document.getElementById(menuId)?.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
-    }, 0);
-    function closeMenuOnOutsideClick(event) {
-      const target = event.target;
-      if (target instanceof Element && (target.closest(`#${menuId}`) || target.closest(`[aria-controls="${menuId}"]`))) return;
-      closeSessionMenu();
-    }
-    function navigateMenu(event) {
-      if (event.key === "Escape") {
-        closeSessionMenu();
-        return;
-      }
-      if (!event.key || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
-      const menu = document.getElementById(menuId);
-      const items = menu ? [...menu.querySelectorAll('[role="menuitem"]:not(:disabled)')] : [];
-      const currentIndex = items.indexOf(document.activeElement);
-      if (!items.length) return;
-      event.preventDefault();
-      const nextIndex = event.key === "ArrowDown"
-        ? (currentIndex + 1) % items.length
-        : (currentIndex - 1 + items.length) % items.length;
-      items[nextIndex].focus();
-    }
-    document.addEventListener("mousedown", closeMenuOnOutsideClick);
-    document.addEventListener("keydown", navigateMenu);
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("mousedown", closeMenuOnOutsideClick);
-      document.removeEventListener("keydown", navigateMenu);
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && active.closest(`#${menuId}`)) {
-        document.querySelector(`[aria-controls="${menuId}"]`)?.focus();
-      }
-    };
-  }, [closeSessionMenu, openMenuId]);
 
   function updateSessionInList(updated) {
     if (classIdRef.current !== classId) return;
@@ -4893,80 +4850,147 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
       closeSessionMenu();
       return;
     }
-    setSessionMenuPosition(getSessionMenuPosition(event.currentTarget.getBoundingClientRect()));
+    sessionMenuAnchorRef.current = event.currentTarget;
     setOpenMenuId(sessionId);
   }
 
-  function renderSessionMenu(item) {
-    const menuPos = sessionMenuPos.item;
-    if (!item || !menuPos) return null;
+  function sessionMenuItems(item) {
     const busy = busySessionIds.has(item.id);
     const noFreeWeek = freeWeeks.length === 0;
+    const noFreeWeekHint = noFreeWeek ? t("AiJudgePanel.noFreeWeeksHint") : undefined;
+    return [
+      { key: "move", label: t("AiJudgePanel.moveWeekBtn"), icon: "calendar_month", disabled: busy || noFreeWeek, title: noFreeWeekHint, onSelect: () => openWeekPicker("move", item) },
+      { key: "copy", label: t("AiJudgePanel.copyToWeekBtn"), icon: "content_copy", disabled: busy || noFreeWeek, title: noFreeWeekHint, onSelect: () => openWeekPicker("copy", item) },
+      { key: "delete", label: t("AiJudgePanel.opDelete"), icon: "delete", danger: true, separatorBefore: true, disabled: busy, onSelect: () => deleteSession(item) },
+    ];
+  }
+
+  /* 週次的兩行字：清單列、窄版的目前週次、換週清單的選項共用，三處長得一樣 */
+  function weekTopic(week) {
+    return String(week.title ?? "").trim() || t("AiJudgePanel.weekNoTopic");
+  }
+
+  function renderWeekTitle(week) {
+    const hasTopic = Boolean(String(week.title ?? "").trim());
     return (
-      <div
-        id={`check-menu-${item.id}`}
-        className={`${styles.sessionMenu} ${sessionMenuPos.closing ? styles.sessionMenuOut : ""}`}
-        role="menu"
-        aria-label={t("AiJudgePanel.moreActionsAria", { title: item.title })}
-        style={{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }}
-      >
-        <button type="button" role="menuitem" disabled={busy || noFreeWeek} title={noFreeWeek ? t("AiJudgePanel.noFreeWeeksHint") : undefined} onClick={() => openWeekPicker("move", item)}><MIcon name="calendar_month" size={16} />{t("AiJudgePanel.moveWeekBtn")}</button>
-        <button type="button" role="menuitem" disabled={busy || noFreeWeek} title={noFreeWeek ? t("AiJudgePanel.noFreeWeeksHint") : undefined} onClick={() => openWeekPicker("copy", item)}><MIcon name="content_copy" size={16} />{t("AiJudgePanel.copyToWeekBtn")}</button>
-        <span className={styles.menuSeparator} />
-        <button type="button" role="menuitem" className={styles.menuDanger} disabled={busy} onClick={() => deleteSession(item)}><MIcon name="delete" size={16} />{t("AiJudgePanel.opDelete")}</button>
+      <>
+        {t("AiJudgePanel.weekRowTitle", { week: week.week_number })}
+        <span className={hasTopic ? styles.weekRowTopic : styles.weekRowTopicEmpty}>{weekTopic(week)}</span>
+      </>
+    );
+  }
+
+  function weekDate(week) {
+    return String(week.session_date ?? "").slice(5, 10).replace("-", "/");
+  }
+
+  function renderWeekStatus(week) {
+    const hasCheck = sessionByWeek.has(String(week.id));
+    const date = weekDate(week);
+    return (
+      <>
+        <span className={hasCheck ? styles.weekDotReady : styles.weekDot} aria-hidden="true" />
+        {date && `${date} · `}{hasCheck ? t("AiJudgePanel.weekHasCheck") : t("AiJudgePanel.weekNoCheck")}
+        {!isWeekPublished(week) && ` · ${t("AiJudgePanel.weekDraft")}`}
+      </>
+    );
+  }
+
+  function renderWeekMenuButton(item) {
+    return (
+      <button type="button" className={styles.menuBtn} aria-label={t("AiJudgePanel.moreActionsAria", { title: item.title })} title={t("AiJudgePanel.moreActions")} aria-haspopup="menu" aria-expanded={openMenuId === item.id} aria-controls={`check-menu-${item.id}`} disabled={busySessionIds.has(item.id)} onClick={(event) => toggleSessionMenu(event, item.id)}><MIcon name="more_vert" size={18} /></button>
+    );
+  }
+
+  function renderWeekList() {
+    return (
+      <div className={styles.sessionList} role="list">
+        {sortedWeeks.map((week) => {
+          const item = sessionByWeek.get(String(week.id)) ?? null;
+          const selected = String(week.id) === String(activeWeekId);
+          return (
+            <div key={week.id} className={`${styles.sessionRow} ${selected ? styles.sessionRowActive : ""}`} role="listitem">
+              <button type="button" className={selected ? styles.sessionItemActive : styles.sessionItem} aria-current={selected ? "true" : undefined} onClick={() => selectWeek(week.id)}>
+                <SessionTitle title={weekTopic(week)}>{renderWeekTitle(week)}</SessionTitle>
+                <small className={styles.sessionWeekLabel}>{renderWeekStatus(week)}</small>
+              </button>
+              {item && <div className={styles.sessionRowActions}>{renderWeekMenuButton(item)}</div>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  /* 窄版：‹ 目前這週 ▾ › 連成一組翻頁控制，跟分頁放在同一條標頭列；點週次開換週清單。
+     ⋮ 只有建了檢查的週才有，沒有時留同寬的空位，按箭頭翻週時箭頭不會跟著位移 */
+  function renderWeekSwitcher() {
+    if (!activeWeek) return null;
+    const index = sortedWeeks.indexOf(activeWeek);
+    const previousWeek = index > 0 ? sortedWeeks[index - 1] : null;
+    const nextWeek = index < sortedWeeks.length - 1 ? sortedWeeks[index + 1] : null;
+    const date = weekDate(activeWeek);
+    return (
+      <div className={styles.weekSwitcher}>
+        <div className={styles.weekPager}>
+          <button type="button" className={styles.weekStepBtn} aria-label={t("AiJudgePanel.prevWeek")} title={t("AiJudgePanel.prevWeek")} disabled={!previousWeek} onClick={() => selectWeek(previousWeek.id)}>
+            <MIcon name="chevron_left" size={20} />
+          </button>
+          <button
+            type="button"
+            ref={weekSwitcherAnchorRef}
+            className={styles.weekPickerBtn}
+            aria-haspopup="listbox"
+            aria-expanded={weekSwitcherOpen}
+            aria-controls={weekSwitcherOpen ? weekSwitcherListId : undefined}
+            title={t("AiJudgePanel.switchWeek")}
+            onClick={() => setWeekSwitcherOpen((open) => !open)}
+            onKeyDown={(event) => {
+              // 跟原生下拉一樣：上下鍵直接展開
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+              event.preventDefault();
+              setWeekSwitcherOpen(true);
+            }}
+          >
+            <span className={activeSession ? styles.weekDotReady : styles.weekDot} aria-hidden="true" />
+            <span className={styles.weekPickerTitle}>{renderWeekTitle(activeWeek)}</span>
+            {date && <span className={styles.weekPickerDate}>{date}</span>}
+            {!isWeekPublished(activeWeek) && <span className={styles.weekDraftBadge}>{t("AiJudgePanel.weekDraft")}</span>}
+            <span className={styles.srOnly}>{activeSession ? t("AiJudgePanel.weekHasCheck") : t("AiJudgePanel.weekNoCheck")}</span>
+            <MIcon name="expand_more" size={20} className={weekSwitcherOpen ? styles.weekPickerChevronOpen : styles.weekPickerChevron} />
+          </button>
+          <button type="button" className={styles.weekStepBtn} aria-label={t("AiJudgePanel.nextWeek")} title={t("AiJudgePanel.nextWeek")} disabled={!nextWeek} onClick={() => selectWeek(nextWeek.id)}>
+            <MIcon name="chevron_right" size={20} />
+          </button>
+        </div>
+        {activeSession ? renderWeekMenuButton(activeSession) : <span className={styles.weekMenuSlot} aria-hidden="true" />}
       </div>
     );
   }
 
   const sessionSidebarInner = (
     <>
-      {/* 分頁放在週次清單上方的標頭列：跟表格欄位標頭、助理標頭同一條 */}
-      <div className={styles.sidebarHead}>
+      {/* 分頁放在週次清單上方的標頭列：跟表格欄位標頭、助理標頭同一條。
+          窄版沒有週次清單，換週控制也收進這一條，左邊換週、右邊分頁 */}
+      <div className={compactWeeks ? `${styles.sidebarHead} ${styles.sidebarHeadCompact}` : styles.sidebarHead}>
+        {compactWeeks && !loading && renderWeekSwitcher()}
         <SegmentedControl
           ariaLabel={t("AiJudgePanel.tabsAria")}
           className={styles.sidebarTabs}
           compact
-          fullWidth
+          fullWidth={!compactWeeks}
           options={TEACHER_JUDGE_TABS.map((tab) => ({ value: tab.key, label: tab.label, icon: tab.icon, buttonProps: tab.buttonProps }))}
           value={activeTab}
           onChange={selectTab}
         />
       </div>
-      <div className={styles.sidebarBody}>
-        {loading ? (
-          <div className={styles.sidebarLoading} role="status" aria-label={t("AiJudgePanel.loading")}><LoadingSpinner size={44} /></div>
-        ) : sortedWeeks.length === 0 ? null : (
-          <div className={styles.sessionList} role="list">
-            {sortedWeeks.map((week) => {
-              const item = sessionByWeek.get(String(week.id)) ?? null;
-              const selected = String(week.id) === String(activeWeekId);
-              const busy = item ? busySessionIds.has(item.id) : false;
-              const topic = String(week.title ?? "").trim();
-              const date = String(week.session_date ?? "").slice(5, 10).replace("-", "/");
-              return (
-                <div key={week.id} className={`${styles.sessionRow} ${selected ? styles.sessionRowActive : ""}`} role="listitem">
-                  <button type="button" className={selected ? styles.sessionItemActive : styles.sessionItem} aria-current={selected ? "true" : undefined} onClick={() => selectWeek(week.id)}>
-                    <SessionTitle title={topic || t("AiJudgePanel.weekNoTopic")}>
-                      {t("AiJudgePanel.weekRowTitle", { week: week.week_number })}
-                      <span className={topic ? styles.weekRowTopic : styles.weekRowTopicEmpty}>{topic || t("AiJudgePanel.weekNoTopic")}</span>
-                    </SessionTitle>
-                    <small className={styles.sessionWeekLabel}>
-                      <span className={item ? styles.weekDotReady : styles.weekDot} aria-hidden="true" />
-                      {date && `${date} · `}{item ? t("AiJudgePanel.weekHasCheck") : t("AiJudgePanel.weekNoCheck")}
-                      {!isWeekPublished(week) && ` · ${t("AiJudgePanel.weekDraft")}`}
-                    </small>
-                  </button>
-                  {item && (
-                    <div className={styles.sessionRowActions}>
-                      <button type="button" className={styles.menuBtn} aria-label={t("AiJudgePanel.moreActionsAria", { title: item.title })} title={t("AiJudgePanel.moreActions")} aria-haspopup="menu" aria-expanded={openMenuId === item.id} aria-controls={`check-menu-${item.id}`} disabled={busy} onClick={(event) => toggleSessionMenu(event, item.id)}><MIcon name="more_vert" size={18} /></button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {!compactWeeks && (
+        <div className={styles.sidebarBody}>
+          {loading ? (
+            <div className={styles.sidebarLoading} role="status" aria-label={t("AiJudgePanel.loading")}><LoadingSpinner size={44} /></div>
+          ) : sortedWeeks.length === 0 ? null : renderWeekList()}
+        </div>
+      )}
     </>
   );
 
@@ -4991,7 +5015,7 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   const pickerIsCopy = weekPicker?.mode === "copy";
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} ref={panelRef}>
       {/* 週次清單、分頁列、分頁內容是同一塊面板，欄位之間只用分隔線區隔 */}
       <section
         className={styles.checkWorkspaceTwo}
@@ -5066,7 +5090,29 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
         </div>
       </section>
 
-      {typeof document !== "undefined" && sessionMenuItemKeep.open && sessionMenuPos.item && createPortal(renderSessionMenu(sessionMenuItemKeep.item), document.body)}
+      {sessionMenuItemKeep.open && (
+        <ActionMenu
+          id={`check-menu-${sessionMenuItemKeep.item.id}`}
+          anchorRef={sessionMenuAnchorRef}
+          ariaLabel={t("AiJudgePanel.moreActionsAria", { title: sessionMenuItemKeep.item.title })}
+          items={sessionMenuItems(sessionMenuItemKeep.item)}
+          onClose={closeSessionMenu}
+          closing={sessionMenuItemKeep.closing}
+        />
+      )}
+
+      {weekSwitcher.open && (
+        <ListboxPopover
+          id={weekSwitcherListId}
+          anchorRef={weekSwitcherAnchorRef}
+          ariaLabel={t("AiJudgePanel.weekSwitcherAria")}
+          options={sortedWeeks.map((week) => ({ value: String(week.id), label: renderWeekTitle(week), description: renderWeekStatus(week) }))}
+          value={activeWeekId}
+          onSelect={selectWeek}
+          onClose={closeWeekSwitcher}
+          closing={weekSwitcher.closing}
+        />
+      )}
 
       {pickerItem && (
         <Modal

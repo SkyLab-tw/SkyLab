@@ -1,17 +1,18 @@
-import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
-import { createPortal } from "react-dom";
+import { useState, useRef, useEffect, useCallback, useId } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth }  from "../../contexts/AuthContext";
 import { useUnsavedChanges } from "../../contexts/UnsavedChangesContext";
 import { currentLanguage, setLanguage } from "../../i18n";
 import useScrollEdges from "../../hooks/useScrollEdges";
-import useOutsideClick from "../../hooks/useOutsideClick";
+import useDialogPresence from "../../hooks/useDialogPresence";
 import styles from "./Sidebar.module.scss";
 import MIcon from "../MIcon";
 import Avatar from "../Avatar/Avatar";
 import OctoMark from "../OctoPet/OctoMark";
 import JobsButton from "../Jobs/JobsButton";
+import ActionMenu from "../ActionMenu/ActionMenu";
+import ListboxPopover from "../ListboxPopover/ListboxPopover";
 import { canTeachUser, canViewStudentCourses, isAdminUser } from "../../utils/roles";
 
 const topItems = [
@@ -198,124 +199,11 @@ function NavGroup({ group, active, onSelect, collapsed, onExpand, pinnedKeys, on
   );
 }
 
-/** 管理 popup 的開關，含 closing 動畫狀態 */
-function usePopup(DURATION = 150) {
-  const [open, setOpen] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const timerRef = useRef(null);
-
-  const close = useCallback(() => {
-    setClosing(true);
-    timerRef.current = setTimeout(() => {
-      setOpen(false);
-      setClosing(false);
-    }, DURATION);
-  }, [DURATION]);
-
-  const toggle = useCallback(() => {
-    if (open && !closing) {
-      close();
-    } else if (!open) {
-      clearTimeout(timerRef.current);
-      setClosing(false);
-      setOpen(true);
-    }
-  }, [open, closing, close]);
-
-  useEffect(() => () => clearTimeout(timerRef.current), []);
-
-  return { open, closing, toggle, close };
-}
-
-/* 側欄有 overflow 裁切，彈窗一律 portal 到 body 再依觸發鈕定位：
-   展開時蓋在觸發鈕上方同寬，收合時貼著側欄右緣飛出、底部對齊觸發鈕 */
-function usePopupPosition(triggerRef, collapsed) {
-  const [pos, setPos] = useState(null);
-
-  const updatePos = useCallback(() => {
-    const btn = triggerRef?.current;
-    const rect = btn?.getBoundingClientRect();
-    if (!rect) return;
-    if (collapsed) {
-      const anchorRight = btn.closest("aside")?.getBoundingClientRect().right ?? rect.right;
-      setPos({ left: anchorRight + 8, bottom: window.innerHeight - rect.bottom, width: "max-content", minWidth: 190 });
-    } else {
-      setPos({ left: rect.left, bottom: window.innerHeight - rect.top + 8, width: rect.width });
-    }
-  }, [collapsed, triggerRef]);
-
-  useLayoutEffect(() => {
-    updatePos();
-    window.addEventListener("resize", updatePos);
-    return () => window.removeEventListener("resize", updatePos);
-  }, [updatePos]);
-
-  return pos;
-}
-
-/** 側欄的語言選單（options 每項 { key, label, flag }）；外觀設定已移到帳號設定頁 */
-function SelectPopup({ options, value, onSelect, onClose, triggerRef, closing, collapsed }) {
-  const ref = useRef(null);
-  const pos = usePopupPosition(triggerRef, collapsed);
-  useOutsideClick(ref, triggerRef, onClose);
-
-  if (!pos) return null;
-  return createPortal(
-    <div className={`${styles.appearancePopup} ${closing ? styles.popupClosing : styles.popupOpening}`} ref={ref} style={pos}>
-      {options.map((opt) => (
-        <button
-          key={opt.key}
-          type="button"
-          className={`${styles.appearanceOption} ${value === opt.key ? styles.appearanceOptionActive : ""}`}
-          onClick={() => { onSelect(opt.key); onClose(); }}
-        >
-          <span className={styles.optionFlag}>{opt.flag}</span>
-          <span>{opt.label}</span>
-        </button>
-      ))}
-    </div>,
-    document.body
-  );
-}
-
-function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing, collapsed }) {
-  const { t } = useTranslation("common");
-  const ref = useRef(null);
-  const pos = usePopupPosition(triggerRef, collapsed);
-  useOutsideClick(ref, triggerRef, onClose);
-
-  if (!pos) return null;
-  return createPortal(
-    <div className={`${styles.userPopup} ${closing ? styles.popupClosing : styles.popupOpening}`} ref={ref} style={pos}>
-      <div className={styles.userPopupHeader}>
-        <Avatar user={user} size={32} />
-        <div className={styles.userPopupInfo}>
-          <span className={styles.userName}>{user?.full_name ?? "—"}</span>
-          <span className={styles.userEmail}>{user?.email ?? "—"}</span>
-        </div>
-      </div>
-      <div className={styles.userPopupDivider} />
-      <button type="button" className={styles.userPopupItem} onClick={() => { onClose(); onSettings(); }}>
-        <MIcon name="settings" size={18} />
-        <span>{t("Sidebar.userSettings")}</span>
-      </button>
-      <button
-        type="button"
-        className={`${styles.userPopupItem} ${styles.userPopupItemDanger}`}
-        onClick={() => { onClose(); onLogout(); }}
-      >
-        <MIcon name="logout" size={18} />
-        <span>{t("Sidebar.logOut")}</span>
-      </button>
-    </div>,
-    document.body
-  );
-}
-
+/* 語言名稱用各自的語言寫，不放國旗：Windows 不畫國旗 emoji，只會變成 TW／GB／JP 字母 */
 const LANG_OPTIONS = [
-  { key: "zh-TW", label: "繁體中文", flag: "🇹🇼" },
-  { key: "en",    label: "English",  flag: "🇬🇧" },
-  { key: "ja",    label: "日本語",   flag: "🇯🇵" },
+  { value: "zh-TW", label: "繁體中文" },
+  { value: "en",    label: "English" },
+  { value: "ja",    label: "日本語" },
 ];
 
 export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
@@ -325,10 +213,15 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
   const routeKey = location.pathname.split("/")[1] || "dashboard";
   const active   = activeKeyAliases[routeKey] ?? routeKey;
   const lang = currentLanguage(i18n.language);
-  const langPopup  = usePopup();
-  const userPopup  = usePopup();
+  /* 側欄底部的語言、帳號選單：貼著側欄外緣彈出、跟側欄同一套玻璃（同背景任務），關閉時保留 130ms 離場動畫 */
+  const [langOpen, setLangOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
+  const langMenu = useDialogPresence(langOpen, 130);
+  const userMenu = useDialogPresence(userOpen, 130);
   const langBtnRef = useRef(null);
   const userBtnRef = useRef(null);
+  const langMenuId = useId();
+  const userMenuId = useId();
   const { user, logout } = useAuth();
   const { confirmLeave } = useUnsavedChanges();
   const isAdmin = isAdminUser(user);
@@ -376,12 +269,25 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
     onClose?.();
   };
 
-  /* 收合／展開有寬度動畫，portal 彈窗的定位會跑掉，切換時直接收起 */
+  /* 收合／展開有寬度動畫，貼著側欄外緣的選單會對不準，切換時直接收起 */
   useEffect(() => {
-    if (langPopup.open) langPopup.close();
-    if (userPopup.open) userPopup.close();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLangOpen(false);
+    setUserOpen(false);
   }, [collapsed]);
+
+  const userMenuItems = [
+    { key: "settings", label: t("Sidebar.userSettings"), icon: "settings", onSelect: () => handleNav("account") },
+    {
+      key: "logout",
+      label: t("Sidebar.logOut"),
+      icon: "logout",
+      danger: true,
+      onSelect: async () => {
+        /* 登出會被路由守衛直接導到登入頁，不觸發 beforeunload，要先確認未儲存的表單 */
+        if (await confirmLeave()) logout();
+      },
+    },
+  ];
 
   return (
     <aside className={cls}>
@@ -525,70 +431,86 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
         <JobsButton collapsed={collapsed} />
 
         {/* 語言選擇 */}
-        <div className={styles.appearanceWrap}>
-          {langPopup.open && (
-            <SelectPopup
-              options={LANG_OPTIONS}
-              value={lang}
-              onSelect={setLanguage}
-              onClose={langPopup.close}
-              triggerRef={langBtnRef}
-              closing={langPopup.closing}
-              collapsed={collapsed}
-            />
-          )}
-          <button
-            ref={langBtnRef}
-            type="button"
-            className={`${styles.navItem} ${langPopup.open && !langPopup.closing ? styles.active : ""}`}
-            onClick={langPopup.toggle}
-            title={collapsed ? "語言" : undefined}
-            aria-label="語言 / Language"
-            aria-expanded={langPopup.open}
-          >
-            <MIcon name="language" size={20} />
-            {!collapsed && <span className={styles.navLabel}>語言 / Language</span>}
-            {!collapsed && <span className={styles.navHint}>{LANG_OPTIONS.find(o => o.key === lang)?.label}</span>}
-          </button>
-        </div>
+        <button
+          ref={langBtnRef}
+          type="button"
+          className={`${styles.navItem} ${langOpen ? styles.active : ""}`}
+          onClick={() => setLangOpen((v) => !v)}
+          onKeyDown={(event) => {
+            // 跟原生下拉一樣：上下鍵直接展開
+            if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+            event.preventDefault();
+            setLangOpen(true);
+          }}
+          title={collapsed ? "語言" : undefined}
+          aria-label="語言 / Language"
+          aria-haspopup="listbox"
+          aria-expanded={langOpen}
+          aria-controls={langOpen ? langMenuId : undefined}
+        >
+          <MIcon name="language" size={20} />
+          {!collapsed && <span className={styles.navLabel}>語言 / Language</span>}
+          {!collapsed && <span className={styles.navHint}>{LANG_OPTIONS.find((o) => o.value === lang)?.label}</span>}
+        </button>
+        {langMenu.open && (
+          <ListboxPopover
+            id={langMenuId}
+            anchorRef={langBtnRef}
+            ariaLabel="語言 / Language"
+            options={LANG_OPTIONS}
+            value={lang}
+            onSelect={setLanguage}
+            onClose={() => setLangOpen(false)}
+            closing={langMenu.closing}
+            placement="side"
+            glass
+          />
+        )}
 
         {/* 使用者資料 */}
-        <div className={styles.appearanceWrap}>
-          {userPopup.open && (
-            <UserPopup
-              user={user}
-              onLogout={async () => {
-                /* 登出會被路由守衛直接導到登入頁，不觸發 beforeunload，要先確認未儲存的表單 */
-                if (await confirmLeave()) logout();
-              }}
-              onSettings={() => handleNav("account")}
-              onClose={userPopup.close}
-              triggerRef={userBtnRef}
-              closing={userPopup.closing}
-              collapsed={collapsed}
-            />
+        <button
+          ref={userBtnRef}
+          type="button"
+          className={`${styles.user} ${userOpen ? styles.userActive : ""}`}
+          onClick={() => setUserOpen((v) => !v)}
+          title={collapsed ? (user?.full_name ?? user?.email) : undefined}
+          aria-label={t("Sidebar.userMenuAriaLabel", { name: user?.full_name ?? user?.email ?? "" })}
+          aria-haspopup="menu"
+          aria-expanded={userOpen}
+          aria-controls={userOpen ? userMenuId : undefined}
+        >
+          <Avatar user={user} size={32} className={styles.avatar} />
+          {!collapsed && (
+            <>
+              <div className={styles.userInfo}>
+                <span className={styles.userName}>{user?.full_name ?? "—"}</span>
+                <span className={styles.userEmail}>{user?.email ?? "—"}</span>
+              </div>
+              <MIcon name={userOpen ? "expand_more" : "unfold_more"} size={16} />
+            </>
           )}
-          <button
-            ref={userBtnRef}
-            type="button"
-            className={`${styles.user} ${userPopup.open && !userPopup.closing ? styles.userActive : ""}`}
-            onClick={userPopup.toggle}
-            title={collapsed ? (user?.full_name ?? user?.email) : undefined}
-            aria-label={t("Sidebar.userMenuAriaLabel", { name: user?.full_name ?? user?.email ?? "" })}
-            aria-expanded={userPopup.open}
-          >
-            <Avatar user={user} size={32} className={styles.avatar} />
-            {!collapsed && (
-              <>
-                <div className={styles.userInfo}>
-                  <span className={styles.userName}>{user?.full_name ?? "—"}</span>
-                  <span className={styles.userEmail}>{user?.email ?? "—"}</span>
+        </button>
+        {userMenu.open && (
+          <ActionMenu
+            id={userMenuId}
+            anchorRef={userBtnRef}
+            ariaLabel={t("Sidebar.userMenuAriaLabel", { name: user?.full_name ?? user?.email ?? "" })}
+            items={userMenuItems}
+            onClose={() => setUserOpen(false)}
+            closing={userMenu.closing}
+            placement="side"
+            glass
+            header={(
+              <div className={styles.menuUser}>
+                <Avatar user={user} size={32} />
+                <div className={styles.menuUserText}>
+                  <span className={styles.menuUserName}>{user?.full_name ?? "—"}</span>
+                  <span className={styles.menuUserEmail}>{user?.email ?? "—"}</span>
                 </div>
-                <MIcon name={userPopup.open && !userPopup.closing ? "expand_more" : "unfold_more"} size={16} />
-              </>
+              </div>
             )}
-          </button>
-        </div>
+          />
+        )}
       </div>
     </aside>
   );

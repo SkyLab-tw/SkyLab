@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Sidebar from "./Sidebar";
+import { setLanguage } from "../../i18n";
 
 const logout = vi.fn();
 const confirmLeave = vi.fn();
@@ -104,4 +105,42 @@ test("老師使用班級管理入口", async () => {
   await renderAt("/dashboard");
   expect(buttons("topCourses")).toHaveLength(0);
   expect(buttons("itemClassManagement")).toHaveLength(1);
+});
+
+async function pressEscape() {
+  await act(async () => {
+    document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  // 等 130ms 離場動畫跑完、選單卸載
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 160)); });
+}
+
+test("帳號選單用共用動作選單：頭顯示姓名，焦點落在第一項，Esc 關閉並把焦點還給觸發鈕", async () => {
+  const userBtn = document.querySelector('button[aria-label="Sidebar.userMenuAriaLabel"]');
+  await act(async () => { userBtn.click(); });
+
+  const menu = document.querySelector('[role="menu"]');
+  expect(menu).not.toBeNull();
+  expect(userBtn.getAttribute("aria-controls")).toBe(menu.id);
+  expect(menu.textContent).toContain("a@example.com");
+  expect(document.activeElement.textContent).toContain("Sidebar.userSettings");
+
+  await pressEscape();
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(userBtn);
+});
+
+test("語言選單用共用單選清單：目前的語言打勾，選了就切換並把焦點還給觸發鈕", async () => {
+  const langBtn = document.querySelector('button[aria-label="語言 / Language"]');
+  await act(async () => { langBtn.click(); });
+
+  const options = [...document.querySelectorAll('[role="listbox"] [role="option"]')];
+  expect(options.map((option) => option.firstElementChild.textContent)).toEqual(["繁體中文", "English", "日本語"]);
+  expect(options[0].getAttribute("aria-selected")).toBe("true");
+  expect(document.activeElement).toBe(options[0]);
+
+  await act(async () => { options[1].click(); });
+  expect(setLanguage).toHaveBeenCalledWith("en");
+  expect(document.activeElement).toBe(langBtn);
+  expect(langBtn.getAttribute("aria-expanded")).toBe("false");
 });

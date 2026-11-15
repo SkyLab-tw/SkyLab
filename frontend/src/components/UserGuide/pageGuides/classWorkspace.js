@@ -45,7 +45,8 @@ const CLASS_SECTION_GUIDES = {
     steps: [
       HEADER_STEP,
       SECTION_TAB_STEP,
-      step('[data-guide="class-students-actions"]', "students.actions"),
+      /* 送出建機後名單鎖定，匯入／加入鈕整組不出現 */
+      step('[data-guide="class-students-actions"]', "students.actions", { optional: true }),
       step('[data-guide="class-students-list"]', "students.list"),
       /* 移除鈕只在準備中的班級出現 */
       step('[data-guide="class-students-remove"]', "students.remove", { optional: true }),
@@ -90,8 +91,9 @@ const CLASS_SECTION_GUIDES = {
       step('[data-guide="class-progress-broadcast"]', "progress.broadcast", { optional: true }),
       step('[data-guide="class-progress-power"]', "progress.power", { optional: true }),
       step('[data-guide="class-progress-toolbar"]', "progress.toolbar", { optional: true }),
-      step('[data-guide="class-progress-tiles"]', "progress.tiles", { optional: true }),
+      /* 「需要注意」在學生格上方，導覽照畫面由上而下 */
       step('[data-guide="class-progress-attention"]', "progress.attention", { optional: true }),
+      step('[data-guide="class-progress-tiles"]', "progress.tiles", { optional: true }),
     ],
   },
 };

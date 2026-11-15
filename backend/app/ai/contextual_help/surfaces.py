@@ -1016,18 +1016,18 @@ _CLASS_WORKSPACE_ELEMENTS: tuple[ElementSpec, ...] = (
     ElementSpec(
         id="classmgmt.more_menu", role="button", label="更多班級操作",
         section="班級總覽",
-        help="頁首的 ⋯ 按鈕。編輯班級與課表、延長課程日期、封存並回收"
+        help="頁首的 ⋮ 按鈕。編輯班級與課表、延長課程日期、封存並回收"
              "都收在這裡。",
     ),
     ElementSpec(
         id="classmgmt.extend_class", role="button", label="延長課程日期",
         section="班級總覽",
-        help="在 ⋯ 選單裡。延長後會自動補上新的課次，機器到期日一併順延。",
+        help="在 ⋮ 選單裡。延長後會自動補上新的課次，機器到期日一併順延。",
     ),
     ElementSpec(
         id="classmgmt.archive_class", role="button", label="封存並回收",
         section="班級總覽",
-        help="在 ⋯ 選單裡，動作不可逆：班級會結束，班上的機器會被刪除。"
+        help="在 ⋮ 選單裡，動作不可逆：班級會結束，班上的機器會被刪除。"
              "回收失敗時可以從班級總覽的狀態面板重試。",
     ),
     ElementSpec(
