@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { canManageNode, nodeLabel, toDialogNodes } from "./topologyNodes";
+import { canManageNode, nodeLabel, readOnlyNodeMessageKey, toDialogNodes } from "./topologyNodes";
 
 const gateway = { vmid: null, name: "Internet", node_type: "gateway" };
 const mine = { vmid: 100, name: "demo", node_type: "vm" };
@@ -32,6 +32,16 @@ describe("canManageNode", () => {
     expect(canManageNode(mine)).toBe(true);
     expect(canManageNode(studentVm)).toBe(true);
     expect(canManageNode(readOnlyClassVm)).toBe(false);
+  });
+});
+
+describe("readOnlyNodeMessageKey", () => {
+  test("拉線碰到唯讀機器時依原因給提示：快速練習、課堂機、其他", () => {
+    const quickPractice = { vmid: 301, name: "qp-1", can_manage: false, machine_kind: "quick_practice", owner_name: "王小明" };
+    const orphanClassVm = { vmid: 302, name: "old-1", can_manage: false, machine_kind: "teaching_class" };
+    expect(readOnlyNodeMessageKey(quickPractice)).toBe("FirewallPage.readOnlyNodeQuickPractice");
+    expect(readOnlyNodeMessageKey(readOnlyClassVm)).toBe("FirewallPage.readOnlyNode");
+    expect(readOnlyNodeMessageKey(orphanClassVm)).toBe("FirewallPage.readOnlyNodeNoPermission");
   });
 });
 

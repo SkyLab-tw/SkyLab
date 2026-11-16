@@ -220,9 +220,7 @@
 }
 
 .optionBtnActive {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
-  color: var(--color-primary);
+  @include option-selected(var(--color-surface));
   font-weight: $font-weight-500;
 }
 

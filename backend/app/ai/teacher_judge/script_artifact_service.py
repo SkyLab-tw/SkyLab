@@ -118,7 +118,7 @@ def require_active_artifact(
             status_code=409,
             detail={
                 "code": "teacher_judge_script_set_not_active",
-                "message": "腳本尚未指定為每週生效組，請重新製作。",
+                "message": "這份腳本不是這週正在使用的版本，請重新製作。",
             },
         )
     workspace = (
@@ -694,7 +694,7 @@ def create_artifact_set(
             status_code=409,
             detail={
                 "code": "teacher_judge_script_generation_conflict",
-                "message": "工作區或生效組已變更，請重新載入後製作。",
+                "message": "檢查內容或正在使用的腳本已變更，請重新載入後再製作。",
             },
         )
     if source_file_id is not None:
@@ -878,7 +878,7 @@ def _ensure_artifact_can_retire(
             status_code=409,
             detail={
                 "code": "teacher_judge_active_script_protected",
-                "message": "生效組的腳本無法個別封存或刪除，請先成功製作新組。",
+                "message": "正在使用的腳本不能單獨封存或刪除，請先成功製作新的腳本。",
             },
         )
     referenced = session.exec(

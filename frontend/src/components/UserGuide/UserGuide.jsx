@@ -67,6 +67,8 @@ const PAGE_GUIDES = {
     autoStart: true,
     enterSelector: '[data-guide="request-create"]',
     enterTargetSelector: '[data-guide="request-resource-settings"]',
+    /* 表單是導覽自己打開的：按「跳過」或關閉導覽時退回申請列表，完成導覽則留在表單讓學生接著填 */
+    exitSelector: '[data-guide="request-form-back"]',
     titleKey: "UserGuide.myRequests.title",
     icon: "assignment",
     steps: [
@@ -541,6 +543,8 @@ export default function UserGuide() {
   const [slot, setSlot] = useState(null);
   const [hasEmptyState, setHasEmptyState] = useState(false);
   const originalAiTab = useRef(null);
+  // 這次導覽有沒有替使用者點 enterSelector（例如打開申請表單）；有才在跳過時用 exitSelector 退回去
+  const enteredByGuide = useRef(false);
   const prevStepRef = useRef(null);
 
   useEffect(() => {
@@ -665,6 +669,7 @@ export default function UserGuide() {
         if (trigger) {
           trigger.click();
           entered = true;
+          enteredByGuide.current = true;
         }
       }
       if (entered && guide.steps.some((item) => document.querySelector(item.selector))) {
@@ -764,7 +769,8 @@ export default function UserGuide() {
 
   if (!guide) return null;
 
-  const complete = () => {
+  /* dismissed：使用者按「跳過」或右上角關閉，不是走完最後一步 */
+  const complete = ({ dismissed = false } = {}) => {
     try {
       localStorage.setItem(storageKey, "completed");
     } catch {
@@ -774,6 +780,10 @@ export default function UserGuide() {
     setOpen(false);
     setStep(0);
     document.querySelector(guide.cleanupSelector)?.click();
+    if (dismissed && enteredByGuide.current && guide.exitSelector) {
+      document.querySelector(guide.exitSelector)?.click();
+    }
+    enteredByGuide.current = false;
     prevStepRef.current = null;
     if (activeStep?.deactivateSelector) {
       document.querySelector(activeStep.deactivateSelector)?.click();
@@ -794,7 +804,10 @@ export default function UserGuide() {
     setOpen(false);
     setStep(0);
     const trigger = guide.enterSelector ? document.querySelector(guide.enterSelector) : null;
-    trigger?.click();
+    if (trigger) {
+      trigger.click();
+      enteredByGuide.current = true;
+    }
     window.setTimeout(() => {
       setPageTitle(document.querySelector("h1")?.textContent?.trim() ?? "");
       setOpen(true);
@@ -919,7 +932,7 @@ export default function UserGuide() {
                 <small>{t("UserGuide.tourSubtitle", { title: displayTitle })}</small>
                 <strong>{step + 1} / {availableSteps.length}</strong>
               </div>
-              <button type="button" onClick={complete} aria-label={t("UserGuide.closeGuideAriaLabel")}>
+              <button type="button" onClick={() => complete({ dismissed: true })} aria-label={t("UserGuide.closeGuideAriaLabel")}>
                 <MIcon name="close" size={19} />
               </button>
             </div>
@@ -937,7 +950,7 @@ export default function UserGuide() {
             </div>
 
             <div className={styles.actions}>
-              <button type="button" className={styles.skip} onClick={complete}>{t("UserGuide.skipButton")}</button>
+              <button type="button" className={styles.skip} onClick={() => complete({ dismissed: true })}>{t("UserGuide.skipButton")}</button>
               <div>
                 {step > 0 && (
                   <button type="button" className={styles.back} onClick={() => setStep((value) => value - 1)}>

@@ -11,6 +11,7 @@ import TeacherReplyNote from "../../../components/TeacherReplyNote/TeacherReplyN
 import { useQueryView } from "../../../hooks/useQueryLoadState";
 import { CoursesService } from "../../../services/courses";
 import { useCoursePathQuery, usePracticeMachinesQuery, useWeeklyTasksQuery } from "../../../queries/courses";
+import StatusBadge from "../../../components/StatusBadge/StatusBadge";
 import styles from "./StudentWeekPage.module.scss";
 import { feedbackFor } from "./studentWeekFeedback";
 
@@ -26,6 +27,18 @@ const STATUS_ICONS = {
   running: "sync",
   pending: "schedule",
   env_error: "report",
+};
+
+/* 徽章色跟老師端導師核查一致：等待老師確認＝橘（pending），機器連不上、腳本沒跑完一樣走紅色，
+   文案會說明不是學生做錯；還沒結果（尚無回饋、等待、檢查中）是中性灰 */
+const STATUS_TONES = {
+  completed: "success",
+  passed: "success",
+  partial: "info",
+  needs_review: "pending",
+  failed: "danger",
+  cancelled: "danger",
+  env_error: "danger",
 };
 
 function createGuideDemoWeek(t) {
@@ -169,7 +182,7 @@ export default function StudentWeekPage() {
             const machine = checkpoint.machine_node_key
               ? view.machines.find((entry) => entry.node_key === checkpoint.machine_node_key)
               : null;
-            return <article key={checkpoint.id} className={`${styles.feedbackCard} ${styles[`feedback_${feedback.status}`] ?? ""}`}>
+            return <article key={checkpoint.id} className={styles.feedbackCard}>
               <div className={styles.feedbackTop}>
                 <span className={styles.number}>{index + 1}</span>
                 <div>
@@ -177,7 +190,9 @@ export default function StudentWeekPage() {
                   {checkpoint.description && <p>{checkpoint.description}</p>}
                   {machine && <small className={styles.checkpointMachine}><MIcon name="dns" size={14} />{t("StudentWeekPage.checkpointMachine", { machine: machine.name })}</small>}
                 </div>
-                <span className={styles.feedbackStatus}><MIcon name={STATUS_ICONS[feedback.status] ?? "hourglass_empty"} size={17} />{feedback.status === "none" ? t("StudentWeekPage.noFeedback") : t(`StudentWeekPage.status_${feedback.status}`)}</span>
+                <StatusBadge tone={STATUS_TONES[feedback.status] ?? "muted"} icon={STATUS_ICONS[feedback.status] ?? "hourglass_empty"} className={styles.feedbackStatus}>
+                  {feedback.status === "none" ? t("StudentWeekPage.noFeedback") : t(`StudentWeekPage.status_${feedback.status}`)}
+                </StatusBadge>
               </div>
               {feedback.status !== "none" && <div className={styles.feedbackBody}>
                 {feedback.score != null && <strong>{t("StudentWeekPage.score", { score: feedback.score, max: feedback.maxScore ?? "—" })}</strong>}
