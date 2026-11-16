@@ -2,8 +2,12 @@
 
 核准不再直接寫 Proxmox。執行中的 QEMU 改 cores/memory 只會進 pending、
 要重開機才生效，若在核准當下就寫入，系統會顯示「已套用」但機器紋風不動。
-因此核准只做配額檢查與狀態變更，由申請人挑時間按「套用」，背景任務負責
-整個電源循環，完成後才寫 applied_at。
+因此核准只做配額、節點容量檢查與狀態變更，由申請人挑時間按「套用」，背景
+任務負責整個電源循環，完成後才寫 applied_at。
+
+節點容量：機器不會搬家，調大的 CPU／RAM 一定落在它現在所在的節點、磁碟一定
+長在它現在的儲存區。核准與套用都會檢查那裡放不放得下「增加的部分」，並先扣掉
+其他帳本還沒反映在 PVE 上的量（見 ``pending_capacity``）。
 """
 
 import logging
@@ -46,6 +50,7 @@ from app.services.proxmox import proxmox_service
 from app.services.resource import quota_service, resource_service
 from app.services.resource.access import require_resource_management
 from app.services.user import audit_service
+from app.services.vm import pending_capacity, placement_service, placement_support
 from app.utils.timeutil import normalize_datetime
 
 logger = logging.getLogger(__name__)
@@ -61,6 +66,9 @@ _POLL_INTERVAL_SECONDS = 2.0
 APPLY_LOCK_MINUTES = 30
 
 ResourceType = Literal["qemu", "lxc"]
+
+GIB = 1024**3
+MIB = 1024**2
 
 
 class _PartialApplyError(Exception):
@@ -605,6 +613,135 @@ def _check_quota_delta(session: Session, db_request: Any) -> None:
     )
 
 
+def _disk_storage(node: str, vmid: int, resource_type: ResourceType) -> str | None:
+    """機器主磁碟所在的儲存區名稱（``local-lvm:vm-100-disk-0,size=32G`` → local-lvm）。
+
+    resize 只會擴 scsi0／rootfs（見 ``_apply_spec_changes``），所以只看這兩個。
+    """
+    config = proxmox_service.get_config(node, vmid, resource_type, current=True)
+    value = str(config.get("scsi0" if resource_type == "qemu" else "rootfs") or "")
+    storage = value.split(",", 1)[0].split(":", 1)[0].strip()
+    return storage or None
+
+
+def _node_capacity_issues(
+    session: Session,
+    db_request: Any,
+    *,
+    node: str,
+    resource_type: ResourceType,
+    cores: int,
+    memory_mb: int,
+    disk_gb: int,
+) -> list[str]:
+    nodes, resources = placement_support.load_cluster_state()
+    cpu_ratio, disk_ratio = placement_service.get_overcommit_ratios(session)
+    capacities = placement_support.build_live_node_capacities(
+        nodes=nodes,
+        resources=resources,
+        cpu_overcommit_ratio=cpu_ratio,
+        disk_overcommit_ratio=disk_ratio,
+        memory_overcommit_ratio=placement_service.get_memory_overcommit_ratio(session),
+    )
+    now = datetime.now(timezone.utc)
+    # 調整後的規格會一直留在機器上，任何還沒到期的已核准申請都可能同時存在
+    ledger = [
+        *pending_capacity.class_reservation_machines(session, active_at=now),
+        *pending_capacity.unbuilt_request_machines(session, now=now),
+        *pending_capacity.approved_spec_change_machines(
+            session, exclude_request_id=db_request.id
+        ),
+    ]
+    pending_capacity.subtract_from_capacities(capacities, ledger)
+    capacity = next((item for item in capacities if item.node == node), None)
+    if capacity is None or capacity.status != "online":
+        return [t("spec_change.node_unavailable", node=node)]
+
+    issues: list[str] = []
+    if cores and capacity.allocatable_cpu_cores < cores:
+        issues.append(
+            t(
+                "spec_change.node_cpu_insufficient",
+                node=node,
+                required=cores,
+                available=f"{capacity.allocatable_cpu_cores:.1f}",
+            )
+        )
+    if memory_mb and capacity.allocatable_memory_bytes < memory_mb * MIB:
+        issues.append(
+            t(
+                "spec_change.node_ram_insufficient",
+                node=node,
+                required=f"{memory_mb * MIB / GIB:.1f}",
+                available=f"{capacity.allocatable_memory_bytes / GIB:.1f}",
+            )
+        )
+    if disk_gb:
+        storage = _disk_storage(node, db_request.vmid, resource_type)
+        room = (
+            pending_capacity.storage_room_gb(
+                session,
+                node=node,
+                storage=storage,
+                machines=ledger,
+                disk_overcommit_ratio=disk_ratio,
+                tuning=placement_service.get_placement_tuning(session=session),
+            )
+            if storage
+            else None
+        )
+        if room is not None and room + 1e-9 < disk_gb:
+            issues.append(
+                t(
+                    "spec_change.node_storage_insufficient",
+                    node=node,
+                    storage=storage,
+                    required=disk_gb,
+                    available=f"{room:.1f}",
+                )
+            )
+    return issues
+
+
+def _check_node_capacity(
+    session: Session,
+    db_request: Any,
+    *,
+    resource_info: dict[str, Any] | None = None,
+) -> None:
+    """機器所在的節點放不放得下這次「增加的部分」；放不下就擋。
+
+    只看增量（與配額同一套 ``spec_change_delta``）：機器現有的規格已經在 PVE 的
+    已分配量裡。調小或只延期不需要檢查。PVE 查不到容量時擋下而不是放行
+    —— 核准後才發現放不下，就是這個檢查要防的事；套用時也會再檢查一次。
+    """
+    cores, memory_mb, disk_gb = quota_service.spec_change_delta(db_request)
+    if not (cores or memory_mb or disk_gb):
+        return
+    try:
+        info = resource_info or proxmox_service.find_resource(db_request.vmid)
+        issues = _node_capacity_issues(
+            session,
+            db_request,
+            node=str(info["node"]),
+            resource_type=_rtype(info),
+            cores=cores,
+            memory_mb=memory_mb,
+            disk_gb=disk_gb,
+        )
+    except NotFoundError:
+        raise BadRequestError(
+            t("spec_change.resource_not_in_proxmox", vmid=db_request.vmid)
+        )
+    except Exception:
+        logger.exception(
+            "Failed to check node capacity for spec change request %s", db_request.id
+        )
+        raise BadRequestError(t("spec_change.capacity_check_failed")) from None
+    if issues:
+        raise BadRequestError("；".join(issues))
+
+
 def review(
     *,
     session: Session,
@@ -612,6 +749,10 @@ def review(
     review_data: SpecChangeRequestReview,
     reviewer: Any,
 ) -> SpecChangeRequestPublic:
+    if review_data.status == SpecChangeRequestStatus.approved:
+        # 容量檢查到核准寫入之間不讓別的分配插隊；要在鎖申請單列之前拿
+        # （見 pending_capacity.lock_allocation）
+        pending_capacity.lock_allocation(session)
     db_request = spec_request_repo.get_spec_change_request_by_id(
         session=session, request_id=request_id, for_update=True
     )
@@ -641,6 +782,7 @@ def review(
             if not is_expiry:
                 db_request = _refresh_current_specs(session, db_request, strict=False)
                 _check_quota_delta(session, db_request)
+                _check_node_capacity(session, db_request)
             db_request = spec_request_repo.update_spec_change_request_status(
                 session=session,
                 request_id=request_id,
@@ -794,6 +936,9 @@ def needs_power_cycle(resource_type: str, was_running: bool, request: Any) -> bo
 def apply(
     *, session: Session, request_id: uuid.UUID, user: Any
 ) -> SpecChangeApplyAccepted:
+    # 套用才是真正消耗容量的時點：檢查到 commit 之間不讓別的分配插隊，
+    # 且要在鎖申請單列之前拿（見 pending_capacity.lock_allocation）
+    pending_capacity.lock_allocation(session)
     db_request = spec_request_repo.get_spec_change_request_by_id(
         session=session, request_id=request_id, for_update=True
     )
@@ -829,6 +974,8 @@ def apply(
     )
     # 核准到套用之間使用者可能又拿到新機器，套用才是真正消耗資源的時點
     _check_quota_delta(session, db_request)
+    # 節點容量同理：核准後到現在，同一台節點可能又被分出去
+    _check_node_capacity(session, db_request, resource_info=resource_info)
 
     db_request = spec_request_repo.mark_spec_change_apply_started(
         session=session, request_id=db_request.id, commit=False

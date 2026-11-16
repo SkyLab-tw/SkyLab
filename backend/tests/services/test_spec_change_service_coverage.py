@@ -163,6 +163,8 @@ def _fake_pve(
         list_all_resources=list_all_resources,
     )
     monkeypatch.setattr(svc, "proxmox_service", fake)
+    # 節點容量另有 test_spec_change_node_capacity 測；這裡假設放得下
+    monkeypatch.setattr(svc, "_node_capacity_issues", lambda *_a, **_k: [])
     return fake
 
 
