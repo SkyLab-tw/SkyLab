@@ -274,7 +274,7 @@ export default function GatewayInstallTab({ gatewayReady, onGoToConnection }) {
               onClick={() => setForm(toInstallForm(status.defaults))}
               disabled={running}
             >
-              <MIcon name="auto_fix_high" size={16} />
+              <MIcon name="input" size={16} />
               {t("GatewayPage.installUseDetected")}
             </button>
           </div>

@@ -41,7 +41,6 @@
   "AiFloatingChat.foundTargetsMessage": "我找到以下可能符合需求的功能：",
   "AiFloatingChat.genericErrorFallback": "AI 目前無法回覆，請稍後再試。",
   "AiFloatingChat.greetingSuffix": "，你好！",
-  "AiFloatingChat.headerSubtitle": "SkyLab 智慧協作",
   "AiFloatingChat.needMoreInfoMessage": "這台機器要用來做什麼？",
   "AiFloatingChat.newChatLabel": "建立新對話",
   "AiFloatingChat.noReplyFallback": "目前無法產生回覆，請稍後再試。",

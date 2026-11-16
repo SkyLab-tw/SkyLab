@@ -22,6 +22,17 @@
   height: auto;
 }
 
+/* ===== AI 助手面板開著時 toast 讓位 =====
+   面板停在右側時會把佔掉的寬度寫進 --ai-panel-inset（對話框的 dialog-overlay-avoid-ai 也用它），
+   toast 往左讓出這段寬度，不再蓋住面板標頭的關閉鈕。多一層 :root 才蓋得過 sonner 自己的 right；
+   600 以下 sonner 改用左右撐滿的手機版位置，不動 */
+@media (min-width: 601px) {
+  :root [data-sonner-toaster][data-x-position="right"] {
+    right: calc(var(--offset-right) + var(--ai-panel-inset, 0px));
+    transition: right 0.2s ease;
+  }
+}
+
 /* ===== sonner toast 色票對齊主題 =====
    五種 toast（success／error／warning／info／無型別）不用 sonner 內建
    richColors 色票，改由 _themes.scss 的語意色衍生：文字＝語意色本體、

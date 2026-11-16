@@ -13,6 +13,16 @@ export function canManageNode(node) {
   return node?.can_manage !== false;
 }
 
+/**
+ * 拉線碰到唯讀機器時要講的原因（network 命名空間的鍵）：學生的課堂機由班級老師管；
+ * 快速練習機誰都不能改（老師、管理員最常碰到的就是這種）；其他（例如失去班級的課堂機）只說沒有管理權。
+ */
+export function readOnlyNodeMessageKey(node) {
+  if (node?.machine_kind === "quick_practice") return "FirewallPage.readOnlyNodeQuickPractice";
+  if (node?.teaching_class_name) return "FirewallPage.readOnlyNode";
+  return "FirewallPage.readOnlyNodeNoPermission";
+}
+
 export function nodeLabel(node) {
   if (!node) return "";
   return node.owner_name ? `${node.name} · ${node.owner_name}` : node.name;

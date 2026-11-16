@@ -698,7 +698,6 @@
   "TeacherDashboardPage.classMemberSummary": "Students: {{count}} · Machines per student: {{nodes}}",
   "TeacherDashboardPage.machinesReady": "{{percent}}% machines ready",
   "TeacherDashboardPage.continueClassSetup": "Continue setup",
-  "StudentCoursePage.detectableAuto": "AI can suggest checks",
   "StudentCoursePage.detectablePartial": "AI-assisted + teacher confirmation",
   "StudentCoursePage.detectableManual": "Teacher Confirmation Required",
   "StudentCoursePage.machineNotReady": "This class machine hasn't been created yet",

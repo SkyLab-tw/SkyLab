@@ -686,7 +686,6 @@
   "TeacherDashboardPage.classMemberSummary": "学生 {{count}} 人 · 1人あたりマシン {{nodes}} 台",
   "TeacherDashboardPage.machinesReady": "マシン準備完了 {{percent}}%",
   "TeacherDashboardPage.continueClassSetup": "設定を続ける",
-  "StudentCoursePage.detectableAuto": "AI がチェックの提案を行えます",
   "StudentCoursePage.detectablePartial": "AI 補助＋教師による確認",
   "StudentCoursePage.detectableManual": "教師による確認",
   "StudentCoursePage.machineNotReady": "このクラスマシンはまだ作成が完了していません",

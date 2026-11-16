@@ -633,80 +633,12 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.machineTabs {
-  display: flex;
-  flex: 1 1 360px;
-  gap: 7px;
+/* 機器切換（兩台以上）：共用 SegmentedControl；機器多時在容器內橫向捲動，不把工具列撐寬 */
+.machineSwitch {
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.machineTabs::-webkit-scrollbar {
-  display: none;
-}
-
-.machineTabs>button {
-  display: flex;
-  width: 220px;
-  max-width: 100%;
-  align-items: center;
-  gap: 9px;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  padding: 9px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-  text-align: left;
-  transition: border-color $transition-base, background $transition-base, color $transition-base;
-}
-
-.machineTabs>button:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
-  background: var(--color-hover);
-}
-
-.machineTabs>button>span:first-child {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  place-items: center;
-  overflow: hidden;
-  border-radius: $radius-8;
-  background: var(--color-hover);
-}
-
-.machineTabs>button>span:last-child {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.machineTabs small {
-  color: var(--color-text-muted);
-  font-size: $font-size-12;
-}
-
-.machineTabs strong {
-  overflow: hidden;
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.machineTabs>button.machineTabActive {
-  border-color: color-mix(in srgb, var(--color-primary) 50%, var(--color-border));
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
-}
-
-.machineTabs>button.machineTabActive>span:first-child {
-  background: color-mix(in srgb, var(--color-primary) 13%, var(--color-surface));
 }
 
 /* 只有一台機器：不做分頁，只標出機器名稱與類型，高度跟右邊的 CPU／RAM 切換同為 36px */
@@ -1597,14 +1529,15 @@ button.heatAttentionChip {
   opacity: 0.55;
 }
 
+/* 剛建立好的那個環境：只給淡底提示；左側主色條留給「已選」，兩者才分得開 */
 .envChoiceSuggested {
-  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
-  box-shadow: inset 3px 0 var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
 }
 
-.envChoiceSelected {
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)) !important;
-  box-shadow: inset 3px 0 var(--color-primary);
+/* 已選的環境：內容清單的「目前項目」（淡底＋左側主色條）。
+   選擇器帶 .envChoices>button 才蓋得過上面的 hover 規則，不必用 !important */
+.envChoices>button.envChoiceSelected {
+  @include item-current(var(--color-surface));
 }
 
 .envChoiceIcon {
@@ -2387,18 +2320,7 @@ button.heatAttentionChip {
     flex-direction: column;
   }
 
-  .machineTabs {
-    display: grid;
-    width: 100%;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    overflow: visible;
-  }
-
-  .machineTabs>button {
-    width: 100%;
-    min-width: 0;
-  }
-
+  .machineSwitch,
   .metricSwitch {
     align-self: flex-start;
   }
@@ -2540,10 +2462,6 @@ button.heatAttentionChip {
   .failedBadge,
   .liveBadge {
     align-self: flex-start;
-  }
-
-  .machineTabs {
-    grid-template-columns: 1fr;
   }
 
   .heatBoard {

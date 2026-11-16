@@ -1142,15 +1142,18 @@ export function StudentMachines({ item }) {
 
       <div className={styles.heatmapToolbar} data-guide="class-progress-toolbar">
         {/* 兩台以上才給分頁切換；只有一台時沒得選，只標出是哪台機器，不做成看起來能點的分頁卡 */}
-        {item.nodes.length > 1 ? <div className={styles.machineTabs} role="tablist" aria-label={t("ClassWorkspacePage.selectMachineAria")}>
-          {item.nodes.map((node, index) => {
-            const selected = String(node.id) === String(selectedNode?.id);
-            return <button key={node.id} type="button" role="tab" aria-selected={selected} className={selected ? styles.machineTabActive : ""} onClick={() => setSelectedNodeId(String(node.id))}>
-              <span><MIcon name={node.resource_type === "lxc" ? "terminal" : "dns"} size={17} /></span>
-              <span><small>{t("ClassWorkspacePage.machineIndexLabel", { index: String(index + 1).padStart(2, "0") })}</small><strong>{node.name}</strong></span>
-            </button>;
-          })}
-        </div> : selectedNode && <div className={styles.machineSingle}>
+        {/* 機器多台時用共用 SegmentedControl 切換（互斥選項），跟右邊的 CPU／RAM 切換同一種外觀 */}
+        {item.nodes.length > 1 ? <SegmentedControl
+          className={styles.machineSwitch}
+          ariaLabel={t("ClassWorkspacePage.selectMachineAria")}
+          value={String(selectedNode?.id ?? "")}
+          onChange={(value) => setSelectedNodeId(value)}
+          options={item.nodes.map((node) => ({
+            value: String(node.id),
+            label: node.name,
+            icon: node.resource_type === "lxc" ? "terminal" : "dns",
+          }))}
+        /> : selectedNode && <div className={styles.machineSingle}>
           <MIcon name={selectedNode.resource_type === "lxc" ? "terminal" : "dns"} size={18} />
           <strong>{selectedNode.name}</strong>
           <span>{selectedNode.resource_type === "lxc" ? "LXC" : "VM"}</span>
