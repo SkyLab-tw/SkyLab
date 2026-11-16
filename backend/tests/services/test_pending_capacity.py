@@ -333,7 +333,7 @@ def placement_env(monkeypatch):
     }
     monkeypatch.setattr(
         pending_capacity,
-        "class_reservation_machines",
+        "request_external_load",
         lambda _s, **_kw: list(state["class_machines"]),
     )
     monkeypatch.setattr(placement_support, "load_cluster_state", lambda: ([], []))

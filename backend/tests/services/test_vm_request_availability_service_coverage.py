@@ -187,7 +187,7 @@ def test_build_availability_response_copies_baseline_when_timeline_missing(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        svc.pending_capacity, "class_reservation_machines", lambda _s, **_k: []
+        svc.pending_capacity, "request_external_load", lambda _s, **_k: []
     )
     monkeypatch.setattr(svc.placement_support, "load_cluster_state", lambda: ([], []))
     monkeypatch.setattr(

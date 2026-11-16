@@ -150,19 +150,19 @@ def build_plan(
     placement_strategy: str | None = None,
     node_priorities: dict[str, int] | None = None,
     current_node: str | None = None,
-    class_machines: list[pending_capacity.PendingMachine] | None = None,
+    ledger_machines: list[pending_capacity.PendingMachine] | None = None,
 ) -> PlacementPlan:
-    """``class_machines``：先把這些班級待建機器的磁碟放進儲存區再試放。
+    """``ledger_machines``：先把這些待建機器的磁碟放進儲存區再試放（見 ``_external_load``）。
 
     核准選點會傳入（節點容量也已經扣過同一份）；建機當下確認指定節點時不傳，
-    已核准的申請不因之後才有的班級預留而在 clone 時失敗。
+    已核准的申請不因之後才有的預留而在 clone 時失敗。
     """
     storage_state_fn = _build_storage_pool_state
-    if class_machines:
+    if ledger_machines:
 
         def storage_state_fn(*, session: Session, node_names: list[str]):
             return _storage_pool_state_with_machines(
-                session=session, node_names=node_names, machines=class_machines
+                session=session, node_names=node_names, machines=ledger_machines
             )
 
     return placement_support.build_plan(
@@ -182,22 +182,23 @@ def build_plan(
     )
 
 
-def _class_reservation_machines(
+def _external_load(
     session: Session, *, active_at: datetime
 ) -> list[pending_capacity.PendingMachine]:
-    """班級已預留、還沒建出來、而且到 ``active_at`` 還沒結束的機器。
+    """申請單帳本以外、PVE 上還看不到的量（見 ``pending_capacity.request_external_load``）。
 
-    批次建機不會產生申請單，這些機器只記在班級容量預留裡；PVE 上也還看不到。
-    不扣的話，申請單（含快速練習）會把整班已預留的容量當成空的分出去，
-    等審核通過開始建機才撞上放不下。班級結束後才開始的申請不受影響。
+    - 班級已預留、還沒建、到 ``active_at`` 還沒結束的機器：批次建機不會產生
+      申請單，不扣的話會把整班已預留的容量當成空的分出去，等審核通過開始建機
+      才撞上放不下。
+    - 已核准、還沒套用的規格調整增量：不扣的話套用時才發現節點放不下。
     """
-    return pending_capacity.class_reservation_machines(session, active_at=active_at)
+    return pending_capacity.request_external_load(session, active_at=active_at)
 
 
 def _live_capacities(
-    session: Session, *, class_machines: list[pending_capacity.PendingMachine]
+    session: Session, *, ledger_machines: list[pending_capacity.PendingMachine]
 ) -> list[NodeCapacity]:
-    """節點此刻的可用量，扣掉已分配給機器的規格與班級待建機器。"""
+    """節點此刻的可用量，扣掉已分配給機器的規格與其他帳本的待建量。"""
     nodes, resources = placement_support.load_cluster_state()
     cpu_overcommit_ratio, disk_overcommit_ratio = get_overcommit_ratios(session)
     capacities = placement_support.build_live_node_capacities(
@@ -207,7 +208,7 @@ def _live_capacities(
         disk_overcommit_ratio=disk_overcommit_ratio,
         memory_overcommit_ratio=get_memory_overcommit_ratio(session),
     )
-    pending_capacity.subtract_from_capacities(capacities, class_machines)
+    pending_capacity.subtract_from_capacities(capacities, ledger_machines)
     return capacities
 
 
@@ -257,10 +258,10 @@ def _select_current_for_request(
     request: PlacementRequest,
 ) -> CurrentPlacementSelection:
     """依節點「現在」的容量選點（不看預約時段）。"""
-    class_machines = _class_reservation_machines(
+    ledger_machines = _external_load(
         session, active_at=datetime.now(UTC)
     )
-    node_capacities = _live_capacities(session, class_machines=class_machines)
+    node_capacities = _live_capacities(session, ledger_machines=ledger_machines)
     effective_resource_type, resource_type_reason = placement_advisor.decide_resource_type(
         request
     )
@@ -270,7 +271,7 @@ def _select_current_for_request(
         node_capacities=node_capacities,
         effective_resource_type=effective_resource_type,
         resource_type_reason=resource_type_reason,
-        class_machines=class_machines,
+        ledger_machines=ledger_machines,
     )
     return CurrentPlacementSelection(
         node=plan.recommended_node,
@@ -292,8 +293,8 @@ class _WindowFeasibility:
     reserved_requests: list[VMRequest]
     effective_resource_type: ResourceType
     resource_type_reason: str
-    # 已經扣進節點容量與儲存區的班級待建機器；build_plan 要用同一份
-    class_machines: list[pending_capacity.PendingMachine]
+    # 已經扣進節點容量與儲存區的其他帳本待建量；build_plan 要用同一份
+    ledger_machines: list[pending_capacity.PendingMachine]
 
 
 def _feasible_nodes_over_window(
@@ -310,8 +311,8 @@ def _feasible_nodes_over_window(
     （get_preview_node_scores）共用同一套判斷，兩邊的可行節點才會一致。
     reserved_requests 為 None 時查詢與時段重疊的已核准申請。
     """
-    class_machines = _class_reservation_machines(session, active_at=start_at)
-    baseline_capacities = _live_capacities(session, class_machines=class_machines)
+    ledger_machines = _external_load(session, active_at=start_at)
+    baseline_capacities = _live_capacities(session, ledger_machines=ledger_machines)
     _cpu_overcommit_ratio, disk_overcommit_ratio = get_overcommit_ratios(session)
     effective_resource_type, resource_type_reason = placement_advisor.decide_resource_type(
         request
@@ -319,7 +320,7 @@ def _feasible_nodes_over_window(
     storage_pools_by_node, has_managed_storage = _storage_pool_state_with_machines(
         session=session,
         node_names=[item.node for item in baseline_capacities],
-        machines=class_machines,
+        machines=ledger_machines,
     )
     allowed_gpu_nodes = placement_support.allowed_gpu_nodes_for_request(request)
     allowed_template_nodes = placement_support.allowed_template_nodes_for_request(
@@ -384,7 +385,7 @@ def _feasible_nodes_over_window(
         reserved_requests=reserved_requests,
         effective_resource_type=effective_resource_type,
         resource_type_reason=resource_type_reason,
-        class_machines=class_machines,
+        ledger_machines=ledger_machines,
     )
 
 
@@ -489,7 +490,7 @@ def select_reserved_target_node_for_request(
             resource_type_reason=resource_type_reason,
             placement_strategy=strategy,
             node_priorities=get_node_priorities(session),
-            class_machines=window.class_machines,
+            ledger_machines=window.ledger_machines,
         )
         if plan.recommended_node:
             break

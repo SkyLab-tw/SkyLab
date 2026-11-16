@@ -784,11 +784,13 @@ def _pending_load(
     - 其他班已預留、還沒建、現在還沒結束的機器。
     - 已核准、還沒 clone 完、在 ``until`` 之前開始的申請單（快速練習、一般
       申請）。這些不在班級預留裡，不扣的話，排隊中的機器會被當成空位分出去。
+    - 已核准、還沒套用的規格調整增量。
     """
     now = datetime.now(UTC)
     return [
         *pending_capacity.class_reservation_machines(session, active_at=now),
         *pending_capacity.unbuilt_request_machines(session, now=now, until=until),
+        *pending_capacity.approved_spec_change_machines(session),
     ]
 
 
