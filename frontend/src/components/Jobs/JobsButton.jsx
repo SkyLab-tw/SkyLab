@@ -1,26 +1,57 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import SegmentedControl from "../SegmentedControl/SegmentedControl";
+import Switch from "../Switch/Switch";
 import { useJobs } from "./JobsProvider";
 import { JobEmpty, JobLoading, JobRow, ReminderRow } from "./JobRow";
 import useDialogPresence from "../../hooks/useDialogPresence";
+import useAnchoredMenu from "../../hooks/useAnchoredMenu";
 import { useUnsavedChanges } from "../../contexts/UnsavedChangesContext";
 import styles from "./Jobs.module.scss";
 
+/** 需與 Jobs.module.scss 的 .popover 寬度一致 */
 const POPOVER_WIDTH = 360;
-const GAP = 8;      // popover 與按鈕的間距
-const MARGIN = 16;  // popover 與視窗邊緣的最小留白
+
+/**
+ * 面板外框：定位、外點與 Esc 關閉共用 useAnchoredMenu（貼著側欄外緣彈出、底緣對齊按鈕，
+ * 跟側欄的語言、帳號選單同一個位置）。打開時焦點移進面板，按 Esc 關閉並把焦點還給按鈕。
+ *
+ * portal 到 document.body：側欄的 backdrop-filter 會成為 fixed 子元素的定位基準，
+ * 加上 overflow-x: hidden 會把彈出內容裁掉。
+ */
+function JobsPopover({ anchorRef, ariaLabel, closing, onClose, children }) {
+  const { ref, pos } = useAnchoredMenu({ anchorRef, onClose, width: POPOVER_WIDTH, placement: "side" });
+  const positioned = pos !== null;
+
+  // 量好位置、看得到之後才移焦點：隱形時 focus 會讓頁面捲到左上角
+  useEffect(() => {
+    if (positioned) ref.current?.focus({ preventScroll: true });
+  }, [positioned, ref]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={ariaLabel}
+      tabIndex={-1}
+      className={`${styles.popover} ${closing ? styles.popoverOut : ""}`}
+      style={pos ? { top: pos.top, left: pos.left } : { top: 0, left: 0, visibility: "hidden" }}
+      // Esc 由 useAnchoredMenu 在 document 上關閉並標成已處理；這裡先把焦點交回按鈕
+      onKeyDown={(event) => { if (event.key === "Escape") anchorRef.current?.focus(); }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
 
 /**
  * 側欄任務入口：有執行中任務時顯示數量（側欄收合時改為紅點），
  * 點開 popover 列出執行中任務，點單筆開詳情（dialog 由 JobsProvider 掛載）。
  * 需在 JobsProvider 內使用。
- *
- * popover 以 portal 掛在 document.body：側欄的 backdrop-filter 會成為
- * fixed 子元素的定位基準，加上 overflow-x: hidden 會把彈出內容裁掉。
  */
 export default function JobsButton({ collapsed = false }) {
   const { t } = useTranslation("components");
@@ -42,46 +73,9 @@ export default function JobsButton({ collapsed = false }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("jobs");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [pos, setPos] = useState(null);
   // 關閉時先播放離場動畫再卸載
   const presence = useDialogPresence(open, 130);
   const btnRef = useRef(null);
-  const popRef = useRef(null);
-
-  /* 依按鈕位置把 popover 放到側欄右側、底部對齊按鈕 */
-  const updatePos = useCallback(() => {
-    const btn = btnRef.current;
-    const rect = btn?.getBoundingClientRect();
-    if (!rect) return;
-    // 以側欄外緣（而非按鈕右緣）為基準，才不會蓋到側欄內距與圓角邊框
-    const anchorRight = btn.closest("aside")?.getBoundingClientRect().right ?? rect.right;
-    const maxLeft = window.innerWidth - POPOVER_WIDTH - MARGIN;
-    setPos({
-      left: Math.max(MARGIN, Math.min(anchorRight + GAP, maxLeft)),
-      bottom: Math.max(MARGIN, window.innerHeight - rect.bottom),
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    updatePos();
-    const onDown = (e) => {
-      if (btnRef.current?.contains(e.target)) return;
-      if (popRef.current?.contains(e.target)) return;
-      setOpen(false);
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("resize", updatePos);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", updatePos);
-    };
-  }, [open, updatePos]);
 
   /* 側欄收合／展開時按鈕會位移且有寬度動畫，直接收起 popover 免得對不準 */
   useEffect(() => {
@@ -139,6 +133,7 @@ export default function JobsButton({ collapsed = false }) {
         onClick={toggleOpen}
         title={collapsed ? t("JobsButton.backgroundJobs") : undefined}
         aria-label={t("JobsButton.backgroundJobs")}
+        aria-haspopup="dialog"
         aria-expanded={open}
       >
         <span className={styles.sidebarBtnIcon}>
@@ -153,11 +148,12 @@ export default function JobsButton({ collapsed = false }) {
         )}
       </button>
 
-      {presence.open && pos && createPortal(
-        <div
-          ref={popRef}
-          className={`${styles.popover} ${presence.closing ? styles.popoverOut : ""}`}
-          style={{ left: pos.left, bottom: pos.bottom }}
+      {presence.open && (
+        <JobsPopover
+          anchorRef={btnRef}
+          ariaLabel={t("JobsButton.backgroundJobs")}
+          closing={presence.closing}
+          onClose={() => setOpen(false)}
         >
           <div className={styles.popoverHeader}>
             <span className={styles.popoverTitle}>
@@ -179,34 +175,35 @@ export default function JobsButton({ collapsed = false }) {
           {settingsOpen ? (
             /* 設定視圖：整個彈窗內容切換，不跟任務列表擠在同一屏 */
             <div className={styles.settingsPanel}>
+              {/* 一切換就生效，用開關不用勾選框 */}
               {isAdmin && (
-                <label className={styles.settingRow}>
+                <div className={styles.settingRow}>
                   <span className={styles.settingText}>
                     <span>{t("JobsButton.notifyOnlyMineTitle")}</span>
                     <small>{t("JobsButton.notifyOnlyMineHint")}</small>
                   </span>
-                  <input
-                    type="checkbox"
+                  <Switch
                     checked={notifyOnlyMine}
-                    onChange={(e) => setNotifyOnlyMine(e.target.checked)}
+                    onChange={setNotifyOnlyMine}
+                    ariaLabel={t("JobsButton.notifyOnlyMineTitle")}
                   />
-                </label>
+                </div>
               )}
               {desktopNotifications.supported && (
-                <label className={`${styles.settingRow} ${desktopBlocked ? styles.settingRowDisabled : ""}`}>
+                <div className={`${styles.settingRow} ${desktopBlocked ? styles.settingRowDisabled : ""}`}>
                   <span className={styles.settingText}>
                     <span>{t("JobsButton.desktopNotificationsTitle")}</span>
                     <small>
                       {desktopBlocked ? t(desktopBlockedKey) : t("JobsButton.desktopNotificationsHint")}
                     </small>
                   </span>
-                  <input
-                    type="checkbox"
+                  <Switch
                     checked={desktopNotifications.enabled}
                     disabled={desktopBlocked}
-                    onChange={(e) => (e.target.checked ? desktopNotifications.enable() : desktopNotifications.disable())}
+                    onChange={(next) => (next ? desktopNotifications.enable() : desktopNotifications.disable())}
+                    ariaLabel={t("JobsButton.desktopNotificationsTitle")}
                   />
-                </label>
+                </div>
               )}
               {desktopNotifications.enabled && pushHintKey && (
                 <p className={styles.notifyHint}>{t(pushHintKey)}</p>
@@ -291,8 +288,7 @@ export default function JobsButton({ collapsed = false }) {
           </div>
           </>
           )}
-        </div>,
-        document.body,
+        </JobsPopover>
       )}
     </>
   );

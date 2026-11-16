@@ -3,10 +3,20 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import useAnchoredMenu from "../../hooks/useAnchoredMenu";
-import { COMMON_PORTS } from "../ReverseProxyRuleModal/domainHelpers";
 import styles from "./ConnectionDialog.module.scss";
 
 const MENU_MIN_WIDTH = 280;
+
+/* 常用 port 建議；label 是模組層級常數無法呼叫 hook，存 labelKey、render 時再 t() */
+const COMMON_PORTS = [
+  { value: "80", labelKey: "ConnectionDialog.port80" },
+  { value: "443", labelKey: "ConnectionDialog.port443" },
+  { value: "3000", labelKey: "ConnectionDialog.port3000" },
+  { value: "5000", labelKey: "ConnectionDialog.port5000" },
+  { value: "8000", labelKey: "ConnectionDialog.port8000" },
+  { value: "8080", labelKey: "ConnectionDialog.port8080" },
+  { value: "8888", labelKey: "ConnectionDialog.port8888" },
+];
 
 /**
  * Port 輸入框，可選擇帶常用 port 下拉。

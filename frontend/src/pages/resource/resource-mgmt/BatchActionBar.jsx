@@ -170,8 +170,9 @@ export default function BatchActionBar({ selected, onDone, onClear }) {
         )}
         <BatchAction
           ref={moreBtnRef}
-          icon="more_horiz"
+          icon="more_vert"
           label={t("ResourceMgmtPage.batchMore")}
+          aria-haspopup="menu"
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((open) => !open)}
         />

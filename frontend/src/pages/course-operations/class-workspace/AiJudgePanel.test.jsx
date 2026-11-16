@@ -35,7 +35,6 @@ import {
   resolveDetectabilityNeedsReview,
   sortStudentOverviewRows,
   getScriptCreationBlocker,
-  getSessionMenuPosition,
   getScriptCreationDestination,
   getTargetReviewSummary,
   getCheckResultSummary,
@@ -726,7 +725,7 @@ describe("RubricTable", () => {
     expect(html).not.toContain("檢查條件");
     expect(html).toContain("自動檢測支援");
     expect(html).toContain('>Python 版本檢查</textarea>');
-    expect(html).toContain("可以");
+    expect(html).toContain("可自動檢查");
     expect(html).toContain("缺少資訊");
     expect(html).toContain("導師檢查");
     expect(html).toContain("導師核查／無法執行");
@@ -741,9 +740,9 @@ describe("RubricTable", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-label="展開第 1 項檢查設定"');
     expect(html.indexOf('aria-label="展開第 1 項檢查設定"')).toBeLessThan(html.indexOf('>Python 版本檢查</textarea>'));
-    // 序號跟展開鈕在同一格，排在按鈕前面
-    expect(html.indexOf(">1</span>")).toBeGreaterThan(-1);
-    expect(html.indexOf(">1</span>")).toBeLessThan(html.indexOf('aria-label="展開第 1 項檢查設定"'));
+    // 序號跟展開鈕在同一格：展開鈕在前、序號緊貼著標題
+    expect(html.indexOf(">1</span>")).toBeGreaterThan(html.indexOf('aria-label="展開第 1 項檢查設定"'));
+    expect(html.indexOf(">1</span>")).toBeLessThan(html.indexOf('>Python 版本檢查</textarea>'));
     expect(html).not.toContain(">詳細</button>");
     expect(html).toContain("執行 python --version");
     expect(html).not.toContain('placeholder="寫下學生需要符合的條件"');
@@ -872,7 +871,7 @@ describe("RubricTable", () => {
     expect(versionHtml).not.toContain("缺少資訊");
   });
 
-  test("展開後顯示執行契約、判定模式與 assertion", async () => {
+  test("展開後用白話列出檢查機器、步驟、通過條件與判定方式", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -913,14 +912,18 @@ describe("RubricTable", () => {
       toggle.click();
     });
 
-    expect(container.textContent).toContain("執行契約");
-    expect(container.textContent).toContain("執行節點");
+    expect(container.textContent).toContain("檢查機器");
     expect(container.textContent).toContain("n8n（P1）");
-    expect(container.textContent).toContain("角色：workflow · 類型：LXC · 映像：Ubuntu 24.04");
-    expect(container.textContent).toContain("系統判定");
-    expect(container.textContent).toContain("預計檢查步驟（尚未執行）");
-    expect(container.textContent).toContain("回傳碼 = 0");
-    expect(container.textContent).toContain("30 秒");
+    expect(container.textContent).toContain("workflow · LXC · 映像：Ubuntu 24.04");
+    expect(container.textContent).toContain("系統自動判定");
+    expect(container.textContent).toContain("檢查步驟");
+    expect(container.textContent).toContain("執行指令");
+    expect(container.textContent).toContain("python3 /home/student/project/main.py");
+    expect(container.textContent).toContain("通過條件：結束代碼為 0");
+    expect(container.textContent).toContain("時限 30 秒");
+    // 系統內部的代號與用語不露給老師
+    expect(container.textContent).not.toContain("執行契約");
+    expect(container.textContent).not.toContain("command");
 
     await act(async () => {
       root.unmount();
@@ -1301,20 +1304,6 @@ describe("uploaded rubric naming", () => {
       .toBe("AI導師檢查表審核系統_Python服務Running狀態檢測_簡短版");
     expect(getRubricDisplayName({ display_name: "自訂檢查表", original_filename: "保存的檢查表.docx" })).toBe("自訂檢查表");
     expect(getRubricDisplayName({ name: "  " }, "未命名檢查表")).toBe("未命名檢查表");
-  });
-});
-
-describe("session menu positioning", () => {
-  test("浮動選單會貼近觸發按鈕並限制在視窗內", () => {
-    expect(getSessionMenuPosition(
-      { top: 160, right: 780, bottom: 196 },
-      { width: 800, height: 600, menuWidth: 220, menuHeight: 280, margin: 12 },
-    )).toEqual({ top: 208, left: 560 });
-
-    expect(getSessionMenuPosition(
-      { top: 520, right: 790, bottom: 556 },
-      { width: 800, height: 600, menuWidth: 220, menuHeight: 280, margin: 12 },
-    )).toEqual({ top: 228, left: 568 });
   });
 });
 
@@ -2456,6 +2445,16 @@ describe("導師核查：全班當週回報與指定檢查", () => {
     const bars = [...container.querySelectorAll('[role="img"]')].map((node) => node.getAttribute("aria-label"));
     expect(bars).toContain(i18n.t("AiJudgePanel.metricReportedValue", { ns: "teaching", done: 1, total: 2 }));
     expect(bars).toContain(i18n.t("AiJudgePanel.metricCheckValue", { ns: "teaching", pass: 0, fail: 0, error: 0, checked: 0, total: 2 }));
+    // 分頁列已經寫「導師核查」，總覽不再重複標題
+    expect(container.querySelector("h4")).toBeNull();
+    // 數量 0 時不上狀態色（還沒檢查就出現紅字會誤導）
+    const failCount = [...container.querySelectorAll("em")]
+      .find((node) => node.textContent === i18n.t("AiJudgePanel.metricFailCount", { ns: "teaching", count: 0 }));
+    expect(failCount.className).toMatch(/reviewStatZero/);
+    expect(failCount.className).not.toMatch(/reviewStatFail/);
+    // 回報狀態是 20px 圖示：完成＝實心綠勾，未回報＝小空心點（不畫數字、不像勾選框）
+    const ticks = [...container.querySelectorAll('[class*="reportTick"]')];
+    expect(ticks.map((tick) => tick.textContent)).toEqual(["check_circle", ""]);
 
     const runReady = [...container.querySelectorAll("button")]
       .find((button) => button.textContent.includes(i18n.t("AiJudgePanel.runReadyBtn", { ns: "teaching", count: 1 })));

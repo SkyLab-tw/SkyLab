@@ -16,21 +16,20 @@
   gap: $spacing-16;
 }
 
-/* ── 導師核查 ── */
+/* ── 導師核查 ──
+   總覽直接排在分頁裡（不包玻璃卡，工作區本身就是玻璃面板）；分頁列已寫「導師核查」，這裡只放動作鈕，靠右 */
 .reviewOverview {
   display: flex;
   align-items: stretch;
   flex-direction: column;
-  gap: $spacing-16;
+  gap: 12px;
 }
 
 .reviewOverviewHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: $spacing-16;
-
-  h4 { margin: 0; }
 }
 
 .runOnceProgress {
@@ -241,14 +240,16 @@ strong.reviewStatValue { font-size: $font-size-14; }
 .reviewStatPass { color: var(--color-success); }
 .reviewStatFail { color: var(--color-danger); }
 .reviewStatPending { color: var(--color-pending); }
+.reviewStatZero { color: var(--color-text-muted); } // 數量 0 不上狀態色
 
-/* 還不能檢查的原因：一行一個，右邊直接帶去處理的地方 */
+/* 還不能檢查的原因：一行一個，右邊直接帶去處理的地方。
+   提示塊一律白底＋一般細框，顏色只放在圖示（同 warn-notice 的原則），不鋪 info 淡底 */
 .reviewBlockers {
   display: grid;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
+  border: 1px solid var(--color-border);
   border-radius: $radius-8;
-  background: color-mix(in srgb, var(--color-info) 6%, transparent);
+  background: var(--color-surface);
 }
 
 .reviewBlocker {
@@ -259,7 +260,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
   color: var(--color-text-secondary);
   font-size: $font-size-12;
 
-  & + & { border-top: 1px solid color-mix(in srgb, var(--color-info) 18%, transparent); }
+  & + & { border-top: 1px solid var(--color-divider); }
   > span:first-child { color: var(--color-info); }
   > span:nth-child(2) { flex: 1; min-width: 0; }
 }
@@ -285,8 +286,8 @@ strong.reviewStatValue { font-size: $font-size-14; }
   transition: border-color $transition-base, box-shadow $transition-base;
 }
 
+/* 展開時只加深陰影，框色不變（卡片不靠改框色表示狀態，同檢查表展開） */
 .reviewStudentOpen {
-  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-divider));
   box-shadow: var(--shadow-md);
 }
 
@@ -377,23 +378,28 @@ strong.reviewStatValue { font-size: $font-size-14; }
   gap: 6px;
 }
 
-/* 學生條最前面的打勾狀態：已完成＝綠勾、做到一半＝橘色 n/m、還沒回報＝空心圈 */
+/* 學生條最前面的打勾狀態：20px 狀態圖示，不做成像勾選框的大圓圈。
+   已完成＝綠色實心勾、做到一半＝橘色進行中、還沒回報＝小空心點（n/m 寫在姓名旁的文字） */
 .reportTick {
   display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   align-items: center;
   justify-content: center;
-  border: 2px solid color-mix(in srgb, var(--color-status-neutral) 40%, transparent);
-  border-radius: 50%;
   color: var(--color-text-muted);
-
-  small { font-size: $font-size-10; font-weight: $font-weight-700; }
 }
 
-.reportTick_ready { border-color: var(--color-success); color: var(--color-text-on-primary); background: var(--color-success); }
-.reportTick_partial { border-color: var(--color-pending); color: var(--color-pending); }
+.reportTick_ready { color: var(--color-success); }
+.reportTick_partial { color: var(--color-pending); }
+
+.reportTick_none::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border: 2px solid color-mix(in srgb, var(--color-status-neutral) 45%, transparent);
+  border-radius: 50%;
+}
 
 .reviewStudentName {
   display: flex;
@@ -416,8 +422,9 @@ strong.reviewStatValue { font-size: $font-size-14; }
   color: var(--color-text-primary);
   font-size: $font-size-12;
 
-  > span { font-weight: $font-weight-700; }
-  > span small { margin-left: 4px; color: var(--color-text-muted); font-weight: $font-weight-500; }
+  // 第一個 span 是標籤（粗體＋「選填」）；下方的說明列另有 .replyFoot
+  > span:first-child { font-weight: $font-weight-700; }
+  > span:first-child small { margin-left: 4px; color: var(--color-text-muted); font-weight: $font-weight-500; }
 }
 
 .replyInput {
@@ -429,10 +436,18 @@ strong.reviewStatValue { font-size: $font-size-14; }
   line-height: 1.5;
 }
 
-.replyCount {
-  justify-self: end;
+/* 回覆欄下方：左邊說明（學生看得到、Ctrl+Enter 儲存），右邊字數（快到上限才出現） */
+.replyFoot {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-8;
   color: var(--color-text-muted);
   font-size: $font-size-12;
+  font-weight: $font-weight-400;
+}
+
+.replyCount {
+  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -639,19 +654,34 @@ strong.reviewStatValue { font-size: $font-size-14; }
     color: var(--color-text-primary);
   }
 }
-/* ── 提示框 ── */
+/* ── 提示框 ──
+   一律白底＋一般細框（玻璃卡裡的內容區塊不鋪淡底），狀態色只放在圖示（同 warn-notice 的原則）；
+   標題粗體用一般文字色。進行中藍、完成綠、失敗紅由下面的修飾類換圖示顏色 */
 .noticeInfo {
   @include flex-column;
   gap: 4px;
   padding: $spacing-8 $spacing-16;
+  border: 1px solid var(--color-border);
   border-radius: $radius-8;
-  font-size: $font-size-12;
-  border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
-  background: color-mix(in srgb, var(--color-info) 8%, transparent);
+  background: var(--color-surface);
   color: var(--color-text-secondary);
+  font-size: $font-size-12;
 
   p { margin: 0; }
-  strong { color: var(--color-info); }
+  strong { color: var(--color-text-primary); }
+}
+
+/* 提示前面的狀態圖示（MIcon／Spinner 都吃 currentColor），預設 info 藍 */
+.noticeIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--color-info);
+}
+
+/* 圖示夾在一段文字開頭時：對齊第一行 */
+.noticeInlineIcon {
+  margin-right: 4px;
+  vertical-align: -3px;
 }
 
 /* 提示＋一顆動作鈕排成一列，窄螢幕換行 */
@@ -663,21 +693,8 @@ strong.reviewStatValue { font-size: $font-size-14; }
   gap: $spacing-8 $spacing-16;
 }
 
-/* 製作中＝進行中，用 info 藍（橘色只留給待審核） */
-.noticeProgress {
-  border-color: color-mix(in srgb, var(--color-info) 30%, transparent);
-  background: linear-gradient(
-    110deg,
-    color-mix(in srgb, var(--color-info) 8%, var(--color-surface)) 0%,
-    color-mix(in srgb, var(--color-info) 16%, var(--color-surface)) 42%,
-    color-mix(in srgb, var(--color-info) 8%, var(--color-surface)) 70%
-  );
-  background-size: 220% 100%;
-  animation: scriptButtonProgress 1.8s ease-in-out infinite;
-  overflow: hidden;
-
-  strong { color: var(--color-info); }
-}
+/* 製作中＝進行中：轉圈的圖示就是進行中的訊號，底色維持白底，不再鋪會流動的藍色漸層 */
+.noticeProgress .noticeIcon { color: var(--color-info); }
 
 .noticeProgressTitle {
   display: inline-flex;
@@ -687,19 +704,8 @@ strong.reviewStatValue { font-size: $font-size-14; }
   font-weight: $font-weight-700;
 }
 
-.noticeWorkflowSuccess {
-  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
-  background: color-mix(in srgb, var(--color-success) 8%, transparent);
-
-  strong { color: var(--color-success); }
-}
-
-.noticeWorkflowError {
-  border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
-  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
-
-  strong { color: var(--color-danger); }
-}
+.noticeWorkflowSuccess .noticeIcon { color: var(--color-success); }
+.noticeWorkflowError .noticeIcon { color: var(--color-danger); }
 /* ── 欄位標籤 ── */
 .fieldLabel {
   font-size: $font-size-12;
@@ -737,15 +743,28 @@ strong.reviewStatValue { font-size: $font-size-14; }
   white-space: nowrap;
 }
 
+/* 展開鈕在序號前面：表頭的「#」往右挪過展開鈕（32px＋間距 6px），對齊下面的序號 */
+.rubricTable th:first-child { padding-left: calc(#{$spacing-16} + 38px); }
+
 .rubricTable th:nth-child(2) { width: 30%; }
 .rubricTable th:nth-child(4) { width: 136px; } /* 英文的 Supported／Not supported 徽章要約 100px，112 會被拆成 Supporte／d */
 .rubricTable th:last-child { width: 64px; } /* 32px 刪除鈕＋左右各 16px 內距；再窄按鈕會凸出表格右緣被裁掉 */
+
+/* 每一格都靠上對齊，第一行統一放在 36px 高的「首行」裡置中：
+   標題欄、檢測方式的第一行字（上內距 7px＋行高約 20px）正好也落在這 36px 的中線，
+   所以序號、展開鈕、狀態徽章、刪除鈕跟兩段文字的第一行對齊，內容再長也不會飄到中間 */
+.rubricCellLine {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
 
 /* 序號與展開鈕同一列、垂直置中 */
 .rubricIndex {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-height: 36px;
 }
 
 .rubricNumber {
@@ -754,7 +773,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
   font-size: $font-size-12;
   font-variant-numeric: tabular-nums;
   font-weight: $font-weight-700;
-  text-align: right;
 }
 
 /* 每列的刪除：標準危險圖示鈕（32px、未 hover 就是紅字） */
@@ -769,6 +787,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
 
 .rubricTableRow {
   @include table-tr;
+  @include table-tr-clickable; // 整列可點來展開／收合
 }
 
 /* 展開詳情時，詳情列接在後面，分隔線留到詳情列底下 */
@@ -824,16 +843,21 @@ strong.reviewStatValue { font-size: $font-size-14; }
   textarea:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 
+/* 標題欄 hover／聚焦才出現框：框內留 9px，框往左右各推出 10px，平常字的左緣跟表頭「檢查點」對齊 */
 .tableField .rubricTitleInput {
+  width: calc(100% + 20px);
   min-height: 48px;
+  margin-inline: -10px;
+  padding-inline: 9px;
   field-sizing: content;
   font-weight: $font-weight-700;
 }
 .rubricDescriptionCell { min-width: 0; }
+/* 上下 7px 跟標題欄的字同一條線；左右不留，字跟表頭「檢測方式」對齊 */
 .rubricMethodText {
   min-height: 36px;
   margin: 0;
-  padding: 7px 9px;
+  padding: 7px 0;
   border-radius: $radius-8;
   color: var(--color-text-primary);
   line-height: 1.45;
@@ -848,7 +872,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  margin: 2px 9px 0;
+  margin: 2px 0 0;
   color: var(--color-text-muted);
   font-size: $font-size-12;
   line-height: 1.45;
@@ -886,23 +910,22 @@ strong.reviewStatValue { font-size: $font-size-14; }
     white-space: pre-wrap;
   }
 }
-/* 兩個 class 的權重壓過 .rubricTableRow > td 的 top 對齊，不用 !important */
-.rubricTableRow > .rubricDetailToggleCell,
-.rubricTableRow > .rubricDetectabilityCell,
-.rubricTableRow > .rubricActionsCell {
-  vertical-align: middle;
+/* 序號欄：右內距要用兩個 class 的權重壓過 table-td 的 16px，不然 32px 的展開鈕會被擠成 20px 寬 */
+.rubricTableRow > .rubricDetailToggleCell {
+  padding-right: 4px;
 }
 
 /* 刪除鈕靠右貼齊表格邊緣 */
 .rubricTableRow > .rubricActionsCell {
   padding-right: $spacing-16;
-  text-align: right;
 }
 
 .tableActions {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
+  min-height: 36px;
 }
 
 .detailToggle {
@@ -976,75 +999,105 @@ strong.reviewStatValue { font-size: $font-size-14; }
   > span { min-width: 0; }
 }
 
-.detectGrid {
+/* ── 詳細檢查設定：左欄名稱、右欄內容的對照清單（dl）；窄欄時改成上下排 ── */
+.detailFacts {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: $spacing-8;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 12px $spacing-16;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
 
-  @include respond-to(sm) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  @container judge-rubric (max-width: 420px) {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+
+    .detailFact:not(:last-child) dd { margin-bottom: 10px; }
   }
 }
 
-.detectItem {
-  @include flex-column;
-  gap: 5px;
+// 每組 dt／dd 包一層 div 方便條件顯示；display: contents 讓它們直接排進上面的兩欄
+.detailFact {
+  display: contents;
 
-  span {
+  dt {
+    color: var(--color-text-muted);
     font-size: $font-size-12;
     font-weight: $font-weight-500;
-    color: var(--color-text-muted);
+    line-height: 22px; // 對齊右欄 14px 字第一行
+    white-space: nowrap;
   }
 
-  p {
+  dd {
+    min-width: 0;
     margin: 0;
-    padding: 9px 12px;
-    border: 1px solid var(--color-divider);
-    border-radius: $radius-8;
-    background: var(--color-surface);
-    font-size: $font-size-14;
     color: var(--color-text-primary);
+    font-size: $font-size-14;
     line-height: 1.6;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+
+  small {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: $font-size-12;
+  }
 }
 
-.executionContract {
-  display: flex;
-  flex-wrap: wrap;
+/* 檢查步驟：一步一段（做什麼／整行指令或路徑／通過條件與時限）；兩步以上才編號 */
+.stepList,
+.stepListNumbered {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  white-space: normal;
+}
+
+.stepList { list-style: none; }
+
+.stepListNumbered {
+  padding-left: 18px;
+
+  > li::marker {
+    color: var(--color-text-muted);
+    font-size: $font-size-12;
+  }
+}
+
+.stepItem {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stepAction {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 2px;
-  padding: 7px 9px;
-  border: 1px solid var(--color-divider);
-  border-radius: $radius-8;
-  background: var(--color-surface);
+  font-weight: $font-weight-500;
+
+  > :first-child { color: var(--color-text-secondary); }
 }
 
-.executionContractTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+.stepTarget {
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent);
+  color: var(--color-text-primary);
+  font-family: $font-family-mono;
   font-size: $font-size-12;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.executionContractTitle {
-  color: var(--color-text-secondary);
-  font-weight: $font-weight-700;
-}
-
-.executionContractItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+.stepNotes {
+  color: var(--color-text-muted);
   font-size: $font-size-12;
-  padding-left: 8px;
-  border-left: 1px solid var(--color-divider);
-
-  > span { color: var(--color-text-muted); }
-  strong { color: var(--color-text-primary); font-weight: $font-weight-500; }
-  small { color: var(--color-text-muted); font-size: $font-size-12; }
 }
 
 .chipRow {
@@ -1068,29 +1121,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
     font-size: $font-size-12;
     color: var(--color-text-muted);
   }
-}
-
-/* 檢查步驟的唯讀參數顯示：每個步驟一列，後接 argv／cwd 等參數 chip。 */
-.stepPlanList {
-  display: grid;
-  gap: 6px;
-}
-
-.stepPlanRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.chipLabel,
-.chipText {
-  font-size: $font-size-12;
-  color: var(--color-text-muted);
-}
-
-.stepPlanRow .chip code {
-  color: var(--color-text-primary);
 }
 
 /* ── AI 對話 ── */
@@ -1748,57 +1778,119 @@ strong.reviewStatValue { font-size: $font-size-14; }
   padding-right: $spacing-8;
 }
 
-@keyframes menuIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.sessionMenuOut {
-  animation: none !important;
-  opacity: 0;
-  transform: translateY(6px);
-  pointer-events: none;
-}
-
-.sessionMenu {
-  position: fixed;
-  z-index: 1200;
+/* ── 窄版的週次切換（工作區寬不到 1100px）──
+   週次清單疊在最上面會把工作區推出首屏，改成跟分頁同一條標頭列的翻頁控制：
+   ‹ 目前這週 ▾ › 連成一組（跟欄位同高 36px、白底細框），點週次開換週清單（ListboxPopover）。
+   寬度固定吃滿可用空間（上限 560），不跟著週次標題長短變，連按箭頭時箭頭不會跑掉 */
+.weekSwitcher {
   display: flex;
-  width: min(220px, calc(100vw - 24px));
-  max-height: min(420px, calc(100vh - 24px));
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-12;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
-  animation: menuIn 0.13s ease;
-  transition: opacity 0.13s ease, transform 0.13s ease;
-}
-
-.sessionMenu button {
-  display: flex;
+  flex: 1 1 360px;
   align-items: center;
-  gap: 7px;
-  width: 100%;
-  min-height: 34px;
-  padding: 6px 9px;
+  gap: $spacing-8;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.weekPager {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-8;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.weekStepBtn,
+.weekPickerBtn {
   border: 0;
-  border-radius: 6px;
-  color: var(--color-text-primary);
   background: transparent;
   font: inherit;
-  font-size: $font-size-12;
-  text-align: left;
   cursor: pointer;
+  transition: background $transition-base, color $transition-base;
+
+  &:hover:not(:disabled) {
+    background: var(--color-hover);
+    color: var(--color-text-primary);
+  }
+
+  // 外框 overflow: hidden 會切掉往外畫的焦點框，改畫在按鈕內側
+  &:focus-visible {
+    outline-offset: -2px;
+  }
 }
 
-.sessionMenu button:hover:not(:disabled) { background: var(--color-hover); }
-.sessionMenu button:disabled { opacity: .5; cursor: not-allowed; }
-.menuDanger { color: var(--color-danger) !important; }
-.menuSeparator { display: block; height: 1px; margin: 4px 2px; background: var(--color-divider); }
+.weekStepBtn {
+  display: inline-flex;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+
+  &:first-child { border-right: 1px solid var(--color-border); }
+  &:last-child { border-left: 1px solid var(--color-border); }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.weekPickerBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: $spacing-8;
+  min-width: 0;
+  padding: 0 6px 0 12px;
+  color: var(--color-text-primary);
+  font-size: $font-size-14;
+  text-align: left;
+}
+
+/* 「第 N 週」粗體、主題中等字重，跟週次清單同一個語彙；太長時截斷 */
+.weekPickerTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: $font-weight-700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weekPickerDate {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+}
+
+.weekDraftBadge {
+  @include badge-base;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent);
+}
+
+.weekPickerChevron,
+.weekPickerChevronOpen {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  transition: transform $transition-base;
+}
+
+.weekPickerChevronOpen {
+  transform: rotate(180deg);
+}
+
+/* 這週沒有檢查時沒有 ⋮，留同寬的空位 */
+.weekMenuSlot {
+  flex: 0 0 32px;
+  height: 32px;
+}
 
 .sidebarLoading {
   @include flex-center;
@@ -1926,6 +2018,14 @@ strong.reviewStatValue { font-size: $font-size-14; }
     padding: 12px;
   }
 
+  // 窄版：換週控制在左、分頁在右；放不下時分頁換到下一行
+  .sidebarHeadCompact {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: $spacing-8 $spacing-16;
+    padding: $spacing-8 12px;
+  }
+
   // 分頁撐滿側邊欄、內距收小都走 SegmentedControl 的 fullWidth／compact prop，這裡只管它在標頭列不被壓縮
   .sidebarTabs {
     flex: 0 0 auto;
@@ -2028,8 +2128,9 @@ strong.reviewStatValue { font-size: $font-size-14; }
   }
 }
 
+/* 導師核查：左右不再另加內距，子區塊已經有 .checkTabPanel 給的 24px 左右邊距（原本兩層相加變 48px） */
 .checkTabPanelPadded {
-  padding: 20px $spacing-24 $spacing-24;
+  padding: $spacing-8 0 $spacing-24;
 }
 
 /* 表格貼齊工作區左右邊緣（工作區本身沒有內距），表格外框不用負邊距——
@@ -2391,19 +2492,33 @@ strong.reviewStatValue { font-size: $font-size-14; }
     white-space: nowrap;
   }
   .rubricTable tbody { display: block; }
+  /* 卡片頂列：左邊「序號＋狀態」是這一項的標籤，右邊「展開＋刪除」是動作，各自成組。
+     序號和展開鈕在同一格，用 display: contents 拆開，各自排進卡片的格線 */
   .rubricTableRow {
     display: grid;
-    grid-template-columns: 68px minmax(0, 1fr) 36px;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 4px $spacing-8;
     padding: $spacing-16;
   }
   .rubricTableRow > td { display: block; width: auto; padding: 0; }
-  .rubricDetailToggleCell { grid-column: 1; grid-row: 1; }
-  .rubricTableRow > .rubricDetectabilityCell { grid-column: 2; grid-row: 1; text-align: right; }
-  .rubricTableRow > .rubricActionsCell { grid-column: 3; grid-row: 1; padding: 0; }
+  .rubricTableRow > .rubricDetailToggleCell,
+  .rubricTableRow > .rubricDetailToggleCell > .rubricIndex { display: contents; }
+  .rubricNumber {
+    @include badge-base;
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: center;
+    min-width: 24px;
+    padding: 2px 6px;
+    background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent);
+    color: var(--color-text-secondary);
+  }
+  .rubricTableRow > .rubricDetectabilityCell { grid-column: 2; grid-row: 1; text-align: left; }
+  .detailToggle { grid-column: 3; grid-row: 1; }
+  .rubricTableRow > .rubricActionsCell { grid-column: 4; grid-row: 1; padding: 0; }
   .rubricTitleCell { grid-column: 1 / -1; grid-row: 2; }
-  .tableField .rubricTitleInput { min-height: 44px; padding-inline: 0; }
+  .tableField .rubricTitleInput { min-height: 44px; }
   .rubricDescriptionCell {
     grid-column: 1 / -1;
     grid-row: 3;
@@ -2427,7 +2542,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
 
 @container judge-content (max-width: 620px) {
   .checkChatCol { height: 420px; }
-  .checkTabPanelPadded { padding: $spacing-16; }
+  .checkTabPanelPadded { padding: $spacing-8 0 $spacing-16; }
   .checkPane { padding: $spacing-16; }
   .checkTabPanel > .tabBody > :not(.rubricsGrid) { margin-inline: $spacing-16; }
   .reviewStudentBody { padding-inline: $spacing-8; }
@@ -2439,10 +2554,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
 
 @media (prefers-reduced-motion: reduce) {
   .btnPrimaryProcessing {
-    animation: none;
-  }
-
-  .noticeProgress {
     animation: none;
   }
 

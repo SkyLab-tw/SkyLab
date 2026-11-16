@@ -1,0 +1,98 @@
+@use "../../assets/styles/variables" as *;
+@use "../../assets/styles/mixins" as *;
+
+/* ── 動作選單 ──
+   位置由 ActionMenu.jsx 經 useAnchoredMenu 算好寫進 inline style，這裡只管外觀。
+   跟 PowerMenu、ListboxPopover 同一套：不透明白底（不套 glass-surface，底下內容會透出來）、z-index 150 */
+.menu {
+  position: fixed;
+  z-index: 150; // 高於 sticky header(100)，低於 Dialog / Modal(200+)
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: $spacing-8;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-12;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.13s ease, transform 0.13s ease;
+}
+
+/* 側欄的帳號選單：跟側欄同一套玻璃（見 popover-glass） */
+.menuGlass {
+  @include popover-glass;
+}
+
+/* 進場方向跟著展開方向：往下展開就由上滑入，往上展開就由下滑入 */
+.menuDown { animation: actionMenuInDown 0.14s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.menuUp   { animation: actionMenuInUp   0.14s cubic-bezier(0.25, 0.8, 0.25, 1); }
+
+@keyframes actionMenuInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes actionMenuInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 離場 130ms，需與呼叫端 useDialogPresence 的時間一致 */
+.menuOut {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.menuDown.menuOut { transform: translateY(-6px); }
+.menuUp.menuOut   { transform: translateY(6px); }
+
+/* 選項上方的說明區（帳號選單的頭像、姓名）：內容由呼叫端給，這裡只管留白 */
+.header {
+  padding: 6px 10px 4px;
+  min-width: 0;
+}
+
+.separator {
+  display: block;
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--color-divider);
+}
+
+/* 選項：34px 高、12px 字，跟站內其他選單同一組 */
+.item,
+.itemDanger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: $radius-8;
+  color: var(--color-text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+  text-align: left;
+  cursor: pointer;
+  transition: background $transition-base;
+
+  &:hover:not(:disabled) { background: var(--color-hover); }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* 危險項（封存、刪除）：紅字常駐，hover 淡紅底；同結構寫，不靠 !important */
+.itemDanger {
+  color: var(--color-danger);
+
+  &:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
+}

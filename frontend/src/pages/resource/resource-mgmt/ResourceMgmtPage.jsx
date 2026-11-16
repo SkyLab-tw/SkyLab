@@ -186,7 +186,7 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
         {actionLoading && <MIcon name="hourglass_empty" size={16} spin />}
         {canControl && <div className={styles.menuWrap}>
           {menu.open && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onClose={() => setMenuOpen(false)} anchorRef={menuBtnRef} closing={menu.closing} />}
-          <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("ResourceMgmtPage.powerControlTitle")} aria-label={t("ResourceMgmtPage.powerControlTitle")}><MIcon name="more_vert" size={18} /></button>
+          <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("ResourceMgmtPage.powerControlTitle")} aria-label={t("ResourceMgmtPage.powerControlTitle")} aria-haspopup="menu" aria-expanded={menuOpen}><MIcon name="more_vert" size={18} /></button>
         </div>}
       </div></td>
     </tr>
@@ -296,7 +296,7 @@ function EnvironmentGroupRows({ group, machines = group.machines, onUpdated, onR
                   anchorRef={menuBtnRef}
                   closing={menu.closing}
                 />}
-                <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("ResourceMgmtPage.groupPowerTitle")} aria-label={t("ResourceMgmtPage.groupPowerTitle")}><MIcon name="more_vert" size={18} /></button>
+                <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("ResourceMgmtPage.groupPowerTitle")} aria-label={t("ResourceMgmtPage.groupPowerTitle")} aria-haspopup="menu" aria-expanded={menuOpen}><MIcon name="more_vert" size={18} /></button>
               </div>
             </div>
           : <span className={styles.noAction}>—</span>}</td>
@@ -429,6 +429,8 @@ function ResourceActionsCell({
           onClick={onToggleMenu}
           title={t("ResourceMgmtPage.powerControlTitle")}
           aria-label={t("ResourceMgmtPage.powerControlTitle")}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
         >
           <MIcon name="more_vert" size={18} />
         </button>
