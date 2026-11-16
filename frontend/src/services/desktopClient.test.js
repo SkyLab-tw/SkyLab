@@ -1,24 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-const WINDOWS_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
-const MAC_UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15";
-
 afterEach(() => {
   vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
   vi.resetModules();
 });
 
-async function downloadUrl(
-  apiUrl,
-  { override = "", macOverride = "", userAgent = WINDOWS_UA, maxTouchPoints = 0 } = {},
-) {
+async function downloadUrl(apiUrl, override = "") {
   vi.stubEnv("VITE_API_URL", apiUrl);
   vi.stubEnv("VITE_DESKTOP_CLIENT_DOWNLOAD_URL", override);
-  vi.stubEnv("VITE_DESKTOP_CLIENT_MAC_DOWNLOAD_URL", macOverride);
-  vi.stubGlobal("navigator", { userAgent, maxTouchPoints });
   return (await import("./desktopClient.js")).DESKTOP_CLIENT_DOWNLOAD_URL;
 }
 
@@ -34,31 +23,43 @@ test("split-origin deployments download through their configured API", async () 
 
 test("an explicit installer URL overrides the backend endpoint", async () => {
   const custom = "https://downloads.example.org/SkyLab-Connect-Setup.exe";
-  expect(await downloadUrl("https://api.example.org", { override: custom })).toBe(
-    custom,
+  expect(await downloadUrl("https://api.example.org", custom)).toBe(custom);
+});
+
+test.each([
+  [{ userAgentData: { platform: "Windows", mobile: false } }, "windows"],
+  [{ platform: "Win32", userAgent: "Windows NT 10.0" }, "windows"],
+  [{ platform: "MacIntel", userAgent: "Macintosh", maxTouchPoints: 0 }, "macos"],
+  [{ userAgentData: { platform: "macOS", mobile: false } }, "macos"],
+  [{ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" }, "macos"],
+  [{ platform: "MacIntel", userAgent: "Macintosh", maxTouchPoints: 5 }, null],
+  [{ platform: "iPhone", userAgent: "iPhone" }, null],
+  [{ userAgentData: { platform: "Android", mobile: true } }, null],
+  [{ platform: "Linux armv8l", userAgent: "Android" }, null],
+  [{ platform: "Linux x86_64", userAgent: "Linux" }, null],
+  [{}, null],
+])("detects desktop platforms without treating mobile devices as Macs (%j)", async (browser, expected) => {
+  const { getDesktopClientPlatform } = await import("./desktopClient.js");
+  expect(getDesktopClientPlatform(browser)).toBe(expected);
+});
+
+test("platform downloads use the configured API origin", async () => {
+  await downloadUrl("https://api.example.org///");
+  const { getDesktopClientDownloadUrl } = await import("./desktopClient.js");
+  expect(getDesktopClientDownloadUrl("windows")).toBe(
+    "https://api.example.org/api/v1/desktop-client/download?platform=windows",
+  );
+  expect(getDesktopClientDownloadUrl("macos")).toBe(
+    "https://api.example.org/api/v1/desktop-client/download?platform=macos",
   );
 });
 
-test("macOS browsers ask the backend for the macOS installer", async () => {
-  expect(await downloadUrl("", { userAgent: MAC_UA })).toBe(
-    "/api/v1/desktop-client/download?platform=mac",
-  );
-});
-
-test("macOS uses its own override, never the Windows one", async () => {
-  const windows = "https://downloads.example.org/SkyLab-Connect-Setup.exe";
-  const mac = "https://downloads.example.org/SkyLab-Connect-mac-universal.dmg";
-  expect(
-    await downloadUrl("", { override: windows, userAgent: MAC_UA }),
-  ).toBe("/api/v1/desktop-client/download?platform=mac");
-  vi.resetModules();
-  expect(
-    await downloadUrl("", { override: windows, macOverride: mac, userAgent: MAC_UA }),
-  ).toBe(mac);
-});
-
-test("iPads reporting a Mac user agent keep the default download", async () => {
-  expect(await downloadUrl("", { userAgent: MAC_UA, maxTouchPoints: 5 })).toBe(
-    "/api/v1/desktop-client/download",
-  );
+test("Windows and macOS overrides stay separate and preserve signed URLs", async () => {
+  const windows = "https://downloads.example.org/client.exe?signature=abc";
+  const mac = "https://downloads.example.org/client.dmg?signature=def";
+  vi.stubEnv("VITE_DESKTOP_CLIENT_MAC_DOWNLOAD_URL", mac);
+  await downloadUrl("", windows);
+  const { getDesktopClientDownloadUrl } = await import("./desktopClient.js");
+  expect(getDesktopClientDownloadUrl("windows")).toBe(windows);
+  expect(getDesktopClientDownloadUrl("macos")).toBe(mac);
 });

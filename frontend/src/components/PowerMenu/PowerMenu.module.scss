@@ -7,7 +7,7 @@
    半透明背景會讓底下的列（節點名稱、終端機按鈕…）透出來。 */
 .powerMenu {
   position: fixed;
-  width: 240px; // 需與 position.js 的 MENU_WIDTH 一致
+  width: 240px; // 需與 hooks/anchoredMenuPosition.js 的 MENU_WIDTH 一致
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: $radius-12;

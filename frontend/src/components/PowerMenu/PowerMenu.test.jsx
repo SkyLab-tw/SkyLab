@@ -71,3 +71,25 @@ test("extra actions are hidden without their callbacks", async () => {
   expect(findButton("PowerMenu.convertTemplate")).toBeUndefined();
   expect(findButton("PowerMenu.delete")).toBeUndefined();
 });
+
+test("鍵盤：焦點落在第一個可用動作，上下鍵頭尾相接，Esc 把焦點交回觸發鈕、Tab 關閉", async () => {
+  const onClose = vi.fn();
+  await renderMenu({ onClose });
+  // renderMenu 把觸發鈕直接掛在 body 底下
+  const anchor = [...document.body.children].find((el) => el.tagName === "BUTTON");
+  const press = (key) => act(async () => {
+    document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+
+  expect(document.querySelector('[role="menu"]').getAttribute("aria-label")).toBe("PowerMenu.title");
+  // 機器開著時「開機」停用，第一個可用的是「強制關機」
+  expect(document.activeElement.textContent).toContain("PowerMenu.stop");
+  await press("ArrowUp");
+  expect(document.activeElement.textContent).toContain("PowerMenu.reboot");
+  await press("ArrowDown");
+  expect(document.activeElement.textContent).toContain("PowerMenu.stop");
+
+  await press("Tab");
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(anchor);
+});

@@ -1,0 +1,118 @@
+@use "../../assets/styles/variables" as *;
+@use "../../assets/styles/mixins" as *;
+
+/* ── 單選清單浮層 ──
+   位置與寬度由 ListboxPopover.jsx 經 useAnchoredMenu 算好寫進 inline style，這裡只管外觀。
+   跟 PowerMenu 同一套：不套 glass-surface（半透明會讓底下的內容透出來）、z-index 150。 */
+.listbox {
+  position: fixed;
+  z-index: 150; // 高於 sticky header(100)，低於 Dialog / Modal(200+)
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(420px, calc(100vh - 16px)); // 量位置前的預設；量完由 inline style 依剩下的空間縮
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: $spacing-8;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-12;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.13s ease, transform 0.13s ease;
+}
+
+/* 側欄的語言選單：跟側欄同一套玻璃（見 popover-glass） */
+.listboxGlass {
+  @include popover-glass;
+}
+
+/* 進場方向跟著展開方向：往下展開就由上滑入，往上展開就由下滑入 */
+.listboxDown { animation: listboxInDown 0.14s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.listboxUp   { animation: listboxInUp   0.14s cubic-bezier(0.25, 0.8, 0.25, 1); }
+
+@keyframes listboxInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes listboxInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 離場 130ms，需與呼叫端 useDialogPresence 的時間一致 */
+.listboxOut {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.listboxDown.listboxOut { transform: translateY(-6px); }
+.listboxUp.listboxOut   { transform: translateY(6px); }
+
+.option,
+.optionSelected {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: $spacing-8;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: $radius-8;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background $transition-base;
+
+  &:hover:not(:disabled) { background: var(--color-hover); }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* 目前選中的那項：主色淡底，跟清單裡選中的列同一個語彙 */
+.optionSelected {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+
+  &:hover:not(:disabled) { background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+}
+
+.optionText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.optionLabel,
+.optionDescription {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionLabel {
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
+}
+
+.optionDescription {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+}
+
+.optionCheck {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+}

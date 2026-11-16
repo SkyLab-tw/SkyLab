@@ -52,7 +52,6 @@ class Settings(BaseSettings):
         "https://github.com/SkyLab-tw/SkyLab-Connect/"
         "releases/latest/download/SkyLab-Connect-Setup.exe"
     )
-    # Same as above for macOS (/desktop-client/download?platform=mac).
     DESKTOP_CLIENT_MAC_DOWNLOAD_URL: str = (
         "https://github.com/SkyLab-tw/SkyLab-Connect/"
         "releases/latest/download/SkyLab-Connect-mac-universal.dmg"

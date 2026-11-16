@@ -12,9 +12,9 @@ import mimetypes
 import secrets
 import time
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.api.deps import CurrentUser, SessionDep
@@ -51,12 +51,6 @@ _DOWNLOAD_PATTERNS = (
     "*.dmg",
     "*.AppImage",
     "*.zip",
-)
-# macOS 只發 universal DMG（Intel 與 Apple Silicon 通用）
-_MAC_DOWNLOAD_PATTERNS = (
-    "SkyLab-Connect-mac-universal.dmg",
-    "SkyLab-Connect-mac-*.dmg",
-    "*.dmg",
 )
 
 # ─── Device auth in-memory store ─────────────────────────────────────────────
@@ -258,9 +252,12 @@ def _newest_matching_file(directory: Path, pattern: str) -> Path | None:
     return max(matches, key=lambda path: path.stat().st_mtime)
 
 
-def _find_local_download_asset(
-    patterns: tuple[str, ...] = _DOWNLOAD_PATTERNS,
-) -> Path | None:
+def _find_local_download_asset(platform: str | None = None) -> Path | None:
+    patterns = _DOWNLOAD_PATTERNS
+    if platform == "macos":
+        patterns = ("SkyLab-Connect-mac-universal.dmg", "*.dmg")
+    elif platform == "windows":
+        patterns = tuple(p for p in patterns if p not in ("*.dmg", "*.AppImage"))
     for pattern in patterns:
         asset = _newest_matching_file(_STATIC_DIR, pattern)
         if asset:
@@ -270,31 +267,26 @@ def _find_local_download_asset(
 
 
 @router.get("/download")
-def download_desktop_client(
-    platform: Annotated[Literal["windows", "mac"], Query()] = "windows",
-):
+def download_desktop_client(platform: Literal["windows", "macos"] | None = None):
     """Return the desktop client installer or archive.
 
     The installer is intentionally public so a normal browser download can
     follow the redirect without exposing an API access token.
 
-    If DESKTOP_CLIENT_DOWNLOAD_URL (or DESKTOP_CLIENT_MAC_DOWNLOAD_URL for
-    platform=mac) is set, redirects to that URL (e.g. a GitHub Releases asset).
-    Otherwise serves a local file from static/downloads/.
+    Select the configured Windows or macOS URL with the platform query parameter.
+    Without a platform, retain the legacy URL and local asset selection.
+    An empty URL serves a matching local file from static/downloads/.
     Client source and build outputs live in the separate SkyLab-Connect repository.
     """
-    is_mac = platform == "mac"
-    release_url = (
+    download_url = (
         settings.DESKTOP_CLIENT_MAC_DOWNLOAD_URL
-        if is_mac
+        if platform == "macos"
         else settings.DESKTOP_CLIENT_DOWNLOAD_URL
     )
-    if release_url:
-        return RedirectResponse(release_url, status_code=302)
+    if download_url:
+        return RedirectResponse(download_url, status_code=302)
 
-    download_path = _find_local_download_asset(
-        _MAC_DOWNLOAD_PATTERNS if is_mac else _DOWNLOAD_PATTERNS
-    )
+    download_path = _find_local_download_asset(platform)
     if not download_path:
         logger.warning(
             "Desktop client download asset not found in %s",
