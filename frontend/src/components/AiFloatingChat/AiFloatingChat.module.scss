@@ -53,8 +53,8 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
+/* 只有一行名稱，高度由 34px 的圓形按鈕＋上下 12px 撐出來 */
 .header {
-  min-height: 66px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -69,17 +69,10 @@
 .headerText {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
 
   strong {
     color: var(--color-text-primary);
     font-size: $font-size-14;
-  }
-
-  span {
-    color: var(--color-text-muted);
-    font-size: $font-size-12;
   }
 }
 
@@ -453,14 +446,15 @@
   color: var(--color-text-secondary);
 }
 
-/* 流程導覽：目前這一步高亮，已經過的那幾步壓低對比 */
+/* 流程導覽：目前這一步高亮，已經過的那幾步壓低對比。
+   順序靠由上而下排列表達，不再加外面的 1. 2. 3.：卡片裡的狀態圖示（已完成／目前／還沒做）已經標出進度，兩套記號重複 */
 .stepList {
-  list-style: decimal;
+  list-style: none;
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin: 14px 0 0;
-  padding: 0 0 0 1.5em;
+  padding: 0;
 
   button {
     width: 100%;
@@ -516,11 +510,12 @@
   padding: 12px $spacing-16 $spacing-16;
   background: transparent;
 
+  // AI 可能出錯的提醒常駐在輸入框下方（使用者選常駐）；用全站最小可讀字級 12px，不再縮成 10px
   > small {
     display: block;
     margin-top: $spacing-8;
     color: var(--color-text-muted);
-    font-size: $font-size-10;
+    font-size: $font-size-12;
     text-align: center;
   }
 }
@@ -638,12 +633,16 @@
   pointer-events: none;
 }
 
-@media (max-width: 1439px) {
-  .rootOpen {
+/* 覆蓋層版型：面板固定在右側蓋住頁面、底下鋪遮罩，點遮罩關閉。
+   用在 <1440 的視窗，以及頁面自己有對話欄、要求助手不要擠窄版面的時候（.rootOverlay，AI 導師檢查）。
+   右邊界歸零：並排時往右挪的負邊距放到 fixed 面板上會把它推出畫面 */
+@mixin overlay-layout {
+  &.rootOpen {
     position: fixed;
     inset: 0 0 0 auto;
     width: min(460px, 100vw);
     margin-left: 0;
+    margin-right: 0;
   }
 
   .panel {
@@ -665,16 +664,23 @@
     animation: panelBackdropIn 0.18s ease;
     transition: opacity 0.18s ease;
   }
-
-  @keyframes panelBackdropIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
 }
 
+@keyframes panelBackdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (max-width: 1439px) {
+  .root { @include overlay-layout; }
+}
+
+.rootOverlay { @include overlay-layout; }
+
+/* 覆蓋層版型的權重是兩個 class，手機全寬也要寫成兩個 class 才蓋得過 */
 @media (max-width: 560px) {
-  .rootOpen { width: 100vw; }
-  .panel { border: 0; border-radius: 0; }
+  .root.rootOpen { width: 100vw; }
+  .root .panel { border: 0; border-radius: 0; }
   /* 按鈕有 6px 內距，往外推回去，章魚本體才跟原本一樣離邊 16px */
   .fab { right: 10px; bottom: 10px; }
 }
