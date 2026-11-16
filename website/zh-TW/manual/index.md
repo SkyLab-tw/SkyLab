@@ -27,7 +27,7 @@
 - [建立班級](/zh-TW/manual/class-setup)：名單、課表、環境、批次建置
 - [班級管理](/zh-TW/manual/class-management)：班級清單、草稿與批量封存
 - [班級工作頁](/zh-TW/manual/class-workspace)：學生、機器、監看、廣播、每週內容
-- [AI導師檢查](/zh-TW/manual/ai-judge)：檢查表、產生腳本、在學生機器上執行檢查
+- [AI 導師檢查](/zh-TW/manual/ai-judge)：檢查表、產生腳本、在學生機器上執行檢查
 - [教學環境](/zh-TW/manual/course-templates)：建構與發布多機拓樸，另見 [SOP](/zh-TW/guides/multi-machine-environment-sop)
 - [課程管理](/zh-TW/manual/course-cms)：學習路徑、任務與題目
 

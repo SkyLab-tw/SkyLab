@@ -41,7 +41,6 @@
   "AiFloatingChat.foundTargetsMessage": "ご要望に合いそうな機能を見つけました：",
   "AiFloatingChat.genericErrorFallback": "AIが現在応答できません。しばらくしてから再度お試しください。",
   "AiFloatingChat.greetingSuffix": "さん、こんにちは！",
-  "AiFloatingChat.headerSubtitle": "SkyLabスマートアシスト",
   "AiFloatingChat.needMoreInfoMessage": "この機器の用途をもう少し教えてください。例えば「ディープラーニングの学習」や「Webサイトの構築」などです。",
   "AiFloatingChat.newChatLabel": "新しい会話を開始",
   "AiFloatingChat.noReplyFallback": "現在返信を生成できません。しばらくしてから再度お試しください。",

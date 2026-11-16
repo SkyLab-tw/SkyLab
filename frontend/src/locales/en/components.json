@@ -41,7 +41,6 @@
   "AiFloatingChat.foundTargetsMessage": "Here are some features that might match what you need:",
   "AiFloatingChat.genericErrorFallback": "The AI can't reply right now — please try again later.",
   "AiFloatingChat.greetingSuffix": ", hi!",
-  "AiFloatingChat.headerSubtitle": "SkyLab Smart Assistant",
   "AiFloatingChat.needMoreInfoMessage": "I still need to know what this machine is for — for example, \"running deep learning training\" or \"hosting a website.\"",
   "AiFloatingChat.newChatLabel": "New conversation",
   "AiFloatingChat.noReplyFallback": "Couldn't generate a reply right now — please try again later.",

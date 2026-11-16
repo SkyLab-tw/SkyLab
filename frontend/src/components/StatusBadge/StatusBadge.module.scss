@@ -1,0 +1,21 @@
+@use "../../assets/styles/variables" as *;
+@use "../../assets/styles/mixins" as *;
+
+/* 狀態徽章：狀態色 12% 淡底＋狀態色文字，不加外框。
+   高度 24px 固定，放進一列文字或表格裡都不會撐高列 */
+.badge {
+  @include badge-base;
+  justify-content: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 10px;
+  vertical-align: middle;
+}
+
+.success { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
+.info    { background: color-mix(in srgb, var(--color-info)    12%, transparent); color: var(--color-info); }
+.pending { background: color-mix(in srgb, var(--color-pending) 12%, transparent); color: var(--color-pending); }
+.danger  { background: color-mix(in srgb, var(--color-danger)  12%, transparent); color: var(--color-danger); }
+.muted   { background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent); color: var(--color-status-neutral); }
+/* 非狀態的主色標記（老師有回覆）：主色淡底、文字用 on-surface 版本，淺色主題也讀得到 */
+.primary { background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary-on-surface); }

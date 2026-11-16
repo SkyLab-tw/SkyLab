@@ -11,6 +11,7 @@ import AiJudgePanel, { JUDGE_COLUMN_WIDTHS, JUDGE_SIDE_BY_SIDE_MIN_WIDTH, readSt
 import { AiJudgeService } from "../../../services/aiJudge";
 import { ConfirmProvider } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { UnsavedChangesProvider } from "../../../contexts/UnsavedChangesContext";
+import { LayoutContext } from "../../../layout/layoutContext";
 import { createTestQueryClient, withQueryClient } from "../../../queries/testing";
 import i18n from "../../../i18n";
 
@@ -43,7 +44,7 @@ function CurrentLocation() {
   return <output data-test-location="">{search}</output>;
 }
 
-async function mountPanel({ initialEntry = "/?week=week-2", weeks = WEEKS } = {}) {
+async function mountPanel({ initialEntry = "/?week=week-2", weeks = WEEKS, setAssistantOverlay = () => {} } = {}) {
   Element.prototype.scrollIntoView = vi.fn();
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -57,11 +58,13 @@ async function mountPanel({ initialEntry = "/?week=week-2", weeks = WEEKS } = {}
       root.render(withQueryClient(
         <MemoryRouter initialEntries={[initialEntry]}>
           <CurrentLocation />
-          <ConfirmProvider>
-            <UnsavedChangesProvider>
-              <AiJudgePanel classId="class-1" members={[]} weeks={nextWeeks} />
-            </UnsavedChangesProvider>
-          </ConfirmProvider>
+          <LayoutContext.Provider value={{ setAssistantOverlay, registerSurface: () => {} }}>
+            <ConfirmProvider>
+              <UnsavedChangesProvider>
+                <AiJudgePanel classId="class-1" members={[]} weeks={nextWeeks} />
+              </UnsavedChangesProvider>
+            </ConfirmProvider>
+          </LayoutContext.Provider>
         </MemoryRouter>,
         queryClient,
       ));
@@ -181,6 +184,20 @@ test("週次的「⋮」用共用動作選單：焦點落第一項，刪除放�
   });
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
   expect(document.activeElement).toBe(trigger);
+});
+
+test("這頁有自己的檢查助理：掛上時請 AI 助手改用覆蓋層，離開時還原", async () => {
+  vi.spyOn(AiJudgeService, "listSessions").mockResolvedValue([]);
+  vi.spyOn(AiJudgeService, "listFiles").mockResolvedValue([]);
+  vi.spyOn(AiJudgeService, "listSessionMessages").mockResolvedValue([]);
+  const setAssistantOverlay = vi.fn();
+
+  await mountPanel({ setAssistantOverlay });
+  expect(setAssistantOverlay).toHaveBeenLastCalledWith(true);
+
+  await cleanup();
+  cleanup = null;
+  expect(setAssistantOverlay).toHaveBeenLastCalledWith(false);
 });
 
 test("按「建立這週的檢查」才建立，之後直接進入那週的任務設定", async () => {

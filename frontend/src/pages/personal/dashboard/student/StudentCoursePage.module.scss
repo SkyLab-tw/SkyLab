@@ -93,20 +93,11 @@
   }
 }
 
-.statusBadge {
-  @include badge-base;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
+/* 本週完成狀態（共用 StatusBadge）：只管位置，貼齊標題列上緣、不被標題擠窄 */
+.heroStatus {
   flex-shrink: 0;
   align-self: flex-start;
-  background: color-mix(in srgb, currentColor 10%, transparent);
 }
-
-.success { color: var(--color-success); }
-
-.muted { color: var(--color-text-muted); }
 
 /* ── 課堂狀態 ── */
 
@@ -259,12 +250,12 @@
   border: 1px solid var(--color-border);
   border-radius: $radius-12;
   background: var(--color-surface);
-  transition: border-color $transition-base, box-shadow $transition-base;
+  transition: box-shadow $transition-base;
 }
 
+/* 展開不是選中：框色不變，只加深陰影（同導師核查學生列展開） */
 .assignmentRowOpen {
-  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .assignmentHeader {
@@ -346,17 +337,6 @@
     &:disabled { cursor: not-allowed; opacity: .6; }
     &[aria-busy="true"] { cursor: wait; }
   }
-}
-
-.teacherReplyBadge {
-  @include badge-base;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
-  color: var(--color-primary-on-surface);
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  white-space: nowrap;
 }
 
 .assignmentTitle {
@@ -466,30 +446,6 @@
     color: var(--color-text-secondary);
     font-size: $font-size-12;
     line-height: 1.5;
-  }
-}
-
-.aiCheckBadge {
-  @include badge-base;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 7px;
-  white-space: nowrap;
-
-  &.auto {
-    background: color-mix(in srgb, var(--color-success) 10%, transparent);
-    color: var(--color-success);
-  }
-
-  &.partial {
-    background: color-mix(in srgb, var(--color-info) 10%, transparent);
-    color: var(--color-info);
-  }
-
-  &.manual {
-    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-    color: var(--color-danger);
   }
 }
 

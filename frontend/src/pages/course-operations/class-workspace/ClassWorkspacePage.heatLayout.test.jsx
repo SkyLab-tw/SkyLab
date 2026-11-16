@@ -88,7 +88,11 @@ describe("課堂監看熱力圖的版面", () => {
       },
       [{ vmid: 101, status: "running", cpu_usage_pct: 92 }, { vmid: 102, status: "running", cpu_usage_pct: 40 }],
     );
-    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    // 機器切換是共用 SegmentedControl：一台一段，預設選第一台
+    const machineSwitch = container.querySelector(`[aria-label="${tr("selectMachineAria")}"]`);
+    const machineButtons = [...machineSwitch.querySelectorAll("button")];
+    expect(machineButtons.map((button) => button.textContent)).toEqual(["dnsWeb", "terminalDB"]);
+    expect(machineButtons.map((button) => button.getAttribute("aria-pressed"))).toEqual(["true", "false"]);
 
     const attention = container.querySelector('[data-guide="class-progress-attention"]');
     const chips = attention.querySelectorAll("li");

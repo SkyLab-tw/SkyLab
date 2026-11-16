@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
@@ -15,9 +15,11 @@ import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
 import OctoAvatar from "../../../components/OctoPet/OctoAvatar";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import StatusBadge from "../../../components/StatusBadge/StatusBadge";
 import { useToast } from "../../../hooks/useToast";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useUnsavedChanges, useUnsavedChangesGuard } from "../../../contexts/UnsavedChangesContext";
+import { LayoutContext } from "../../../layout/layoutContext";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import useElementWidth from "../../../hooks/useElementWidth";
 import useFileDrop from "../../../hooks/useFileDrop";
@@ -1768,8 +1770,9 @@ function RubricSourceRail({ classId, file, onClose, embedded = false }) {
           {onClose && <button type="button" className={styles.iconBtn} aria-label={t("AiJudgePanel.closeSourcesAria")} title={t("AiJudgePanel.closeBtn")} onClick={onClose}><MIcon name="close" size={18} /></button>}
         </div>
       </div>
-      <div className={`${styles.sourceRow} ${styles.sourceRowSelected}`}>
-        <div className={styles.sourceSelect} aria-current="true">
+      {/* 來源只有這一份檢查表，沒有東西可選：一般資訊列，不掛選中樣式 */}
+      <div className={styles.sourceRow}>
+        <div className={styles.sourceSelect}>
           <span className={styles.sourceIndicator} aria-hidden="true"><MIcon name="description" size={17} /></span>
           <span className={styles.sourceText}>
             <b>{getRubricDisplayName(file, t("AiJudgePanel.unnamedRubric"))}</b>
@@ -2607,11 +2610,13 @@ export function RubricsTab({
           {!filesLoaded && !analysis ? (
             <LoadingState text={t("AiJudgePanel.loadingRubric")} />
           ) : items.length === 0 && !pendingProposal ? (
+            /* 完整說明在助理欄，這裡只留一行；按鈕只在助理欄掉到檢查表下方時出現（見 .noItemsEmpty） */
             <EmptyState
+              className={styles.noItemsEmpty}
               icon="playlist_add"
               title={t("AiJudgePanel.noItemsTitle")}
               description={t("AiJudgePanel.noItemsDesc")}
-              action={<button type="button" className={styles.btnSecondary} onClick={() => chatColRef.current?.querySelector("textarea")?.focus()}><MIcon name="fact_check" size={16} />{t("AiJudgePanel.askAssistantBtn")}</button>}
+              action={<button type="button" className={`${styles.btnSecondary} ${styles.askAssistantStacked}`} onClick={() => chatColRef.current?.querySelector("textarea")?.focus()}><MIcon name="fact_check" size={16} />{t("AiJudgePanel.askAssistantBtn")}</button>}
             />
           ) : (
             <>
@@ -2706,17 +2711,18 @@ function newRunBatchId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/* 圖示跟學生週次頁同一組（檢查中＝sync、等待＝schedule…），兩端同一個狀態長一樣 */
 const RUN_STATUS = {
-  completed: { get label() { return jt("runCompleted"); }, className: styles.badge_success },
-  running: { get label() { return jt("runRunning"); }, className: styles.badge_info },
-  failed: { get label() { return jt("runFailed"); }, className: styles.badge_danger },
-  cancelled: { get label() { return jt("runCancelled"); }, className: styles.badge_muted },
-  pending: { get label() { return jt("runPending"); }, className: styles.badge_pending },
+  completed: { get label() { return jt("runCompleted"); }, tone: "success", icon: "check_circle" },
+  running: { get label() { return jt("runRunning"); }, tone: "info", icon: "sync" },
+  failed: { get label() { return jt("runFailed"); }, tone: "danger", icon: "error" },
+  cancelled: { get label() { return jt("runCancelled"); }, tone: "muted", icon: "cancel" },
+  pending: { get label() { return jt("runPending"); }, tone: "pending", icon: "schedule" },
 };
 
-function StatusBadge({ map, status }) {
-  const info = map[status] ?? { label: status ?? "—", className: styles.badge_muted };
-  return <span className={`${styles.badge} ${info.className}`}>{info.label}</span>;
+function RunStatusBadge({ status }) {
+  const info = RUN_STATUS[status] ?? { label: status ?? "—", tone: "muted" };
+  return <StatusBadge tone={info.tone} icon={info.icon}>{info.label}</StatusBadge>;
 }
 
 const CHECK_STATUS_META = {
@@ -2789,7 +2795,7 @@ function ReturnCodeBadge({ returncode }) {
   const ok = returncode === 0;
   return (
     <span className={`${styles.cmdBadge} ${ok ? styles.cmdBadgeOk : styles.cmdBadgeError}`}>
-      {t("AiJudgePanel.exitCode", { code: returncode })}{ok ? " ✓" : " ✗"}
+      {t("AiJudgePanel.exitCode", { code: returncode })}
     </span>
   );
 }
@@ -3012,12 +3018,12 @@ export function isReviewDraftDirty(draft, saved) {
   return keys.some((key) => draftDecisions[key] !== savedDecisions[key]);
 }
 
-function reviewBadgeClass(kind) {
-  if (kind === "pending") return styles.badge_pending;
-  if (kind === "failed") return styles.badge_danger;
-  if (kind === "reviewed") return styles.badge_success;
-  return styles.badge_muted;
-}
+/* 單台機器標題列的審查摘要；旁邊沒有其他狀態圖示，所以徽章自己帶圖示 */
+const REVIEW_SUMMARY_BADGE = {
+  pending: { tone: "pending", icon: "person_search" },
+  failed: { tone: "danger", icon: "report" },
+  reviewed: { tone: "success", icon: "how_to_reg" },
+};
 
 /* 一個檢查項一列：狀態圖示、名稱＋摘要、需要老師判定時右邊是通過／未通過。
    原始輸出收在「查看原始證據」裡；待判定且還沒判的整列淡橘底，一眼找得到 */
@@ -3067,11 +3073,11 @@ export function checkpointBadge(item, decisions = {}) {
   return { kind: "muted", label: checkStatusMeta(item?.status).label };
 }
 
-const CHECKPOINT_BADGE_CLASS = {
-  pending: styles.badge_pending,
-  fail: styles.badge_danger,
-  pass: styles.badge_success,
-  muted: styles.badge_muted,
+const CHECKPOINT_BADGE_TONE = {
+  pending: "pending",
+  fail: "danger",
+  pass: "success",
+  muted: "muted",
 };
 
 /* 一個檢查點一組：標題列可收合，全部通過的預設收起來，老師只需要看未通過與待判定的 */
@@ -3097,7 +3103,7 @@ function ReviewCheckpointGroup({ item, decisions, onDecide, executionFailed = fa
           <strong>{item?.title ?? item?.rubric_item_id ?? t("AiJudgePanel.thCheckpoint")}</strong>
           {peerText && <small>{peerText}</small>}
         </span>
-        <span className={`${styles.badge} ${CHECKPOINT_BADGE_CLASS[badge.kind]}`}>{badge.label}</span>
+        <StatusBadge tone={CHECKPOINT_BADGE_TONE[badge.kind]} className={styles.checkpointBadge}>{badge.label}</StatusBadge>
         <span className={styles.reviewCheckGroupChevron}><MIcon name="expand_more" size={18} /></span>
       </summary>
       <div className={styles.reviewCheckGroupBody}>
@@ -3586,7 +3592,9 @@ function MachineReviewDetail({
       <div className={styles.reviewMachineHead}>
         <strong>{nodeLabel ?? `VMID ${row.vmid ?? "—"}`}</strong>
         {row.vmid ? <small>{`VMID ${row.vmid}`}</small> : null}
-        <span className={`${styles.badge} ${reviewBadgeClass(summary.kind)}`}>{summary.label}</span>
+        <StatusBadge tone={REVIEW_SUMMARY_BADGE[summary.kind]?.tone ?? "muted"} icon={REVIEW_SUMMARY_BADGE[summary.kind]?.icon}>
+          {summary.label}
+        </StatusBadge>
       </div>
       {/* 關機、狀態不明有自己的說明（下方），不要再疊一段「請檢查 Python、timeout」的主機環境提示 */}
       {!executionBlocker && <ExecutionFailure target={target} />}
@@ -3648,25 +3656,32 @@ export function checkOutcome(machines) {
   return { kind: "none", count: 0 };
 }
 
-const OUTCOME_BADGE_CLASS = {
-  error: styles.badge_danger,
-  pass: styles.badge_success,
-  fail: styles.badge_danger,
-  pending: styles.badge_pending,
-  none: styles.badge_muted,
+/**
+ * 老師已經在這位學生最新一次結果上存了核查（勾了判定或寫了評語）。
+ * 重新檢查會建立新的一批，核查列改顯示新結果、這些核查不會跟過去，所以執行前要提醒；
+ * 給學生的週回覆另外存，不受影響。
+ */
+export function studentHasSavedReview(student) {
+  return (Array.isArray(student?.machines) ? student.machines : []).some((row) => {
+    if (!row?.target) return false;
+    const review = targetTeacherReview(row.target);
+    return Object.keys(review.decisions).length > 0 || review.feedback.trim() !== "";
+  });
+}
+
+/* 學生條右側的結果徽章：圖示跟學生週次頁同一組（通過＝check_circle、待老師確認＝person_search…），
+   老師和學生看到的同一個狀態長一樣 */
+const OUTCOME_BADGE = {
+  error: { tone: "danger", icon: "report" },
+  pass: { tone: "success", icon: "check_circle" },
+  fail: { tone: "danger", icon: "error" },
+  pending: { tone: "pending", icon: "person_search" },
+  none: { tone: "muted", icon: "hourglass_empty" },
 };
 
 const REPLY_MAX_LENGTH = 4000;
 // 快到上限才顯示字數，平常不佔位置
 const REPLY_COUNTER_FROM = 3600;
-
-const OUTCOME_CHIP_CLASS = {
-  error: styles.machineChipFail,
-  pass: styles.machineChipPass,
-  fail: styles.machineChipFail,
-  pending: styles.machineChipPending,
-  none: "",
-};
 
 /** PVE 回報的狀態收成三種：開著、關著、不知道（查不到或還在建機）。 */
 export function machinePowerState(vmStatus) {
@@ -3698,11 +3713,13 @@ export function studentMachineChips(student, members = [], machineNodes = []) {
     const label = batchMachineDisplayName(nodeKey, machineNodes, fallbackLabel)
       ?? nodeKey
       ?? (vmid != null ? `VMID ${vmid}` : "—");
+    const outcome = checkOutcome(rows);
     return {
       key: vmid != null ? `vm-${vmid}` : `node-${nodeKey ?? fallbackLabel}`,
       label: blocked ? `${getTargetReviewSummary(blocked.target).label} · ${label}` : label,
       vmid: vmid ?? null,
-      outcome: checkOutcome(rows).kind,
+      outcome: outcome.kind,
+      outcomeCount: outcome.count,
       power: machinePowerState(vmStatus),
     };
   };
@@ -3945,6 +3962,12 @@ export function TeacherReviewTab({
     () => studentRows.filter((student) => student.report?.ready && student.userId).map((student) => student.userId),
     [studentRows],
   );
+  // 已經核查過的學生：重新檢查會換成新結果、原本的核查不再顯示，執行前要提醒
+  const reviewedUserIds = useMemo(
+    () => new Set(studentRows.filter((student) => student.userId && studentHasSavedReview(student))
+      .map((student) => String(student.userId))),
+    [studentRows],
+  );
 
   const dirtyCount = useMemo(() => machineRows.filter((row) => (
     Boolean(row.target) && isReviewDraftDirty(drafts[row.key], targetTeacherReview(row.target))
@@ -4119,9 +4142,23 @@ export function TeacherReviewTab({
     await startBatch();
   }
 
-  /* 只檢查指定學生（這位學生／已回報完成的人）：用最新核准的那組腳本，其他人的結果不動 */
+  /* 只檢查指定學生（這位學生／已回報完成的人）：用最新核准的那組腳本，其他人的結果不動。
+     平常直接執行；只有會換掉老師已存的核查時才先確認（整班的「一次執行」在對話框裡提醒） */
   async function runForStudents(userIds) {
-    if (userIds.length) await startBatch(userIds);
+    if (!userIds.length) return;
+    const replacing = userIds.filter((userId) => reviewedUserIds.has(String(userId))).length;
+    if (replacing > 0) {
+      const ok = await confirm({
+        title: t("AiJudgePanel.rerunReviewedTitle"),
+        message: userIds.length === 1
+          ? t("AiJudgePanel.rerunReviewedOne")
+          : t("AiJudgePanel.rerunReviewedMany", { count: replacing }),
+        confirmText: t("AiJudgePanel.rerunReviewedConfirm"),
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await startBatch(userIds);
   }
 
   async function startBatch(userIds = null, retry = null) {
@@ -4195,6 +4232,12 @@ export function TeacherReviewTab({
         }
       >
         <p className={styles.dialogNote}>{t("AiJudgePanel.activeScriptSet", { version: activeSet?.source_analysis_revision ?? "—", count: children.length })}</p>
+        {reviewedUserIds.size > 0 && (
+          <p className={styles.dialogNote}>
+            <MIcon name="warning" size={16} className={`${styles.noticeInlineIcon} ${styles.dialogWarnIcon}`} />
+            {t("AiJudgePanel.rerunReviewedMany", { count: reviewedUserIds.size })}
+          </p>
+        )}
 
         <div className={styles.vmidBox}>
           <span className={styles.fieldLabel}>{t("AiJudgePanel.runScope", { count: children.length })}</span>
@@ -4251,7 +4294,7 @@ export function TeacherReviewTab({
                     disabled={creatingBatch || batchRunning || !weekPublished}
                     title={weekPublished ? undefined : t("AiJudgePanel.reviewWeekDraftNotice")}
                   >
-                    {creatingBatch ? <Spinner size={15} /> : <MIcon name="bolt" size={16} />}
+                    {creatingBatch ? <Spinner size={15} /> : <MIcon name="playlist_play" size={16} />}
                     {t("AiJudgePanel.runAllTitle")}
                   </button>
                 )}
@@ -4311,7 +4354,7 @@ export function TeacherReviewTab({
                   ? t("AiJudgePanel.runNoApprovedTitle")
                   : t("AiJudgePanel.runAllHint")}
             >
-              {creatingBatch ? <Spinner size={15} /> : <MIcon name="bolt" size={16} />}
+              {creatingBatch ? <Spinner size={15} /> : <MIcon name="playlist_play" size={16} />}
               {t("AiJudgePanel.runAllBtn")}
             </button>
           </div>
@@ -4387,8 +4430,8 @@ export function TeacherReviewTab({
           <div className={styles.runOnceProgress} aria-live="polite">
             {(activeBatch.nodes ?? []).map((node) => (
               <div className={styles.runOnceProgressLine} key={node.run_id}>
-                <span>{batchMachineDisplayName(node.target_node_key, machineNodes, node.display_label) ?? "—"}</span>
-                <StatusBadge map={RUN_STATUS} status={node.status} />
+                <span className={styles.runOnceMachine}>{batchMachineDisplayName(node.target_node_key, machineNodes, node.display_label) ?? "—"}</span>
+                <RunStatusBadge status={node.status} />
                 {node.progress_json?.stage === "preparing" && <small>{t("AiJudgePanel.batchPreparing")}</small>}
                 <small>{t("AiJudgePanel.nodeProgress", { done: node.progress_json?.done ?? 0, total: node.progress_json?.total ?? 0 })}</small>
               </div>
@@ -4439,8 +4482,8 @@ export function TeacherReviewTab({
                 aria-expanded={isOpen}
               >
                 <span className={styles.reviewStudentIdentity}>
-                  {/* 20px 狀態圖示（不做成像勾選框的大圓圈）：完成＝綠勾、做到一半＝橘色進行中、未回報＝小空心點；
-                      n/m 的數字在姓名旁的文字裡 */}
+                  {/* 20px 狀態圖示（不做成像勾選框的大圓圈）：完成＝實心勾、做到一半＝進行中、未回報＝小空心點；
+                      一律中性灰，整列只有右側的檢查結果帶狀態色。n/m 的數字在姓名旁的徽章裡 */}
                   <span
                     className={`${styles.reportTick} ${styles[`reportTick_${reportKind}`] ?? ""}`}
                     title={reportLabel}
@@ -4450,43 +4493,49 @@ export function TeacherReviewTab({
                     {reportKind === "ready" && <MIcon name="check_circle" size={20} filled />}
                     {reportKind === "partial" && <MIcon name="timelapse" size={20} />}
                   </span>
+                  {/* 固定兩行：姓名＋回報＋已回覆／email＋機器，每列一樣高 */}
                   <span className={styles.reviewStudentMain}>
                     <span className={styles.reviewStudentName}>
                       <strong>{user.full_name ?? t("AiJudgePanel.unnamedStudent")}</strong>
-                      <em className={styles[`reportText_${reportKind}`]}>{reportLabel}</em>
+                      <StatusBadge>{reportLabel}</StatusBadge>
                       {student.reply?.text && (
-                        <em className={styles.replyMark}><MIcon name="forum" size={13} />{t("AiJudgePanel.replied")}</em>
+                        <StatusBadge tone="primary" icon="forum">{t("AiJudgePanel.replied")}</StatusBadge>
                       )}
                     </span>
-                    {user.email && <small>{user.email}</small>}
-                    <span className={styles.machineChips} aria-label={t("AiJudgePanel.studentMachinesAria")}>
-                      {chips.length === 0 ? (
-                        <em className={styles.machineChipEmpty}>{t("AiJudgePanel.studentNoMachine")}</em>
-                      ) : chips.map((machine) => (
-                        <em
-                          key={machine.key}
-                          className={`${styles.machineChip} ${OUTCOME_CHIP_CLASS[machine.outcome]}`}
-                          title={[
-                            machine.label,
-                            machine.vmid != null ? `VMID ${machine.vmid}` : null,
-                            t(`AiJudgePanel.machinePower_${machine.power}`),
-                          ].filter(Boolean).join(" · ")}
-                        >
-                          <span
-                            className={`${styles.powerDot} ${POWER_DOT_CLASS[machine.power]}`}
-                            role="img"
-                            aria-label={t(`AiJudgePanel.machinePower_${machine.power}`)}
-                          />
-                          {machine.label}
-                        </em>
-                      ))}
+                    <span className={styles.reviewStudentMeta}>
+                      {user.email && <small>{user.email}</small>}
+                      <span className={styles.machineChips} aria-label={t("AiJudgePanel.studentMachinesAria")}>
+                        {chips.length === 0 ? (
+                          <em className={styles.machineChipEmpty}>{t("AiJudgePanel.studentNoMachine")}</em>
+                        ) : chips.map((machine) => (
+                          <em
+                            key={machine.key}
+                            className={styles.machineChip}
+                            title={[
+                              machine.label,
+                              machine.vmid != null ? `VMID ${machine.vmid}` : null,
+                              t(`AiJudgePanel.machinePower_${machine.power}`),
+                              machine.outcome !== "none"
+                                ? t(`AiJudgePanel.outcome_${machine.outcome}`, { count: machine.outcomeCount })
+                                : null,
+                            ].filter(Boolean).join(" · ")}
+                          >
+                            <span
+                              className={`${styles.powerDot} ${POWER_DOT_CLASS[machine.power]}`}
+                              role="img"
+                              aria-label={t(`AiJudgePanel.machinePower_${machine.power}`)}
+                            />
+                            <span className={styles.machineChipLabel}>{machine.label}</span>
+                          </em>
+                        ))}
+                      </span>
                     </span>
                   </span>
                 </span>
                 <span className={styles.reviewStudentBadges}>
-                  <span className={`${styles.badge} ${OUTCOME_BADGE_CLASS[outcome.kind]}`}>
+                  <StatusBadge tone={OUTCOME_BADGE[outcome.kind].tone} icon={OUTCOME_BADGE[outcome.kind].icon}>
                     {t(`AiJudgePanel.outcome_${outcome.kind}`, { count: outcome.count })}
-                  </span>
+                  </StatusBadge>
                 </span>
                 <MIcon name={isOpen ? "expand_less" : "expand_more"} size={20} />
               </button>
@@ -4599,6 +4648,12 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   const { confirmLeave } = useUnsavedChanges();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  /* 這頁右側有自己的檢查助理：AI 助手改用覆蓋層開啟，不並排擠窄版面（筆電寬會把檢查助理擠到下方） */
+  const { setAssistantOverlay } = useContext(LayoutContext);
+  useEffect(() => {
+    setAssistantOverlay(true);
+    return () => setAssistantOverlay(false);
+  }, [setAssistantOverlay]);
   const requestedWeekId = searchParams.get("week");
   // 只在選預設週次時參考網址；寫回網址不該觸發重新選擇
   const requestedWeekIdRef = useRef(requestedWeekId);

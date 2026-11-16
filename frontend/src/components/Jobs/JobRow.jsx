@@ -109,7 +109,7 @@ export function ReminderRow({ reminder, unread = false, onClick }) {
 export function JobEmpty({ message }) {
   return (
     <div className={styles.jobEmpty}>
-      <MIcon name="auto_awesome" size={24} />
+      <MIcon name="task_alt" size={24} />
       <span>{message}</span>
     </div>
   );
