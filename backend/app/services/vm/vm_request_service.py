@@ -50,6 +50,7 @@ from app.services.scheduling import provision_pool
 from app.services.template import password_policy
 from app.services.user import audit_service
 from app.services.vm import (
+    pending_capacity,
     vm_request_availability_service,
     vm_request_placement_service,
     workload_advisor,
@@ -144,11 +145,17 @@ def _approve_and_place(
     session: Session,
     db_request: VMRequest,
     reviewer_id: uuid.UUID,
+    preferred_node: str | None = None,
 ) -> CurrentPlacementSelection | None:
     """Approve a request and compute its placement.
 
     Shared helper used by both ``create()`` (auto-approve) and ``review()``.
-    The caller is responsible for committing the session.
+    The caller is responsible for committing the session, and for taking
+    ``pending_capacity.lock_allocation`` before any row lock in the same
+    transaction (this function locks overlapping requests).
+
+    ``preferred_node`` only applies to quick-practice / course machines: the
+    node the caller's whole-group capacity check planned for this machine.
     """
     start_at = normalize_datetime(db_request.start_at)
     end_at = normalize_datetime(db_request.end_at)
@@ -197,6 +204,7 @@ def _approve_and_place(
             session=session,
             db_request=db_request,
             reserved_requests=reserved_requests,
+            preferred_node=preferred_node,
         )
         if not selection or not selection.node:
             raise BadRequestError(
@@ -503,6 +511,8 @@ def create(
     # ---------- role branching ----------
     auto_approved = False
     if can_auto_approve_vm_request(user, mode=mode):
+        # 選點到 commit 之間不能讓別的分配插隊（見 pending_capacity）
+        pending_capacity.lock_allocation(session)
         try:
             _approve_and_place(
                 session=session,
@@ -550,8 +560,14 @@ def create_quick_practice_request(
     request_in: VMRequestCreate,
     user,
     placement_group_id: uuid.UUID | None = None,
+    target_node: str | None = None,
 ) -> VMRequest:
     """Create one machine request inside an already validated quick-practice session.
+
+    ``target_node`` is the node the orchestrator's whole-environment capacity
+    check planned for this machine; placement honours it (or stays in its
+    cluster) instead of letting the first machine pick a cluster on its own.
+    The orchestrator holds ``pending_capacity.lock_allocation``.
 
     The quick-practice orchestrator validates the whole environment, enforces
     aggregate quota and active-session limits before calling this function.
@@ -573,6 +589,7 @@ def create_quick_practice_request(
         session=session,
         db_request=db_request,
         reviewer_id=user.id,
+        preferred_node=target_node,
     )
     audit_service.log_action(
         session=session,
@@ -870,6 +887,10 @@ def review(
     review_data: VMRequestReview,
     reviewer,
 ) -> VMRequestPublic:
+    if review_data.status == "approved":
+        # 要在鎖申請單列之前拿：核准會鎖重疊時段的申請，先拿列鎖再等分配鎖
+        # 會和另一個正在核准的交易互相等待
+        pending_capacity.lock_allocation(session)
     db_request = vm_request_repo.get_vm_request_by_id(
         session=session, request_id=request_id, for_update=True
     )

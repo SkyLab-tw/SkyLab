@@ -4,16 +4,12 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from typing import Any
+from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
 from app.core.i18n import t
-from app.domain.placement import storage as placement_storage
-from app.domain.placement.schemas import (
-    NodeCapacity,
-    ResourceType,
-)
+from app.domain.placement.schemas import ResourceType
 from app.exceptions import BadRequestError
 from app.infrastructure.proxmox import (
     get_connection_id_for_node,
@@ -21,15 +17,15 @@ from app.infrastructure.proxmox import (
 )
 from app.models import (
     ClassCapacityReservation,
+    TeachingClass,
     TeachingClassMachineNode,
     TeachingClassStudent,
-    TeachingClassStudentMachine,
     VMTemplate,
 )
 from app.services.network import ip_management_service
 from app.services.proxmox import provisioning_service, proxmox_service
 from app.services.teaching.class_network_service import network_segments
-from app.services.vm import placement_service, placement_support
+from app.services.vm import pending_capacity, placement_service, placement_support
 
 GIB = 1024**3
 MIB = 1024**2
@@ -81,7 +77,10 @@ def preview(
     nodes: list[TeachingClassMachineNode],
     students: list[TeachingClassStudent],
     check_cluster: bool = False,
+    until: datetime | None = None,
 ) -> dict[str, object]:
+    """``until``：班級結束時間（``pending_capacity.class_end_at``），見
+    ``_evaluate_cluster_capacity``。"""
     totals = calculate(nodes=nodes, students=students)
     ip_stats = ip_management_service.get_ip_stats(session)
     issues = (
@@ -101,6 +100,7 @@ def preview(
             session,
             nodes=nodes,
             student_ids=[student.user_id for student in students],
+            until=until,
         )
         issues.extend(cluster_issues)
     return {
@@ -121,6 +121,9 @@ def reserve(
     nodes: list[TeachingClassMachineNode],
     students: list[TeachingClassStudent],
 ) -> ClassCapacityReservation:
+    # 兩個班同時送出（或同時有人開快速練習）時，都會讀到同一份剩餘容量；
+    # 鎖到呼叫端 commit，讓預檢與寫入預留之間不會被別人插隊
+    pending_capacity.lock_allocation(session)
     existing = session.exec(
         select(ClassCapacityReservation).where(
             ClassCapacityReservation.class_id == class_id
@@ -141,6 +144,7 @@ def reserve(
         session,
         nodes=nodes,
         student_ids=[student.user_id for student in students],
+        until=_class_until(session, class_id),
     )
     reservation_keys = [
         f"{class_id}:{node.node_key}:{student.user_id}"
@@ -178,6 +182,12 @@ def reserve(
     session.add(reservation)
     session.flush()
     return reservation
+
+
+def _class_until(session: Session, class_id: uuid.UUID) -> datetime | None:
+    """班級機器佔著容量到什麼時候；查不到班級時回 None（視為沒有盡頭）。"""
+    item = session.get(TeachingClass, class_id)
+    return pending_capacity.class_end_at(item) if item is not None else None
 
 
 def release(
@@ -568,7 +578,14 @@ def _reserved_placement(
     machine_node_id: uuid.UUID,
     user_id: uuid.UUID | None,
 ) -> str | None:
-    """預留時定案的建機節點；查不到時回 None（沿用單一節點行為）。"""
+    """預留時定案的建機節點。
+
+    這位學生沒有逐位落點時（預留之後才加入班級），改用同一台機器其他學生
+    最常被分到的節點：那是預留時替這種機器選定的叢集裡、確定建得起來的節點。
+    沒有這一步會退回 ``resolve_class_targets``，它不知道預留選了哪個叢集，
+    可能把這位學生建到別的叢集，和同學、拓樸都不通。整份預留都沒有逐位落點
+    （舊資料）時回 None。
+    """
     if user_id is None:
         return None
     reservation = session.exec(
@@ -579,8 +596,19 @@ def _reserved_placement(
     if reservation is None:
         return None
     mapping = _json_dict(reservation.student_placements)
-    node = mapping.get(str(machine_node_id), {}).get(str(user_id))
-    return str(node) if node else None
+    per_student = mapping.get(str(machine_node_id))
+    if not isinstance(per_student, dict):
+        return None
+    node = per_student.get(str(user_id))
+    if node:
+        return str(node)
+    counts: dict[str, int] = defaultdict(int)
+    for name in per_student.values():
+        if name:
+            counts[str(name)] += 1
+    if not counts:
+        return None
+    return min(counts, key=lambda name: (-counts[name], name))
 
 
 def target_node_for_machine(
@@ -623,6 +651,7 @@ def _evaluate_cluster_capacity(
     *,
     nodes: list[TeachingClassMachineNode],
     student_ids: list[uuid.UUID],
+    until: datetime | None = None,
 ) -> tuple[
     dict[str, dict[str, float]],
     dict[uuid.UUID, dict[uuid.UUID, str]],
@@ -632,6 +661,9 @@ def _evaluate_cluster_capacity(
 
     整班固定在同一個叢集（跨叢集 L2 不通），但叢集內依容量把學生分散到不同
     的 server —— 同一個叢集不代表同一台 server。
+
+    ``until``：這批機器要佔著容量到什麼時候（班級結束、快速練習到期）。
+    只有在這之前開始的已核准申請會被扣掉；None 代表全部都扣。
     """
     demand: dict[str, dict[str, float]] = defaultdict(
         lambda: {"cpu_cores": 0, "memory_bytes": 0, "disk_bytes": 0, "machines": 0}
@@ -668,21 +700,10 @@ def _evaluate_cluster_capacity(
         memory_overcommit_ratio=memory_ratio,
         excluded_vmids=_template_guest_vmids(session),
     )
-    # 已預留、還沒建出來的機器 PVE 上看不到，要另外扣；已建出來的上面已經算過
-    pending_machines, legacy_plans = _pending_reservation_load(session)
-    for node_name, spec in pending_machines:
-        _subtract_capacity(
-            capacities.get(node_name),
-            cpu_cores=float(spec.cpu),
-            memory_bytes=int(spec.memory_mb) * MIB,
-        )
-    for plan in legacy_plans:
-        for node_name, values in plan.items():
-            _subtract_capacity(
-                capacities.get(node_name),
-                cpu_cores=float(values.get("cpu_cores") or 0),
-                memory_bytes=int(values.get("memory_bytes") or 0),
-            )
+    # 已定好落點、還沒建出來的機器 PVE 上看不到，要另外扣；已建出來的上面
+    # 已經算過
+    pending_machines = _pending_load(session, until=until)
+    pending_capacity.subtract_from_capacities(capacities.values(), pending_machines)
 
     # 整班鎖定一個叢集，再於叢集內把學生分散到不同 server。
     connection_id = choose_class_cluster(
@@ -755,68 +776,22 @@ def _template_guest_vmids(session: Session) -> set[int]:
     return placement_support.template_guest_vmids(db_engine=session.get_bind())
 
 
-def _subtract_capacity(
-    capacity: NodeCapacity | None, *, cpu_cores: float, memory_bytes: int
-) -> None:
-    if capacity is None:
-        return
-    capacity.allocatable_cpu_cores = max(
-        0.0, float(capacity.allocatable_cpu_cores) - cpu_cores
-    )
-    capacity.allocatable_memory_bytes = max(
-        0, int(capacity.allocatable_memory_bytes) - memory_bytes
-    )
+def _pending_load(
+    session: Session, *, until: datetime | None
+) -> list[pending_capacity.PendingMachine]:
+    """還沒建出來、但落點已經定好，而且會和這批機器同時存在的機器。
 
-
-def _pending_reservation_load(
-    session: Session,
-) -> tuple[list[tuple[str, TeachingClassMachineNode]], list[dict[str, Any]]]:
-    """其他班級已預留、但機器還沒建出來的量。
-
-    回傳 (逐台待建機器與預定節點, 沒有逐位落點的舊預留之 placement_plan)。
-    預留在班級第一次上線前都是 reserved；這段期間已經建好的機器會出現在 PVE
-    上、由 ``_apply_committed_allocations`` 算進去，這裡再整份扣一次就重複了。
+    - 其他班已預留、還沒建、現在還沒結束的機器。
+    - 已核准、還沒 clone 完、在 ``until`` 之前開始的申請單（快速練習、一般
+      申請）。這些不在班級預留裡，不扣的話，排隊中的機器會被當成空位分出去。
+    - 已核准、還沒套用的規格調整增量。
     """
-    pending: list[tuple[str, TeachingClassMachineNode]] = []
-    legacy_plans: list[dict[str, Any]] = []
-    for reservation in session.exec(
-        select(ClassCapacityReservation).where(
-            ClassCapacityReservation.status == "reserved"
-        )
-    ).all():
-        placements = _json_dict(reservation.student_placements)
-        if not placements:
-            legacy_plans.append(_json_dict(reservation.placement_plan))
-            continue
-        specs = {
-            str(row.id): row
-            for row in session.exec(
-                select(TeachingClassMachineNode).where(
-                    TeachingClassMachineNode.class_id == reservation.class_id
-                )
-            ).all()
-        }
-        built = {
-            (str(machine.machine_node_id), str(student.user_id))
-            for machine, student in session.exec(
-                select(TeachingClassStudentMachine, TeachingClassStudent)
-                .join(
-                    TeachingClassStudent,
-                    TeachingClassStudentMachine.class_student_id  # type: ignore[arg-type]
-                    == TeachingClassStudent.id,
-                )
-                .where(TeachingClassStudent.class_id == reservation.class_id)
-            ).all()
-            if machine.vmid is not None
-        }
-        for machine_node_id, per_student in placements.items():
-            spec = specs.get(str(machine_node_id))
-            if spec is None or not isinstance(per_student, dict):
-                continue
-            for user_id, node_name in per_student.items():
-                if node_name and (str(machine_node_id), str(user_id)) not in built:
-                    pending.append((str(node_name), spec))
-    return pending, legacy_plans
+    now = datetime.now(UTC)
+    return [
+        *pending_capacity.class_reservation_machines(session, active_at=now),
+        *pending_capacity.unbuilt_request_machines(session, now=now, until=until),
+        *pending_capacity.approved_spec_change_machines(session),
+    ]
 
 
 def _storage_pool_issues(
@@ -824,13 +799,14 @@ def _storage_pool_issues(
     *,
     nodes: list[TeachingClassMachineNode],
     placements: dict[uuid.UUID, dict[uuid.UUID, str]],
-    pending_machines: list[tuple[str, TeachingClassMachineNode]] | None = None,
+    pending_machines: list[pending_capacity.PendingMachine] | None = None,
 ) -> list[str]:
     """依實際儲存區檢查磁碟：整班逐台試放，一台機器不能跨池。
 
     節點層的 disk 是 PVE 主機系統碟，跟機器放的 local-lvm／Ceph 無關，不能
     拿來判斷磁碟夠不夠。這裡照 placement 的真實規則逐台挑儲存區；其他班級
-    已預留、還沒建出來的機器先放進去，避免兩班都通過、開課才撞上空間不足。
+    已預留、以及已核准還沒建出來的機器先放進去，避免兩邊都通過、開課才撞上
+    空間不足。
     """
     target_names = sorted(
         {name for machine in placements.values() for name in machine.values()}
@@ -841,7 +817,7 @@ def _storage_pool_issues(
     pools_by_node, has_managed_storage = placement_support.build_storage_pool_state(
         session=session,
         node_names=sorted(
-            set(target_names) | {node_name for node_name, _spec in pending_machines}
+            set(target_names) | {machine.node for machine in pending_machines}
         ),
     )
     if not has_managed_storage:
@@ -861,31 +837,22 @@ def _storage_pool_issues(
         return template_nodes[key]
 
     def _place(target_node: str, machine_node: TeachingClassMachineNode) -> bool:
-        disk_gb = int(machine_node.disk_gb)
-        pools = pools_by_node.get(target_node, [])
-        source_node = _template_node(machine_node)
-        if source_node is not None and target_node != source_node:
-            # 範本 clone 到其他節點只能放共享儲存（與批次建機挑的一致）
-            pools = [pool for pool in pools if pool.is_shared]
-        selection = placement_storage.select_best_storage_for_request(
-            storage_pools=pools,
+        return pending_capacity.place_on_storage(
+            pools_by_node,
+            node=target_node,
+            disk_gb=int(machine_node.disk_gb),
             resource_type=_storage_resource_type(machine_node),
-            disk_gb=disk_gb,
+            template_node=_template_node(machine_node),
             disk_overcommit_ratio=disk_ratio,
             tuning=tuning,
         )
-        if selection is None:
-            return False
-        placement_storage.reserve_storage_pool(
-            selection=selection,
-            disk_gb=disk_gb,
-            disk_overcommit_ratio=disk_ratio,
-        )
-        return True
 
-    for target_node, machine_node in pending_machines:
-        # 別班放不下是別班的問題，這裡只是先把它的份占掉
-        _place(target_node, machine_node)
+    pending_capacity.preplace_storage(
+        pools_by_node,
+        pending_machines,
+        disk_overcommit_ratio=disk_ratio,
+        tuning=tuning,
+    )
     for machine_node in nodes:
         for target_node in placements[machine_node.id].values():
             if not _place(target_node, machine_node):
@@ -909,12 +876,14 @@ def _check_cluster_capacity(
     *,
     nodes: list[TeachingClassMachineNode],
     student_ids: list[uuid.UUID],
+    until: datetime | None = None,
 ) -> tuple[dict[str, dict[str, float]], dict[uuid.UUID, dict[uuid.UUID, str]]]:
     """Validate capacity for reservation while preview uses structured issues."""
     placement_plan, placements, issues = _evaluate_cluster_capacity(
         session,
         nodes=nodes,
         student_ids=student_ids,
+        until=until,
     )
     if issues:
         raise BadRequestError("；".join(issues))

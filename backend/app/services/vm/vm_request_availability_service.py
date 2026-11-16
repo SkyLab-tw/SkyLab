@@ -33,7 +33,11 @@ from app.schemas.vm_request import (
     VMRequestWindowAvailabilityRequest,
     VMRequestWindowAvailabilityResponse,
 )
-from app.services.vm import placement_support, vm_request_placement_service
+from app.services.vm import (
+    pending_capacity,
+    placement_support,
+    vm_request_placement_service,
+)
 from app.utils.timeutil import normalize_datetime
 
 logger = logging.getLogger(__name__)
@@ -294,6 +298,12 @@ def _build_availability_response(
         memory_overcommit_ratio=(
             vm_request_placement_service.get_memory_overcommit_ratio(session)
         ),
+    )
+    # 與核准選點一致：班級已預留未建、已核准未套用的規格調整也要扣，否則
+    # 格子顯示有空、送出卻被擋
+    pending_capacity.subtract_from_capacities(
+        baseline_capacities,
+        pending_capacity.request_external_load(session, active_at=datetime.now(UTC)),
     )
     resource_stack_by_node = _build_resource_stack_by_node(baseline_resources)
     hourly_demand = _load_hourly_demand_profile(session=session, timezone=tz)

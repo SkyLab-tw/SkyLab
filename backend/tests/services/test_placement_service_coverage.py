@@ -98,6 +98,12 @@ class _Env:
 @pytest.fixture
 def env(monkeypatch) -> _Env:
     state = _Env()
+    # 這組測試沒有 DB：其他帳本的待建量另有 test_pending_capacity 測
+    monkeypatch.setattr(
+        placement_service.pending_capacity,
+        "request_external_load",
+        lambda _session, **_kw: [],
+    )
     monkeypatch.setattr(placement_support, "load_cluster_state", lambda: ([], []))
     monkeypatch.setattr(
         placement_support,

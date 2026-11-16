@@ -528,10 +528,14 @@ def _template_cache_key(request: PlacementRequest) -> tuple[str, str] | None:
     return None
 
 
-def _connection_nodes_of(node: str) -> set[str] | None:
+def connection_nodes_of(node: str) -> set[str] | None:
+    """與這個節點同一個連線（叢集）的所有節點；空字串回 None。"""
     if not node:
         return None
     return get_nodes_for_connection(get_connection_id_for_node(node)) or {node}
+
+
+_connection_nodes_of = connection_nodes_of
 
 
 def _template_node_info(
