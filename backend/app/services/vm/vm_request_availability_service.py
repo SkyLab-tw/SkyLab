@@ -33,7 +33,11 @@ from app.schemas.vm_request import (
     VMRequestWindowAvailabilityRequest,
     VMRequestWindowAvailabilityResponse,
 )
-from app.services.vm import placement_support, vm_request_placement_service
+from app.services.vm import (
+    pending_capacity,
+    placement_support,
+    vm_request_placement_service,
+)
 from app.utils.timeutil import normalize_datetime
 
 logger = logging.getLogger(__name__)
@@ -293,6 +297,14 @@ def _build_availability_response(
         disk_overcommit_ratio=disk_overcommit_ratio,
         memory_overcommit_ratio=(
             vm_request_placement_service.get_memory_overcommit_ratio(session)
+        ),
+    )
+    # 與核准選點一致：班級已預留、還沒建出來的機器也要扣，否則格子顯示有空、
+    # 送出卻被擋
+    pending_capacity.subtract_from_capacities(
+        baseline_capacities,
+        pending_capacity.class_reservation_machines(
+            session, active_at=datetime.now(UTC)
         ),
     )
     resource_stack_by_node = _build_resource_stack_by_node(baseline_resources)
