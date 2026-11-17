@@ -375,7 +375,7 @@ def test_cluster_capacity_check_uses_the_class_algorithm(monkeypatch):
 
     seen: dict = {}
 
-    def evaluate(_session, *, nodes, student_ids):
+    def evaluate(_session, *, nodes, student_ids, **_kw):
         seen.update(nodes=nodes, student_ids=student_ids)
         return {}, {}, []
 
@@ -396,7 +396,7 @@ def test_cluster_capacity_shortage_blocks_launch(monkeypatch):
     monkeypatch.setattr(
         class_capacity_service,
         "_evaluate_cluster_capacity",
-        lambda _s, *, nodes, student_ids: ({}, {}, ["pve1 RAM 不足：需要 2.0 GB，可用 0.5 GB"]),
+        lambda _s, *, nodes, student_ids, **_kw: ({}, {}, ["pve1 RAM 不足：需要 2.0 GB，可用 0.5 GB"]),
     )
     monkeypatch.setattr(quick_practice, "_node_disk_gb", lambda _s, _n: 8)
     with pytest.raises(BadRequestError) as exc:

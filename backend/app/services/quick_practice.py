@@ -32,7 +32,7 @@ from app.repositories import resource as resource_repo
 from app.schemas import VMRequestCreate
 from app.services.scheduling.recurrence import get_schedule_policy
 from app.services.template import password_policy
-from app.services.vm import vm_request_service
+from app.services.vm import pending_capacity, vm_request_service
 
 MAX_ACTIVE_SESSIONS_PER_USER = 1
 MAX_SESSIONS_PER_24_HOURS = 3
@@ -798,13 +798,25 @@ def _assert_publications_ready(
 
 
 def _assert_cluster_capacity(
-    session: Session, *, nodes: list[CourseEnvironmentNode], user_id: uuid.UUID
-) -> None:
-    """開機器前先確認叢集放得下整組，放不下就直接擋下。
+    session: Session,
+    *,
+    nodes: list[CourseEnvironmentNode],
+    user_id: uuid.UUID,
+    until: datetime | None = None,
+) -> dict[uuid.UUID, str]:
+    """開機器前先確認叢集放得下整組，放不下就直接擋下；回傳每台機器的落點。
 
     與班級容量預檢同一套算法（已分配規格、同叢集、逐節點、儲存區試放），
     只是把這組機器當成「一位學生」的班級來算。不先檢查的話，要等建機失敗
     才知道，已經建好的那幾台又得整組回收。
+
+    回傳 {課程節點 id: 節點名}。建申請單時照這份落點放，和班級建機照預留
+    落點建是同一個道理：預檢是先選「所有機器都建得起來的叢集」再分節點；
+    若改讓每台機器自己選點，第一台會依自己的範本挑叢集，後面的機器被綁到
+    那個叢集卻可能根本建不起來，預檢說可行、開環境卻失敗。
+
+    ``until`` 是這組的到期時間：只扣在這之前開始的已核准申請，下週才開始的
+    排程申請不會擋到現在要開的練習。
     """
     from app.services.teaching import class_capacity_service
 
@@ -828,13 +840,18 @@ def _assert_cluster_capacity(
         )
         for node in nodes
     ]
-    _plan, _placements, issues = class_capacity_service._evaluate_cluster_capacity(
-        session, nodes=machines, student_ids=[user_id]
+    _plan, placements, issues = class_capacity_service._evaluate_cluster_capacity(
+        session, nodes=machines, student_ids=[user_id], until=until
     )
     if issues:
         raise BadRequestError(
             t("quick_practice.cluster_capacity_insufficient", detail="；".join(issues))
         )
+    return {
+        node_id: per_student[user_id]
+        for node_id, per_student in placements.items()
+        if per_student.get(user_id)
+    }
 
 
 def launch(
@@ -848,6 +865,9 @@ def launch(
         raise BadRequestError(t("quick_practice.template_no_machines"))
     _assert_publications_ready(session, version_id=version.id)
 
+    # 容量預檢到申請單寫入（commit）之間不讓別的分配插隊：兩位學生同時開，
+    # 都會讀到同一份剩餘容量。要在任何列鎖之前拿（見 pending_capacity）。
+    pending_capacity.lock_allocation(session)
     # Serialize launches for one user so simultaneous clicks cannot bypass the
     # one-active-session and rolling 24-hour limits.
     locked_user = session.exec(
@@ -914,13 +934,16 @@ def launch(
     # 快速練習是固定配置的環境機器，建好後 allocation_scope 不是 personal、不計入個人
     # 配額（我的資源頁的配額卡片也是這樣寫）；這裡若再拿個人配額擋，學生會看到
     # 「配額不足」卻怎麼算都對不上。上限由同時一組、24 小時 3 次與叢集容量預檢管。
-    _assert_cluster_capacity(session, nodes=nodes, user_id=user.id)
-
     duration_hours = get_schedule_policy(session=session).practice_session_hours
+    expires_at = now + timedelta(hours=duration_hours)
+    target_nodes = _assert_cluster_capacity(
+        session, nodes=nodes, user_id=user.id, until=expires_at
+    )
+
     practice = QuickPracticeSession(
         user_id=user.id,
         environment_version_id=version.id,
-        expires_at=now + timedelta(hours=duration_hours),
+        expires_at=expires_at,
         status="creating",
     )
     session.add(practice)
@@ -958,6 +981,8 @@ def launch(
             # 第一台所在的叢集（同叢集跨節點靠同一個 bridge 互通），拓樸 edge
             # 才有實際連通性可言。
             placement_group_id=practice.id,
+            # 預檢替整組選好的落點；第一台也照它放，叢集才會是整組都建得起來的那個
+            target_node=target_nodes.get(node.id),
         )
         session.add(
             QuickPracticeSessionMachine(

@@ -186,6 +186,9 @@ def test_assess_request_window_quick_template_long_window(monkeypatch) -> None:
 def test_build_availability_response_copies_baseline_when_timeline_missing(
     monkeypatch,
 ) -> None:
+    monkeypatch.setattr(
+        svc.pending_capacity, "request_external_load", lambda _s, **_k: []
+    )
     monkeypatch.setattr(svc.placement_support, "load_cluster_state", lambda: ([], []))
     monkeypatch.setattr(
         svc.placement_support,

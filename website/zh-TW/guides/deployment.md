@@ -193,7 +193,8 @@ Gateway 是另一台 Linux VM，用 `gateway/install.sh` 安裝（nginx stream +
 在 runner 上：
 
 - 機密與模型路由不進 repo。workflow 先在 `/opt/skylab` 的檔案裡補上缺少的 LiteLLM master／salt／DB 值與 SkyLab service key（`prepare-ai-stack.sh --init-env`；缺上游 vLLM 金鑰時在這一步失敗），再把 `/opt/skylab/.env`、`/opt/skylab/vllm-service/litellm/.env`、`/opt/skylab/vllm-service/models.json`（有的話還有 `.env.API`）複製進 checkout。
-- 接著用 `prepare-ai-stack.sh --start` 部署，最後一步是 `docker compose up -d --build`（那份 `.env` 設了 `COMPOSE_PROFILES=monitoring` 時會一起帶監控 stack），等 backend 健康檢查與 LiteLLM readiness 通過，再對每個公開 AI 模型跑 smoke test。模型測試失敗只會發出警告，部署照樣保留。
+- 接著用 `prepare-ai-stack.sh --start` 部署，最後一步是 `docker compose up -d --build`（那份 `.env` 設了 `COMPOSE_PROFILES=monitoring` 時會一起帶監控 stack），再等 backend 健康檢查通過（LiteLLM readiness 已在 `prepare-ai-stack.sh --start` 裡等過）。
+- 對每個公開 AI 模型跑 smoke test 改為選用：執行 workflow 時勾選 **ai_model_smoke** 才會跑。AI 模型不屬於主系統，上游卡住時逐一測試會讓部署一個模型一個模型地等。開啟時每個模型最多等 45 秒、整個步驟最多 8 分鐘；模型測試失敗只會發出警告，部署照樣保留。
 - smoke test 前先刪掉舊的 `pve-deploy-smoke` 金鑰、核發一日有效的新金鑰；測試後無論成功失敗都清理（未使用的直接刪除，已有用量的撤銷並保留帳務紀錄）。清理失敗會讓 workflow 報錯；遺留的金鑰也會自動過期。
 
 要建新 runner：在部署機以專用使用者安裝 GitHub Actions runner、加上 `skylab-main` 標籤、在 repo 設定建立需要審核者的 `pve-test` environment、把上述檔案放到 `/opt/skylab`，並裝好下面說明的 job-started hook。

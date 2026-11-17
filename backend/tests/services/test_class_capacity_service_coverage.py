@@ -162,7 +162,7 @@ def test_reserve_creates_snapshot_and_ip_reservations(session, monkeypatch):
     monkeypatch.setattr(
         svc,
         "_check_cluster_capacity",
-        lambda _s, *, nodes, student_ids: (
+        lambda _s, *, nodes, student_ids, **_kw: (
             plan,
             {node.id: {student_ids[0]: "pve1"}},
         ),
@@ -564,10 +564,11 @@ def _other_class_reservation(session, *, built_users, pending_users, node="a1"):
 def test_pending_reservation_only_counts_machines_not_built_yet(session):
     built, pending = [uuid.uuid4()], [uuid.uuid4(), uuid.uuid4()]
     spec = _other_class_reservation(session, built_users=built, pending_users=pending)
-    machines, legacy = svc._pending_reservation_load(session)
-    assert legacy == []
+    machines = svc.pending_capacity.class_reservation_machines(session)
     # 已建好的那台由 PVE 已分配量算，這裡只剩兩台待建
-    assert [(node, item.id) for node, item in machines] == [("a1", spec.id)] * 2
+    assert [
+        (item.node, item.cpu_cores, item.memory_bytes) for item in machines
+    ] == [("a1", float(spec.cpu), spec.memory_mb * 1024**2)] * 2
 
 
 def test_pending_reservations_reduce_capacity(session, monkeypatch, cluster_state):
@@ -591,7 +592,7 @@ def test_reserve_does_not_store_preview_availability(session, monkeypatch):
     monkeypatch.setattr(
         svc,
         "_check_cluster_capacity",
-        lambda _s, *, nodes, student_ids: (
+        lambda _s, *, nodes, student_ids, **_kw: (
             {
                 "a1": {
                     "cpu_cores": 2,
@@ -626,7 +627,7 @@ def test_check_cluster_capacity_raises_on_issues(session, monkeypatch):
     monkeypatch.setattr(
         svc,
         "_evaluate_cluster_capacity",
-        lambda _s, *, nodes, student_ids: ({}, {}, ["a", "b"]),
+        lambda _s, *, nodes, student_ids, **_kw: ({}, {}, ["a", "b"]),
     )
     with pytest.raises(BadRequestError):
         svc._check_cluster_capacity(session, nodes=[], student_ids=[])
@@ -636,7 +637,7 @@ def test_check_cluster_capacity_returns_plan(session, monkeypatch):
     monkeypatch.setattr(
         svc,
         "_evaluate_cluster_capacity",
-        lambda _s, *, nodes, student_ids: ({"a1": {}}, {"x": {}}, []),
+        lambda _s, *, nodes, student_ids, **_kw: ({"a1": {}}, {"x": {}}, []),
     )
     assert svc._check_cluster_capacity(session, nodes=[], student_ids=[]) == (
         {"a1": {}},

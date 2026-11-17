@@ -18,6 +18,12 @@ def _used_gb(pool: WorkingStoragePool) -> float:
     )
 
 
+def remaining_gb(pool: WorkingStoragePool, disk_overcommit_ratio: float) -> float:
+    """儲存區還能再放多少 GB（含超賣額度），與試放（select／reserve）同一套算法。"""
+    effective_total = float(pool.total_gb) * max(disk_overcommit_ratio, 1.0)
+    return max(effective_total - _used_gb(pool), max(float(pool.avail_gb), 0.0), 0.0)
+
+
 def select_best_storage_for_request(
     *,
     storage_pools: list[WorkingStoragePool],

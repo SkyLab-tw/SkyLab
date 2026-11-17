@@ -602,9 +602,13 @@ def test_launch_creates_requests_and_submits_provisioning(
     )
     monkeypatch.setattr(quick_practice, "_node_disk_gb", lambda session, node: 8)
     # 叢集容量預檢另有專門的測試（test_quick_practice_publication_retry）
-    monkeypatch.setattr(
-        quick_practice, "_assert_cluster_capacity", lambda *_a, **_kw: None
-    )
+    windows: list = []
+
+    def plan_capacity(_session, *, nodes, user_id, until):
+        windows.append(until)
+        return {node.id: f"pve{index + 1}" for index, node in enumerate(nodes)}
+
+    monkeypatch.setattr(quick_practice, "_assert_cluster_capacity", plan_capacity)
     monkeypatch.setattr(
         quick_practice,
         "get_schedule_policy",
@@ -620,9 +624,12 @@ def test_launch_creates_requests_and_submits_provisioning(
     )
     created: list = []
 
-    def create_request(*, session, request_in, user, placement_group_id):
+    def create_request(*, session, request_in, user, placement_group_id, target_node):
         created.append((request_in, placement_group_id))
+        targets.append(target_node)
         return SimpleNamespace(id=uuid.uuid4())
+
+    targets: list[str | None] = []
 
     monkeypatch.setattr(
         vm_request_service, "create_quick_practice_request", create_request
@@ -643,6 +650,10 @@ def test_launch_creates_requests_and_submits_provisioning(
     assert len(reserved[0]) == 2
     assert all(group == practice.id for _req_in, group in created)
     assert created[0][0].resource_type == "lxc"
+    # 每台機器都照容量預檢替整組算好的落點建，不讓第一台自己挑叢集
+    assert targets == ["pve1", "pve2"]
+    # 預檢只看到這組到期前會重疊的申請
+    assert windows == [quick_practice._ensure_utc(practice.expires_at)]
     assert len(submitted) == 2
     machines = qdb.exec(
         select(QuickPracticeSessionMachine).where(
