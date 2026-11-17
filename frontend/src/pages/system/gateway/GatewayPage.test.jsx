@@ -76,8 +76,9 @@ async function typeInto(textarea, value) {
   });
 }
 
-async function openTab(label) {
-  await act(async () => { buttonByText(label).click(); });
+/* 頁面分頁帶圖示，按鈕文字會混進圖示名稱：用分頁角色＋導覽錨點找 */
+async function openTab(key) {
+  await act(async () => { host.querySelector(`[role="tab"][data-guide-tab="gateway-${key}"]`).click(); });
   await flush();
 }
 
@@ -154,7 +155,7 @@ describe("GatewayPage WireGuard tab", () => {
 
     await act(async () => { root.render(withQueryClient(<GatewayPage />)); });
     await flush();
-    await openTab("GatewayPage.tabWireGuard");
+    await openTab("wireguard");
 
     expect(mocks.toast.error).toHaveBeenCalledWith("Error.generic");
     const retry = [...host.querySelectorAll("button")].find((b) => b.textContent.includes("Error.retry"));

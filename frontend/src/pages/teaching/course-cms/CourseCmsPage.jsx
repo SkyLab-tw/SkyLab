@@ -245,17 +245,20 @@ export default function CourseCmsPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={t("CourseCmsPage.pageTitle")}>
-        <Tabs
-          options={[
-            { value: "editor", label: t("CourseCmsPage.tabContentEditor"), icon: "edit_note", buttonProps: { "data-guide-tab": "course-cms-tab-editor" } },
-            { value: "progress", label: t("CourseCmsPage.tabStudentProgress"), icon: "insights", buttonProps: { "data-guide-tab": "course-cms-tab-progress" } },
-          ]}
-          value={tab}
-          onChange={changeTab}
-          ariaLabel={t("CourseCmsPage.pageTitle")}
-        />
-      </PageHeader>
+      <PageHeader title={t("CourseCmsPage.pageTitle")} />
+
+      {/* 頁面分頁放標題下方（全站頁面分頁同一個位置） */}
+      <Tabs
+        page
+        className={styles.pageTabs}
+        options={[
+          { value: "editor", label: t("CourseCmsPage.tabContentEditor"), icon: "edit_note", buttonProps: { "data-guide-tab": "course-cms-tab-editor" } },
+          { value: "progress", label: t("CourseCmsPage.tabStudentProgress"), icon: "insights", buttonProps: { "data-guide-tab": "course-cms-tab-progress" } },
+        ]}
+        value={tab}
+        onChange={changeTab}
+        ariaLabel={t("CourseCmsPage.pageTitle")}
+      />
 
       {pathsLoading ? (
         <LoadingState fullPage />

@@ -21,13 +21,15 @@ export default function ClassWorkflowStepper({ item, activeKey, onSelect }) {
   if (item.status === "active") {
     return (
       <Tabs
+        page
         className={styles.tabs}
         ariaLabel={ariaLabel}
         value={activeKey}
         onChange={onSelect}
-        options={CLASS_WORKFLOW_TABS.map(([key, , labelKey]) => ({
+        options={CLASS_WORKFLOW_TABS.map(([key, icon, labelKey]) => ({
           value: key,
           label: t(labelKey),
+          icon,
           /* 導覽錨點：目前所在的分頁用 [aria-selected="true"] 再篩 */
           buttonProps: { "data-guide-tab": "class-section" },
         }))}

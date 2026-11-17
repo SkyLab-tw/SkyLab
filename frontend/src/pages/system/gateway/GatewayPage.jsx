@@ -656,12 +656,12 @@ export default function GatewayPage() {
   const setConfig = (next) => gatewayCache.setConfig(next);
 
   const TABS = [
-    { key: "connection", label: t("GatewayPage.tabConnection") },
-    { key: "install",    label: t("GatewayPage.tabInstall") },
-    { key: "certificate", label: t("GatewayPage.tabCertificate") },
-    { key: "platform",   label: t("GatewayPage.tabPlatformEntry") },
-    { key: "nginx",      label: "nginx" },
-    { key: "wireguard",  label: t("GatewayPage.tabWireGuard") },
+    { key: "connection",  label: t("GatewayPage.tabConnection"),    icon: "settings_ethernet" },
+    { key: "install",     label: t("GatewayPage.tabInstall"),       icon: "build" },
+    { key: "certificate", label: t("GatewayPage.tabCertificate"),   icon: "https" },
+    { key: "platform",    label: t("GatewayPage.tabPlatformEntry"), icon: "public" },
+    { key: "nginx",       label: "nginx",                           icon: "dns" },
+    { key: "wireguard",   label: t("GatewayPage.tabWireGuard"),     icon: "vpn_lock" },
   ];
 
   const handleDirtyChange = useCallback((dirty) => {
@@ -684,20 +684,22 @@ export default function GatewayPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={t("GatewayPage.pageTitle")}>
+      <PageHeader title={t("GatewayPage.pageTitle")} />
 
-        {/* 切換前若設定檔有未存修改，handleTabSelect 會先跳確認 */}
-        <Tabs
-          ariaLabel={t("GatewayPage.tabsAriaLabel")}
-          value={activeTab}
-          onChange={handleTabSelect}
-          options={TABS.map((tab) => ({
-            value: tab.key,
-            label: tab.label,
-            buttonProps: GUIDE_TAB_PROPS[tab.key],
-          }))}
-        />
-      </PageHeader>
+      {/* 頁面分頁放標題下方（全站頁面分頁同一個位置）；切換前若設定檔有未存修改，handleTabSelect 會先跳確認 */}
+      <Tabs
+        page
+        className={styles.pageTabs}
+        ariaLabel={t("GatewayPage.tabsAriaLabel")}
+        value={activeTab}
+        onChange={handleTabSelect}
+        options={TABS.map((tab) => ({
+          value: tab.key,
+          label: tab.label,
+          icon: tab.icon,
+          buttonProps: GUIDE_TAB_PROPS[tab.key],
+        }))}
+      />
 
       <div className={styles.content} data-guide="gateway-content">
         {loading ? (

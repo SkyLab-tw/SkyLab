@@ -3,7 +3,10 @@ import MIcon from "../MIcon";
 import styles from "./Tabs.module.scss";
 
 /**
- * 全站共用的分頁（tabs）：切換「整塊內容」用，選中的分頁字下有一條 2px 主色短指示條。
+ * 全站共用的分頁（tabs）：切換「整塊內容」用。分兩種：
+ * - 區塊分頁（預設）：卡片、區塊、側欄裡的分頁，選中的分頁字下一條 2px 主色短指示條，刻意低調。
+ * - 頁面分頁（page）：標題下方、切換整頁主要內容的分頁，圖示放進圓角方塊，選中的方塊換主色實心，
+ *   字 16px、列高 44px，份量比區塊分頁重一階，也壓得過旁邊的篩選。
  * 跟 SegmentedControl 分工——分頁用 Tabs；篩選同一份清單（狀態、類型）與選項（時間區間、圖表指標、表單模式）
  * 用 SegmentedControl，兩者並排時一眼分得出來。
  *
@@ -18,6 +21,8 @@ import styles from "./Tabs.module.scss";
  * @param {string}   className 額外樣式（排版用，例如 align-self；不要覆寫元件內部）
  * @param {boolean}  compact   各分頁左右內距縮成 8px：給 240px 以下的窄容器（側邊欄）
  * @param {boolean}  fullWidth 撐滿容器寬度、各分頁平分
+ * @param {boolean}  page      頁面分頁：每個分頁都要給 icon（放進圓角方塊），整列往左拉一個內距，
+ *                             第一個方塊對齊頁面標題左緣。分頁列到下方內容的間距由頁面用 @include page-tabs-row 收成 12px
  */
 export default function Tabs({
   options,
@@ -27,12 +32,14 @@ export default function Tabs({
   className,
   compact = false,
   fullWidth = false,
+  page = false,
 }) {
   const listRef = useRef(null);
   const classes = [
     styles.tabs,
     compact && styles.tabsCompact,
     fullWidth && styles.tabsFullWidth,
+    page && styles.tabsPage,
     className,
   ].filter(Boolean).join(" ");
 
@@ -73,8 +80,15 @@ export default function Tabs({
             className={`${styles.tab}${selected ? ` ${styles.tabActive}` : ""}`}
             onClick={() => onChange(option.value)}
           >
-            {option.icon ? <MIcon name={option.icon} size={16} /> : null}
-            <span className={styles.label}>{option.label}</span>
+            {option.icon ? (
+              page
+                ? <span className={styles.iconBox}><MIcon name={option.icon} size={18} /></span>
+                : <MIcon name={option.icon} size={16} />
+            ) : null}
+            {/* data-label 給 CSS 用選中字重預留寬度（見 .label::after），切換分頁時後面的分頁才不會左右跳 */}
+            <span className={styles.label} data-label={typeof option.label === "string" ? option.label : undefined}>
+              <span className={styles.labelText}>{option.label}</span>
+            </span>
             {option.badge != null ? <span className={styles.badge}>{option.badge}</span> : null}
           </button>
         );

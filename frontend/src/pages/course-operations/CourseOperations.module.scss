@@ -196,11 +196,24 @@
   text-align: center;
 }
 
+/* 卡片底部按鈕列：左右內距跟 .formGrid／.cardHeader／列表列的 22px 一致，按鈕右緣才對得齊上面的欄位。
+   跟著內容走的按鈕列不畫分隔線（全站頁內表單的慣例，同建班精靈）；
+   固定在畫布下方的機器配置另外補回分隔線（見 .templateMachineWorkspace .actionFooter） */
 .actionFooter {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 16px;
+  padding: 16px 22px 22px;
+}
+
+/* 表單下方：.formGrid 已有 22px 底部內距，按鈕列不再疊上方內距，間距才不會比欄位之間大一截 */
+.formGrid + .actionFooter {
+  padding-top: 0;
+}
+
+/* 機器配置：按鈕列貼在拓撲畫布下方（高度夠時整頁鎖高、畫布自己捲），保留分隔線把畫布和動作分開 */
+.templateMachineWorkspace .actionFooter {
+  padding-bottom: 16px;
   border-top: 1px solid var(--color-border);
 }
 

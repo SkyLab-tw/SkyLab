@@ -235,12 +235,13 @@ export function SegmentSection() {
     <Section
       id="segment"
       title="分段切換 SegmentedControl"
-      refs={["components/SegmentedControl/SegmentedControl.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]"]}
-      intro="篩選同一份清單（狀態、類型）與短選項（時間區間、圖表指標、表單模式）一律用共用 SegmentedControl；固定 36px、選中段主色實心。切換整塊內容的分頁改用 Tabs（下一節）。超過 4 段在 className 加 max-width:100% + overflow-x:auto。"
+      refs={["components/SegmentedControl/SegmentedControl.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "quiet"]}
+      intro="清單篩選（狀態、類型）、表單選值（申請模式、題型）與檢視選項（時間區間、圖表指標、程式語言）一律用共用 SegmentedControl，固定 36px。清單篩選與表單選值用預設的實心版；檢視選項加 quiet：沒有軌道與陰影、選中段只有主色細框，貼在頁面分頁旁或圖表標頭不搶戲。切換整塊內容的分頁改用 Tabs（下一節）。超過 4 段在 className 加 max-width:100% + overflow-x:auto。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="基本＋圖示" refs={["icon"]}>
+        <Demo label="檢視選項：quiet" refs={["quiet", "icon"]} note="時間區間、圖表指標、API 文件的程式語言。切換「看哪一台」這類主要操作（課堂監看切換機器）仍用實心。">
           <SegmentedControl
+            quiet
             ariaLabel="日期區間"
             value={range}
             onChange={setRange}
@@ -251,7 +252,7 @@ export function SegmentSection() {
             ]}
           />
         </Demo>
-        <Demo label="數量徽章＋停用段" refs={["badge", "buttonProps: { disabled }"]}>
+        <Demo label="清單篩選：數量徽章＋停用段" refs={["badge", "buttonProps: { disabled }"]}>
           <SegmentedControl
             ariaLabel="審核狀態"
             value={status}
@@ -305,11 +306,11 @@ export function TabsSection() {
     <Section
       id="tabs"
       title="分頁 Tabs"
-      refs={["components/Tabs/Tabs.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "compact", "fullWidth"]}
-      intro="切換整塊內容（頁面分頁、卡片內分頁）一律用 Tabs：沒有軌道，選中的字下一條 2px 主色短指示條。篩選與選項用 SegmentedControl，兩者並排時一眼分得出來。role=tablist／tab＋aria-selected，左右鍵、Home／End 切換；放不下自己橫捲。"
+      refs={["components/Tabs/Tabs.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "page", "compact", "fullWidth", "@include page-tabs-row"]}
+      intro="切換整塊內容一律用 Tabs，分兩種：頁面分頁（page，標題下方切換整頁內容）圖示放進圓角方塊、選中換主色實心；區塊分頁（預設，卡片／側欄裡）沒有軌道，字下一條 2px 主色短指示條。選中的字都加粗到 600（標籤先依粗體預留寬度，切換時不會左右跳）。篩選與選項用 SegmentedControl。role=tablist／tab＋aria-selected，左右鍵、Home／End 切換；放不下自己橫捲。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="分頁＋右側篩選與搜尋" refs={["Tabs", "SegmentedControl", "ToolbarSearch"]} wide note="AI 用量監控的呼叫明細：分頁換內容、右邊的分段切換只篩目前分頁的清單。徽章 0 也顯示，載入失敗傳「—」。">
+        <Demo label="區塊分頁＋右側篩選與搜尋" refs={["Tabs", "SegmentedControl", "ToolbarSearch"]} wide note="AI 用量監控的呼叫明細（卡片裡的區塊分頁）：分頁換內容、右邊的分段切換只篩目前分頁的清單。徽章 0 也顯示，載入失敗傳「—」。">
           <div className={styles.alignRow}>
             <Tabs
               ariaLabel="呼叫明細"
@@ -334,8 +335,9 @@ export function TabsSection() {
             />
           </div>
         </Demo>
-        <Demo label="頁面分頁（純文字＋圖示）" refs={["icon"]}>
+        <Demo label="頁面分頁：page" refs={["page", "icon"]} wide note="標題下方、切換整頁內容的分頁（AI API、帳號設定、資源詳情、班級頁、Gateway、課程內容）。每個分頁都要給 icon；整列往左拉 12px，第一個方塊對齊標題左緣。放在 PageHeader 下方，分頁列 @include page-tabs-row：分頁到內容 12px、標題到分頁 24px。">
           <Tabs
+            page
             ariaLabel="資源詳情"
             value={page}
             onChange={setPage}

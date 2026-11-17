@@ -21,6 +21,10 @@
   gap: $spacing-16;
 }
 
+.tabsBar {
+  @include page-tabs-row;
+}
+
 /* 分頁切換：窄螢幕放不下時橫向捲動，留細捲軸當提示（藏起來會看不出還有分頁） */
 /* ── 表單：共用 form-field／form-control（控制項 36px） ── */
 .field {

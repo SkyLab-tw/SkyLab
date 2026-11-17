@@ -404,8 +404,8 @@ describe("AI API 細項紀錄", () => {
     });
 
     await renderPage();
-    const usageTab = [...host.querySelectorAll("button")]
-      .find((button) => button.textContent === "AiApiPage.tabUsage");
+    /* 頁面分頁帶圖示，按鈕文字會混進圖示名稱：用分頁角色＋導覽錨點找 */
+    const usageTab = host.querySelector('[role="tab"][data-guide-tab="usage"]');
     await clickAndSettle(usageTab);
 
     const recordsPanel = host.querySelector('[data-guide="ai-usage-records"]');

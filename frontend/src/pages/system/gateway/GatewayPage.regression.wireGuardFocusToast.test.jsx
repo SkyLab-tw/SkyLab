@@ -81,7 +81,7 @@ test("switching back to the window does not toast the same WireGuard overview fa
   await act(async () => { root.render(withQueryClient(<GatewayPage />, client)); });
   await flush();
   await act(async () => {
-    [...host.querySelectorAll("button")].find((b) => b.textContent === "GatewayPage.tabWireGuard").click();
+    host.querySelector(`[role="tab"][data-guide-tab="gateway-wireguard"]`).click();
   });
   await flush();
   expect(mocks.toast.error).toHaveBeenCalledTimes(1);

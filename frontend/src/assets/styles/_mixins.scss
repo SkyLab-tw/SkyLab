@@ -64,6 +64,12 @@
   padding-inline: $spacing-16;
 }
 
+/* 頁面分頁（<Tabs page>）那一列：頁面直排間距 24px，分頁到下方內容收成 12px（標題到分頁維持 24px），
+   分頁才貼著它控制的內容，不會像一條獨立的列浮在中間。掛在 .page 的直接子層（分頁本身或包著分頁的列） */
+@mixin page-tabs-row {
+  margin-bottom: -12px;
+}
+
 @mixin badge-base {
   display: inline-flex;
   align-items: center;

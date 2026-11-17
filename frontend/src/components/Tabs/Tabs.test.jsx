@@ -91,4 +91,30 @@ describe("Tabs", () => {
     expect(tabs().map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
     expect(tabs().every((tab) => tab.getAttribute("aria-selected") === "false")).toBe(true);
   });
+
+  test("字串標籤帶 data-label（CSS 依粗體預留寬度用），文字只出現一次；非字串標籤不帶", () => {
+    const options = [...OPTIONS.slice(0, 2), { value: "node", label: <em>節點</em> }];
+    act(() => root.render(<Harness options={options} />));
+
+    const labels = tabs().map((tab) => tab.querySelector("[data-label]"));
+    expect(labels[0].getAttribute("data-label")).toBe("模型");
+    expect(labels[1].getAttribute("data-label")).toBe("金鑰 API 呼叫");
+    expect(labels[2]).toBeNull();
+    expect(tabs()[2].textContent).toBe("節點");
+  });
+
+  test("page（頁面分頁）：圖示包進方塊、加頁面分頁類名；區塊分頁的圖示不包方塊", () => {
+    act(() => root.render(<Tabs page options={OPTIONS} value="models" onChange={() => {}} ariaLabel="頁面" />));
+
+    const list = host.querySelector('[role="tablist"]');
+    expect(list.className).toMatch(/tabsPage/);
+    const box = tabs()[0].querySelector('[class*="iconBox"]');
+    expect(box?.querySelector('[data-icon="model_training"]')).not.toBeNull();
+    expect(tabs()[0].getAttribute("aria-selected")).toBe("true");
+    expect(tabs()[0].textContent).toBe("模型3");
+
+    act(() => root.render(<Harness />));
+    expect(tabs()[0].querySelector('[class*="iconBox"]')).toBeNull();
+    expect(tabs()[0].querySelector('[data-icon="model_training"]')).not.toBeNull();
+  });
 });

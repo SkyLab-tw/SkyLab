@@ -795,6 +795,7 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
           <h3 className={styles.docsStepTitle}>{t("AiApiPage.docsExampleTitle")}</h3>
           <div className={styles.codeToolbar}>
             <SegmentedControl
+              quiet
               options={endpointKinds}
               value={endpointKind}
               onChange={setEndpointKind}
@@ -802,6 +803,7 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
               className={styles.codeTabs}
             />
             <SegmentedControl
+              quiet
               options={CODE_LANGUAGES.map((item) => ({ value: item.key, label: t(item.labelKey) }))}
               value={language}
               onChange={setLanguage}
@@ -1174,6 +1176,7 @@ function MyUsageTab() {
     <div className={styles.usageTab}>
       <div className={styles.usageDateRow} data-guide="ai-usage-panel">
         <SegmentedControl
+          quiet
           options={PRESETS}
           value={preset}
           onChange={setPreset}
@@ -1401,10 +1404,11 @@ export default function AiApiPage() {
   /* 「API 聊天」用登入者自己核准的金鑰（只在需要時向擁有者專用端點取回、留在記憶體），
      不再打包共用金鑰；絕不能改回讀 VITE_* 環境變數，那會公開在前端 bundle 裡 */
   const TABS = [
-    { key: "keys", label: t("AiApiPage.tabKeys") },
-    { key: "chat", label: t("AiApiPage.tabChat") },
-    { key: "records", label: t("AiApiPage.tabRecords") },
-    { key: "usage", label: t("AiApiPage.tabUsage") },
+    /* 圖示沿用各分頁空狀態的圖示（金鑰 vpn_key、申請紀錄 history） */
+    { key: "keys", label: t("AiApiPage.tabKeys"), icon: "vpn_key" },
+    { key: "chat", label: t("AiApiPage.tabChat"), icon: "forum" },
+    { key: "records", label: t("AiApiPage.tabRecords"), icon: "history" },
+    { key: "usage", label: t("AiApiPage.tabUsage"), icon: "insights" },
   ];
 
   /* ── Form state ── */
@@ -1587,14 +1591,16 @@ export default function AiApiPage() {
       </PageHeader>
 
       {/* ── 分頁切換 ── */}
-      <div data-guide="ai-tabs">
+      <div className={styles.tabsBar} data-guide="ai-tabs">
         <Tabs
+          page
           ariaLabel={t("AiApiPage.tabsAriaLabel")}
           value={activeTab}
           onChange={setActiveTab}
           options={TABS.map((tab) => ({
             value: tab.key,
             label: tab.label,
+            icon: tab.icon,
             // 金鑰數跟清單一致（只算使用中）；申請紀錄只標待審的，0 就不顯示
             badge: tab.key === "keys"
               ? activeCredentials.length

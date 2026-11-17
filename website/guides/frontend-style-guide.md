@@ -354,8 +354,8 @@ The standard form:
 
 - A clickable card's hover only gets a light tint (`background: var(--color-hover)`) or a shadow / lift, with a `transition` for fade-in and fade-out; **do not change the border colour** — a blue border is reserved for the "selected / current" state (such as an active tab or the current step of a flow)
 - "Selected / current" comes in two tiers; do not mix them:
-  - **Navigation** (sidebar, the selected segment of a `SegmentedControl`): solid primary with white text. One per level, short labels
-  - **Tabs** (`Tabs`): a 2px primary indicator under the selected label, no fill and no border. Deliberately unlike the solid segmented control, so "switch content" and "filter" can sit on the same row and still be told apart
+  - **Navigation** (sidebar, the selected segment of a `SegmentedControl`): solid primary with white text. One per level, short labels. The exception is `SegmentedControl quiet` for view options: the selected segment gets only a thin primary border, a white fill and dark text
+  - **Tabs** (`Tabs`): section tabs put a 2px primary indicator under the selected label, with no fill and no border; page tabs (`page`) turn the selected icon square solid primary. Both are deliberately unlike a fully filled segmented control, so "switch content" and "filter" can sit on the same row and still be told apart
   - **Current item of a content list** (the row in a master–detail list whose details are shown on the right, such as the week list in AI Check): `@include item-current;` — an 8% primary tint plus a 3px primary bar on the left, **no border**. The tint alone is indistinguishable from the hover tint, so the bar is the marker; it is deliberately one step lighter than navigation so it does not compete with the page's primary button. Covers the AI Check week list, the request review list and the environment picked when setting up a class; when the row itself is a white card pass `item-current(var(--color-surface))`
 - Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons. Tabs that switch a whole block of content use `Tabs` instead (see "Tabs")
 - Option buttons that carry a swatch, a description or their own border (appearance settings, template visibility): the selected one uses `@include option-selected;` — primary border, 8% tint, primary text. These are options, not the current item of a list, so a border is fine
@@ -617,9 +617,13 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 
 | Purpose | Component | Examples |
 | --- | --- | --- |
-| Tabs: switch a whole block of content (page tabs, tabs inside a card) | `Tabs` | Resource detail, AI API, Gateway, account settings, course content, class page (active), AI Check sidebar, AI usage monitoring details, monitoring alerts / mining |
-| Filter: narrow the same list | `SegmentedControl` | Status on the review pages, resource management, class management, background jobs, user feedback, storage |
-| Option: change how the same content is shown, or a mode in a form | `SegmentedControl` | Time range, chart metric, sign-in method, request mode, switching machines in class monitoring |
+| Page tabs: below the title, switch the page's main content | `Tabs page` | AI API, account settings, resource detail, class page (active), Gateway, course content |
+| Section tabs: switch a block inside a card, a section or a sidebar | `Tabs` | AI usage monitoring details, monitoring alerts / mining, AI Check sidebar |
+| List filter: narrow the same list (usually with counts) | `SegmentedControl` | Status on the review pages, resource management, class management, environment management, key management, background jobs, user feedback, storage |
+| View option: same data, different presentation | `SegmentedControl quiet` | Time range (AI API usage, AI usage monitoring, resource monitoring), chart metric (AI usage trend, class monitoring, resource monitoring), endpoint kind / code language in the API docs |
+| Form value: pick one value that counts when the form is sent or saved | `SegmentedControl` | Sign-in method, request mode, appearance background, feedback category, question difficulty / type, connection publish method / direction |
+
+When it's unclear whether something is a tab or a filter, look at the screen after switching: the same list getting shorter is a filter (the badge counts add up to "All"); a different block with its own layout and columns is a tab. View options use the `quiet` variant because they often sit next to page tabs or in a chart header, where a solid control would outweigh the tabs and the content; a control that picks *which* thing you are looking at (switching machines in class monitoring) is a primary action and stays solid.
 
 ```jsx
 <Tabs
@@ -633,9 +637,12 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 />
 ```
 
-- Look: no track; a 2px rounded primary indicator under the selected label (it spans the content only, not the whole row, and grows from the centre), and the label turns dark; a light tint on hover. 36px tall so it lines up with buttons, fields and segmented controls; 14px text, one step above the segmented control's 12px, so tabs read as a higher level than filters
+- Look: no track; a 2px rounded primary indicator under the selected label (it spans the content only, not the whole row, and grows from the centre), and the label turns dark and goes to weight 600 (each label reserves its bold width up front, so the tabs after it don't shift when the selection changes; badges stay at 500); a light tint on hover. 36px tall so it lines up with buttons, fields and segmented controls; 14px text, one step above the segmented control's 12px, so tabs read as a higher level than filters
+- There are two kinds of tabs, chosen by where they sit; don't mix them:
+  - **Section tabs** (default): tabs inside a card, a section or a sidebar (AI usage monitoring details, monitoring alerts / mining, the AI Check sidebar). The short-indicator look above, deliberately quiet
+  - **Page tabs** (`page`): tabs below the page title that switch the page's main content (AI API, account settings, resource detail, class page, Gateway, course content). Every tab needs an `icon`; the icon sits in a 28px rounded square, the selected square turns solid primary with a white icon, and there is no indicator under the label. 16px text and a 44px row, one step heavier than section tabs, so a filter next to them can't outweigh them. The row is pulled left by one padding so the first square lines up with the page title. Always place them below `PageHeader` (never inside the header's right side), and give the tab row `@include page-tabs-row`, which brings the gap to the content down to 12px (title to tabs keeps the page's 24px), so the tabs sit with the content they control
 - `badge` is a count (0 is shown, `null` / `undefined` is not); on the selected tab it switches to a primary tint with primary text. Pass "—" when loading failed
-- Scrolls horizontally on its own when it doesn't fit (scrollbar hidden), so pages don't wrap it in `overflow-x`. `compact` (8px side padding) is for containers under 240px; `fullWidth` stretches and splits evenly. A page's `className` is for layout only (`align-self` and the like) — don't override `.tab`
+- Scrolls horizontally on its own when it doesn't fit (scrollbar hidden), so pages don't wrap it in `overflow-x`. `compact` (8px side padding) is for containers under 240px; `fullWidth` stretches and splits evenly; `page` is covered under page tabs above. A page's `className` is for layout only (`align-self` and the like) — don't override `.tab`
 - Accessibility: `role="tablist"` / `"tab"` with `aria-selected`; only the selected tab is in the Tab order, and the arrow keys (wrapping), Home and End move and switch straight away. Put guide anchors such as `data-guide-tab` in `buttonProps`, and find the current tab with `[aria-selected="true"]`
 - Inside a header bar that has its own bottom border (AI Check sidebar), let the tabs `align-self: stretch` to the bar's height so the indicator sits right on the border
 - A toolbar (filters + search) can sit to the right of the tabs: tabs on the left, toolbar on the right, and the toolbar wraps to the next line when there isn't room (AI usage monitoring details)
