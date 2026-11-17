@@ -243,7 +243,7 @@ def _reply_claims_created(reply: str) -> bool:
     Used only when the server confirmed no proposal tool outcome exists, so a
     prose-only claim is by definition false under the tools-first contract.
     """
-    return any(marker in (reply or "") for marker in _REPLY_CREATION_CLAIM_MARKERS)
+    return _REPLY_CREATION_CLAIM_RE.search(reply or "") is not None
 
 
 logger = logging.getLogger(__name__)
@@ -432,6 +432,15 @@ _AWAITING_TEACHER_ERROR = (
     "此項目需要老師補充資訊；本輪不要再呼叫工具，請在 reply 詢問老師，"
     "proposal_status 設為 needs_information。"
 )
+_STAGED_REVISIT_ERROR = (
+    "本輪提案已建立，不需要再列出、讀取或修改；請停止呼叫工具，"
+    "直接依 <final_answer> 輸出 JSON。"
+)
+_JSON_REPLY_REPAIR_INSTRUCTION = (
+    "上一則回覆不是規定的 JSON。請把它的內容原意改寫成 <final_answer> 指定的 JSON 物件，只輸出 JSON。"
+    "reply 保留原本要對老師說的話；proposal_status 依本輪工具結果：有 staged 提案為 ready，"
+    "正在請老師補充資訊為 needs_information，平台不支援為 unsupported，其他為 none。"
+)
 _CHAT_JUDGEMENT_MODE_DESCRIPTION = (
     "ai=依 assertion 自動判定；teacher=只收集結果給老師查看，不放 assertion"
 )
@@ -508,12 +517,10 @@ _NO_RUBRIC_READY_REPLY = (
     "因此無法建立可套用提案。請先選擇來源後再送出需求。"
 )
 
-_REPLY_CREATION_CLAIM_MARKERS = (
-    "已建立提案",
-    "已送出修改提案",
-    "整理成提案",
-    "提案已建立",
-    "已新增提案",
+# Only completed (past-tense) claims count; a follow-up such as
+# 「補充後我就整理成提案」 is a question, not a false creation claim.
+_REPLY_CREATION_CLAIM_RE = re.compile(
+    r"已建立提案|已送出修改提案|提案已建立|已新增提案|已整理成提案|已(?:把|將).{0,40}?整理成提案"
 )
 
 
@@ -2416,6 +2423,8 @@ async def _run_proposal_tool_loop(
 
     # Chat (and attachment-item) proposals; refine/Finalizer keep their loop.
     chat_mode = ready_only and not finalizer
+    # Tool rounds cannot use JSON mode; chat no-tool reply rounds restore it.
+    reply_format = payload_data.get("response_format") if chat_mode else None
     base_request = dict(payload_data)
     base_request.pop("messages", None)
     if rubric_available:
@@ -2464,6 +2473,7 @@ async def _run_proposal_tool_loop(
     # tool names. Repeating either ends the tool phase instead of looping.
     awaiting_teacher: dict[str, str] = {}
     unknown_tool_calls = 0
+    staged_revisit = False
     stop_tools = False
     tools_exhausted = False
     for _ in range(max_rounds):
@@ -2664,6 +2674,24 @@ async def _run_proposal_tool_loop(
                     "reason_code": "teacher_input_required",
                     "retryable": False,
                 }
+            elif chat_mode and staged_ops and (
+                tool_name == _LIST_CHECKLIST_TOOL_NAME
+                or (
+                    tool_name
+                    in {_GET_CHECKLIST_ITEM_TOOL_NAME, _EDIT_CHECKLIST_ITEM_TOOL_NAME}
+                    and str(arguments.get("id") or "")
+                    in {str(entry["item"].id) for entry in staged_ops}
+                )
+            ):
+                # Re-reading or re-editing this turn's own proposals only loops
+                # (and invites guessed edits); the staged result is final.
+                staged_revisit = True
+                stop_tools = True
+                chat_block = {
+                    "error": _STAGED_REVISIT_ERROR,
+                    "reason_code": "already_staged",
+                    "retryable": False,
+                }
             if chat_block is not None:
                 # Not a proposal outcome: keep it out of tool_outcomes/pending
                 # errors so the teacher never sees a fake per-item failure.
@@ -2828,8 +2856,9 @@ async def _run_proposal_tool_loop(
             stop_tools = True
             logger.warning(
                 "Teacher Judge chat tool phase stopped: repeated_teacher_input=%s "
-                "unknown_tool_calls=%d staged=%d rejected=%d",
+                "staged_revisit=%s unknown_tool_calls=%d staged=%d rejected=%d",
                 bool(awaiting_teacher),
+                staged_revisit,
                 unknown_tool_calls,
                 len(staged_ops),
                 len(rejected_ops),
@@ -2864,6 +2893,8 @@ async def _run_proposal_tool_loop(
         }
         reply_payload.pop("tools", None)
         reply_payload.pop("tool_choice", None)
+        if reply_format:
+            reply_payload["response_format"] = reply_format
         remaining_tokens = main_completion_budget - int(
             metrics.get("completion_tokens") or 0
         )
@@ -2880,6 +2911,42 @@ async def _run_proposal_tool_loop(
             )
             metrics = _merge_vllm_metrics(metrics, round_metrics)
             final_content = str(_assistant_message(raw_message).get("content") or "")
+    elif (
+        reply_format
+        and final_content.strip()
+        and not pending_errors
+        and _reply_payload_object(final_content)[1] is None
+    ):
+        # Chat final reply came back as prose: one no-tool JSON-mode round
+        # restates it so proposal_status / focus are not lost.
+        remaining_tokens = main_completion_budget - int(
+            metrics.get("completion_tokens") or 0
+        )
+        if remaining_tokens > 0:
+            repair_payload = {
+                **base_request,
+                "messages": [
+                    *messages,
+                    {"role": "assistant", "content": final_content},
+                    {"role": "system", "content": _JSON_REPLY_REPAIR_INSTRUCTION},
+                ],
+                "response_format": reply_format,
+                "max_tokens": min(per_call_max_tokens, remaining_tokens),
+            }
+            repair_payload.pop("tools", None)
+            repair_payload.pop("tool_choice", None)
+            logger.warning("Teacher Judge chat final reply was not JSON; restating it")
+            raw_message, round_metrics = await _call_vllm_message(
+                apply_thinking_control(repair_payload, settings.VLLM_ENABLE_THINKING),
+                timeout=float(settings.VLLM_TIMEOUT),
+            )
+            round_metrics = _charge_missing_completion_usage(
+                round_metrics, int(repair_payload["max_tokens"])
+            )
+            metrics = _merge_vllm_metrics(metrics, round_metrics)
+            repaired = str(_assistant_message(raw_message).get("content") or "")
+            if _reply_payload_object(repaired)[1] is not None:
+                final_content = repaired
 
     if pending_errors:
         final_content = json.dumps(

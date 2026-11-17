@@ -397,3 +397,202 @@ async def test_attachment_item_missing_information_is_needs_information(
     assert len(calls) == 2
     assert row["status"] == "needs_information"
     assert row.get("operation") is None
+
+
+# ------------------------------------------------------------ final reply JSON
+
+
+@pytest.mark.parametrize(
+    ("reply", "claims"),
+    [
+        ("請補充這兩點，我就整理成提案。", False),
+        ("補上絕對路徑後，我再幫你整理成提案。", False),
+        ("我已把「Python 版本」整理成提案。", True),
+        ("已將「nginx」整理成提案，請確認。", True),
+        ("已整理成提案。", True),
+        ("已建立提案。", True),
+    ],
+)
+def test_creation_claim_only_counts_completed_wording(reply: str, claims: bool) -> None:
+    assert service._reply_claims_created(reply) is claims
+
+
+async def test_prose_final_reply_is_restated_once_in_json_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    question = "請提供 main.log 的絕對路徑，我就能幫你建立提案。"
+    calls, result = await _chat(
+        monkeypatch,
+        [
+            tool_call_message("list_checklist", {}),
+            question,
+            reply_message(question, "needs_information"),
+        ],
+        content="我想看main.log",
+    )
+
+    assert len(calls) == 3
+    repair = calls[2]
+    assert repair["response_format"] == {"type": "json_object"}
+    assert "tools" not in repair and "tool_choice" not in repair
+    assert repair["messages"][-2] == {"role": "assistant", "content": question}
+    assert result.proposal_status == "needs_information"
+    assert result.reply == question
+
+
+async def test_prose_question_is_kept_when_restatement_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    question = "判定方式要以哪個版本為準？請補充這點，我就整理成提案。"
+    calls, result = await _chat(
+        monkeypatch,
+        [question, "還是純文字"],
+        content="檢查 Python 版本是否正確",
+    )
+
+    assert len(calls) == 2
+    assert result.proposal_status is None
+    assert result.reply == question
+
+
+async def test_json_final_reply_needs_no_restatement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls, result = await _chat(
+        monkeypatch,
+        [reply_message("請提供路徑。", "needs_information")],
+    )
+
+    assert len(calls) == 1
+    assert result.proposal_status == "needs_information"
+
+
+async def test_refine_prose_reply_is_not_restated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls, _result = await _chat(
+        monkeypatch,
+        [tool_call_message("list_checklist", {}), "檢查表不需要修改。"],
+        is_refine=True,
+        rubric_context=json.dumps({"items": [{"id": "a", "title": "A"}]}),
+    )
+
+    assert len(calls) == 2
+
+
+# ------------------------------------------------------------ staged revisit
+
+
+async def test_listing_after_staging_ends_tool_phase_in_json_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls, result = await _chat(
+        monkeypatch,
+        [
+            _tool_calls_message(
+                (
+                    "create_checklist_item",
+                    _complete_create(
+                        "nginx", ["systemctl", "is-active", "nginx"], "nginx"
+                    ),
+                ),
+                (
+                    "create_checklist_item",
+                    _complete_create("磁碟", ["df", "-h"], "disk"),
+                ),
+            ),
+            tool_call_message("list_checklist", {}),
+            reply_message("共同檢查服務狀態。", "ready"),
+        ],
+        template_commands=[GENERAL_COMMAND],
+    )
+
+    assert len(calls) == 3
+    blocked = json.loads(calls[2]["messages"][-2]["content"])
+    assert blocked["reason_code"] == "already_staged"
+    assert "tools" not in calls[2]
+    assert calls[2]["response_format"] == {"type": "json_object"}
+    assert result.proposal is not None
+    assert len(result.proposal) == 2
+    assert all(entry.get("tool") != "list_checklist" for entry in result.tool_calls[2:])
+
+
+async def test_editing_own_staged_item_is_blocked_and_keeps_proposal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teacher_view = {
+        "title": "Python 版本",
+        "judgement_mode": "teacher",
+        "detection_method": "收集版本給老師查看。",
+        "check_steps": [
+            {
+                "id": "python.version",
+                "title": "Python 版本",
+                "collector": {"type": "command", "argv": ["python3", "--version"]},
+            }
+        ],
+    }
+    calls: list[dict[str, Any]] = []
+
+    async def fake(payload, timeout=60.0):
+        calls.append(payload)
+        if len(calls) == 1:
+            return tool_call_message("create_checklist_item", teacher_view), {}
+        if len(calls) == 2:
+            # Guess an expected value on the item staged in this same turn.
+            staged = json.loads(payload["messages"][-1]["content"])
+            guessed_edit = {
+                "id": staged["item_id"],
+                "judgement_mode": "ai",
+                "check_steps": [
+                    {
+                        **teacher_view["check_steps"][0],
+                        "assertion": {
+                            "type": "text_contains",
+                            "expected": "Python 3.10",
+                        },
+                    }
+                ],
+            }
+            return tool_call_message("edit_checklist_item", guessed_edit), {}
+        return reply_message("已整理成提案。", "ready"), {}
+
+    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    patch_teacher_judge_vllm_settings(monkeypatch)
+    result = await service.chat_with_rubric(
+        messages=[SimpleNamespace(role="user", content="我想看學生的 Python 版本")],
+        rubric_context=json.dumps({"items": []}),
+        rubric_available=True,
+    )
+
+    assert len(calls) == 3
+    blocked = json.loads(calls[2]["messages"][-2]["content"])
+    assert blocked["reason_code"] == "already_staged"
+    assert result.proposal is not None
+    assert result.proposal[0]["judgement_mode"] == "teacher"
+    assert not any(
+        entry.get("tool") == "edit_checklist_item" for entry in result.tool_calls
+    )
+
+
+async def test_sequential_creates_of_new_items_still_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls, result = await _chat(
+        monkeypatch,
+        [
+            tool_call_message(
+                "create_checklist_item",
+                _complete_create("nginx", ["systemctl", "is-active", "nginx"], "nginx"),
+            ),
+            tool_call_message(
+                "create_checklist_item", _complete_create("磁碟", ["df", "-h"], "disk")
+            ),
+            reply_message("共同檢查服務狀態。", "ready"),
+        ],
+        template_commands=[GENERAL_COMMAND],
+    )
+
+    assert len(calls) == 3
+    assert result.proposal is not None
+    assert len(result.proposal) == 2
