@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import Disclosure from "./Disclosure";
+import DisclosureToggle from "./DisclosureToggle";
 
 vi.mock("../MIcon", () => ({ default: ({ name, className }) => <i data-icon={name} className={className} /> }));
 
@@ -57,5 +58,31 @@ describe("Disclosure", () => {
     expect(details.open).toBe(true);
     expect([...details.querySelectorAll("summary [data-icon]")].map((icon) => icon.dataset.icon)).toEqual(["expand_more"]);
     expect(details.querySelector("summary").textContent).toBe("錯誤代碼");
+  });
+});
+
+describe("DisclosureToggle", () => {
+  test("按鈕版：展開狀態同步到 aria-expanded、點了呼叫 onToggle、文字後面一個向下箭頭", () => {
+    const onToggle = vi.fn();
+    const render = (open) => act(() => root.render(
+      <DisclosureToggle open={open} onToggle={onToggle} className="placed" aria-controls="keys">
+        顯示已失效的金鑰（2）
+      </DisclosureToggle>,
+    ));
+    render(false);
+
+    const button = host.querySelector("button");
+    expect(button.type).toBe("button");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(button.getAttribute("aria-controls")).toBe("keys");
+    expect(button.className.split(" ")).toEqual(expect.arrayContaining(["placed"]));
+    expect(button.textContent).toBe("顯示已失效的金鑰（2）");
+    expect([...button.querySelectorAll("[data-icon]")].map((icon) => icon.dataset.icon)).toEqual(["expand_more"]);
+
+    act(() => button.click());
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    render(true);
+    expect(host.querySelector("button").getAttribute("aria-expanded")).toBe("true");
   });
 });

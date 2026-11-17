@@ -501,5 +501,11 @@
   "ColorPicker.pick": "色を選ぶ",
   "ColorPicker.hexLabel": "カラーコード",
   "AiFloatingChat.pageHelpHint": "この画面で何ができるか、私に聞いてください。",
-  "AiFloatingChat.dismissPageHelpHint": "ヒントを閉じる"
+  "AiFloatingChat.dismissPageHelpHint": "ヒントを閉じる",
+  "Pagination.navLabel": "ページ送り",
+  "Pagination.prev": "前のページ",
+  "Pagination.next": "次のページ",
+  "Pagination.page": "{{page}} ページ",
+  "Pagination.jump": "<input/> ページへ",
+  "Pagination.jumpLabel": "移動先のページ（全 {{totalPages}} ページ）"
 }

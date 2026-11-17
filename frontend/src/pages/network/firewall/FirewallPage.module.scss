@@ -573,8 +573,10 @@
   @include text-truncate;
 }
 
+/* 副標（IP）用 14px：卡片扣掉狀態點與盾牌圖示只剩約 107px，16px 時 192.168.60.123 這類就會被截斷；
+   14px 下最長的 IPv4（255.255.255.255）約 105px 放得下。真的更長（IPv6）時滑過看完整內容 */
 .vmMeta {
-  font-size: $font-size-16;
+  font-size: $font-size-14;
   color: var(--color-text-muted);
   @include text-truncate;
 }

@@ -45,6 +45,7 @@
   "FileDropzone.notAnImage": "只能上傳圖片檔",
   "FileDropzone.dropToAdd": "放開以加入檔案",
   "FileDropzone.browse": "瀏覽檔案",
+  "Tabs.more": "更多",
   "FileDropzone.uploading": "上傳中…",
   "FileDropzone.uploadingCount": "上傳中…（{{current}}/{{total}}）",
   "PasswordInput.show": "顯示密碼",

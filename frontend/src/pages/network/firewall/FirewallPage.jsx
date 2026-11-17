@@ -34,6 +34,7 @@ import ConnectionEdge   from "./edges/ConnectionEdge";
 import ConnectionDetailPanel from "./ConnectionDetailPanel";
 import { GATEWAY_KEY, buildFlow, focusEdges, isOutboundEdge, portLabel, routeEdges, withPortIndexing } from "./utils/buildFlow";
 import { mergePendingLayout, toLayoutEntry, topologyView } from "./utils/pageState";
+import { applyMoves, settleDraggedNodes } from "./utils/nodeSpacing";
 import {
   GROUP_THRESHOLD,
   applyView,
@@ -346,7 +347,16 @@ export default function FirewallPage() {
     saveLayout(layoutNodes).catch(() => {});
   }, []);
 
-  const onNodeDragStop = useCallback((_, __, draggedNodes) => {
+  const onNodeDragStop = useCallback((_, __, droppedNodes) => {
+    /* 放得離別台太近（徽章互壓、連線短到放不下標籤）就推開到最近的空處，存的是推開後的位置。
+       群組框（展開或收合）不推：它是大容器、上下只隔 40px 堆疊，往下拖一點就碰到下一個群組，
+       「最近的空處」常常就是原位，放開後被拉回去會像拖不動；群組框照放，但仍算網際網路節點的障礙 */
+    const { moves, dragged: draggedNodes } = settleDraggedNodes(
+      rfInstance.current?.getNodes() ?? [],
+      droppedNodes,
+      { movable: (node) => node.type !== "vmGroup" },
+    );
+    setNodes((prev) => applyMoves(prev, moves));
     /* 分組模式：機器固定在群組框的格子裡，能拖的只有群組框與網際網路，位置存本機 */
     if (grouped) {
       const layout = groupLayoutRef.current;
@@ -360,7 +370,7 @@ export default function FirewallPage() {
     mergePendingLayout(pendingLayout.current, draggedNodes, GATEWAY_KEY);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flushPendingLayout, SAVE_DEBOUNCE);
-  }, [flushPendingLayout, grouped]);
+  }, [flushPendingLayout, grouped, setNodes]);
 
   /* 離開頁面時把還沒送出的佈局存掉 */
   useEffect(() => flushPendingLayout, [flushPendingLayout]);

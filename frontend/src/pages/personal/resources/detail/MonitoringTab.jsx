@@ -124,7 +124,6 @@ export default function MonitoringTab({ vmid, toolbar }) {
       {/* 時間範圍切換 portal 到分頁列右側的工具槽，與分頁切換器同列 */}
       {toolbar && createPortal(
         <SegmentedControl
-          quiet
           className={styles.segmentScroll}
           options={TIMEFRAMES.map((tf) => ({ value: tf.value, label: t(tf.labelKey) }))}
           value={timeframe}
@@ -176,7 +175,6 @@ export default function MonitoringTab({ vmid, toolbar }) {
             <p className={styles.cardDesc}>{t("MonitoringTab.dataPointsCount", { count: chartData.length })}</p>
           </div>
           <SegmentedControl
-            quiet
             options={CHART_TABS.map((ct) => ({
               value: ct.key,
               label: ct.labelKey ? t(ct.labelKey) : ct.label,

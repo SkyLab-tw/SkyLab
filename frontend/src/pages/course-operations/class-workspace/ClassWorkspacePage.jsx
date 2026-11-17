@@ -1159,7 +1159,6 @@ export function StudentMachines({ item }) {
           <span>{selectedNode.resource_type === "lxc" ? "LXC" : "VM"}</span>
         </div>}
         <SegmentedControl
-          quiet
           className={styles.metricSwitch}
           ariaLabel={t("ClassWorkspacePage.selectMetricAria")}
           value={metric}

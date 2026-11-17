@@ -99,7 +99,8 @@ Always look up and reuse what is already defined in `_variables.scss` (spacing, 
 | `--color-divider` | Divider line |
 | `--color-hover` | Hover background |
 | `--color-row-hover` | Table row hover background (darker than `--color-hover` so it does not match the header colour) |
-| `--color-overlay` | Modal backdrop |
+| `--color-track` | Track of progress bars and meters (the unfilled part): 28% of the muted text colour, visible in light, dark and custom primary colours. Do not use `--color-hover` as a track: with a custom primary colour the light hover can equal the page background, and the track all but disappears on a card |
+| `--color-overlay` | Modal backdrop: in light mode it is derived from the deep shadow colour (darkened, then 25%), so it follows a custom primary colour; dark mode stays black at 60%. Do not hard-code a tinted backdrop: under a warm theme the glass dialog would show a blue cast |
 
 #### Shadows
 | Variable | Purpose |
@@ -354,10 +355,10 @@ The standard form:
 
 - A clickable card's hover only gets a light tint (`background: var(--color-hover)`) or a shadow / lift, with a `transition` for fade-in and fade-out; **do not change the border colour** — a blue border is reserved for the "selected / current" state (such as an active tab or the current step of a flow)
 - "Selected / current" comes in two tiers; do not mix them:
-  - **Navigation** (sidebar, the selected segment of a `SegmentedControl`): solid primary with white text. One per level, short labels. The exception is `SegmentedControl quiet` for view options: the selected segment gets only a thin primary border, a white fill and dark text
-  - **Tabs** (`Tabs`): section tabs put a 2px primary indicator under the selected label, with no fill and no border; page tabs (`page`) turn the selected icon square solid primary. Both are deliberately unlike a fully filled segmented control, so "switch content" and "filter" can sit on the same row and still be told apart
+  - **Navigation** (sidebar, the selected segment of a `SegmentedControl`): solid primary with white text. One per level, short labels
+  - **Tabs** (`Tabs`): the selected icon square turns solid primary and the label goes bold, with no fill across the whole tab. Deliberately unlike a fully filled segmented control, so "switch content" and "filter" can sit on the same row and still be told apart
   - **Current item of a content list** (the row in a master–detail list whose details are shown on the right, such as the week list in AI Check): `@include item-current;` — an 8% primary tint plus a 3px primary bar on the left, **no border**. The tint alone is indistinguishable from the hover tint, so the bar is the marker; it is deliberately one step lighter than navigation so it does not compete with the page's primary button. Covers the AI Check week list, the request review list and the environment picked when setting up a class; when the row itself is a white card pass `item-current(var(--color-surface))`
-- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons. Tabs that switch a whole block of content use `Tabs` instead (see "Tabs"). Its width follows its content, so it doesn't stretch inside a column container (leaving a long empty track); use `fullWidth` when it should fill the row, and pages no longer need `align-self: flex-start`
+- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons. Tabs that switch a whole block of content use `Tabs` instead (see "Tabs"). Its width follows its content, so it doesn't stretch inside a column container (leaving a long empty track); use `fullWidth` when it should fill the row, and pages no longer need `align-self: flex-start`. When it doesn't fit, it collapses into a dropdown (one button showing the current option, opening the shared `ListboxPopover`) and expands back into segments once there is room, so no label gets cut off; pages don't add `overflow-x`
 - Option buttons that carry a swatch, a description or their own border (appearance settings, template visibility): the selected one uses `@include option-selected;` — primary border, 8% tint, primary text. These are options, not the current item of a list, so a border is fine
 - Expanded is not selected: an expanded card only gets a deeper shadow (`var(--shadow-md)`) and keeps its border colour; an info row that is the only item and cannot be chosen gets no selected style
 - Do not build the tint with a `linear-gradient` layer: gradients cannot transition, so the hover colour would jump instantly
@@ -479,6 +480,7 @@ Form fields always use the form mixin family from `_mixins.scss`; **do not inven
 
 - Optional settings at the bottom of a form (advanced settings) go in the shared `components/Disclosure`: a full-width clickable row with a white background and hairline border, 14px / 500, an optional primary icon on the left, an optional muted note on the right (such as "Optional") and a chevron that turns half a circle when open. The content sits 16px below the row, aligned with the fields above (not wrapped in the box). Don't use the browser's native ▶ marker or hand-style `<details>`; use `className` for layout (such as `grid-column: 1 / -1`) and `bodyClassName` for the field grid. Used by the class setup wizard and the first-run setup wizard
 - Inline disclosures for supplementary details (execution evidence, error details, tool history, limits and error codes) use the same component with `variant="inline"`: just "text + down chevron", no box, weight 500, font size inherited from the outer element (set 12 / 14px with `className`), muted until hovered or opened, when it turns primary and the chevron turns half a circle. The content follows directly and sets its own spacing. Used by AI Check, the AI API docs, the AI chat tool history and the crash screen. Collapsible card headers (class info card, check groups) are structured differently and don't use this component
+- When the expanded content doesn't follow the toggle (for example "Show inactive keys" merges rows into the table above, so it can't sit inside `<details>`), use the button version `components/Disclosure/DisclosureToggle` (`open` + `onToggle`), which looks the same as the inline disclosure. Don't use a ghost button for a "show more / inactive" toggle that sits on the page background: the ghost tints are meant for white cards, and on low-saturation themes (Milk Tea and similar) the page background is nearly the same color as the ghost hover, so the button seems to vanish on hover
 - A start / end pair of `input type="time"` needs about 130px per box to show "1:10 PM" plus the clock icon; when half a column is too narrow, let that row take the full width (with the card's `@container`) rather than shrinking the inputs until the text is cut off
 > Inside a container narrower than 240px (sidebar tabs) use its `compact` (8px segment padding) and `fullWidth` (fills the container, segments share the width) props
 > instead of overriding the component's internal buttons from page SCSS.
@@ -604,12 +606,15 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 
 | Approach | When | Used on |
 |---|---|---|
-| Pagination: `components/Pagination` (50 per page, "N total · Page x of y" plus previous / next) | Admins looking at all the data, often hundreds or thousands of rows, together with search and filters | User management, audit logs, IP management, feedback, AI key management |
+| Pagination: `components/Pagination` (50 per page, "N total" plus arrows, page numbers and "Go to page __") | Often hundreds or thousands of rows that people page back through, together with search and filters | User management, audit logs, IP management, feedback, AI key management, AI API usage details |
 | Virtual scrolling: `hooks/useVirtualRows` (kicks in from 60 rows) | Everything needs to be seen at once and compared by scrolling, without switching pages | Resource management |
-| Load more (20 at a time) | Records ordered by time, where usually only the recent ones matter | AI API usage details |
+| Load more (20 at a time) | Records ordered by time where almost only the latest few matter | None at the moment (AI API usage details used it until 2026-11; with hundreds of calls over 90 days people page back, so it switched to pagination) |
 
 - A user's own small set of data (their keys, their machines) is simply listed in full, with secondary items (expired) collapsed
-- Pagination bars always use `components/Pagination`, never a hand-written copy in the page; the info text follows "N total · Page x of y"
+- Pagination bars always use `components/Pagination`, never a hand-written copy in the page. Pages pass only "N total" (`info`); the current page is shown by the page numbers, so don't write "Page x of y". The component translates the arrow and page-number labels itself
+- Page numbers always take 7 slots (first and last, plus one on each side of the current page; near either end, five in a row), so the bar doesn't change width when you switch pages. The current page is solid primary with white text; other page numbers have no fill or border and get a light fill on hover
+- "Go to page __" appears only past 7 pages: digits only, jumps on Enter or when the field loses focus, and values out of range snap to the first or last page
+- When the container is narrower than 520px (AI assistant open, phones) the page numbers collapse to "5 / 16" and the go-to field always shows; with a single page only "N total" remains
 
 ### Tabs
 
@@ -617,13 +622,15 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 
 | Purpose | Component | Examples |
 | --- | --- | --- |
-| Page tabs: below the title, switch the page's main content | `Tabs page` | AI API, account settings, resource detail, class page (active), Gateway, course content |
-| Section tabs: switch a block inside a card, a section or a sidebar | `Tabs` | AI usage monitoring details, monitoring alerts / mining, AI Check sidebar |
+| Tabs: switch the whole page or a whole block | `Tabs` | Below the page title: AI API, account settings, resource detail, class page (active), Gateway, course content; inside a card: AI usage monitoring details, monitoring alerts / mining |
+| Tabs in a narrow sidebar (under 240px) | `SegmentedControl compact fullWidth` | Task setup / tutor review in the AI Check sidebar |
 | List filter: narrow the same list (usually with counts) | `SegmentedControl` | Status on the review pages, resource management, class management, environment management, key management, background jobs, user feedback, storage |
-| View option: same data, different presentation | `SegmentedControl quiet` | Time range (AI API usage, AI usage monitoring, resource monitoring), chart metric (AI usage trend, class monitoring, resource monitoring), endpoint kind / code language in the API docs |
+| View option: same data, different presentation | `SegmentedControl` | Time range (AI API usage, AI usage monitoring, resource monitoring), chart metric (AI usage trend, class monitoring, resource monitoring), endpoint kind / code language in the API docs |
 | Form value: pick one value that counts when the form is sent or saved | `SegmentedControl` | Sign-in method, request mode, appearance background, feedback category, question difficulty / type, connection publish method / direction |
 
-When it's unclear whether something is a tab or a filter, look at the screen after switching: the same list getting shorter is a filter (the badge counts add up to "All"); a different block with its own layout and columns is a tab. View options use the `quiet` variant because they often sit next to page tabs or in a chart header, where a solid control would outweigh the tabs and the content; a control that picks *which* thing you are looking at (switching machines in class monitoring) is a primary action and stays solid.
+When it's unclear whether something is a tab or a filter, look at the screen after switching: the same list getting shorter is a filter (the badge counts add up to "All"); a different block with its own layout and columns is a tab.
+
+Each component has a single look: `Tabs` is the icon-square style (no separate section and page variants); `SegmentedControl` is the solid style with only a narrow-container variant (`compact` + `fullWidth`) and the automatic collapse into a dropdown — there is no light variant.
 
 ```jsx
 <Tabs
@@ -637,14 +644,12 @@ When it's unclear whether something is a tab or a filter, look at the screen aft
 />
 ```
 
-- Look: no track; a 2px rounded primary indicator under the selected label (it spans the content only, not the whole row, and grows from the centre), and the label turns dark and goes to weight 600 (each label reserves its bold width up front, so the tabs after it don't shift when the selection changes; badges stay at 500); a light tint on hover. 36px tall so it lines up with buttons, fields and segmented controls; 14px text, one step above the segmented control's 12px, so tabs read as a higher level than filters
-- There are two kinds of tabs, chosen by where they sit; don't mix them:
-  - **Section tabs** (default): tabs inside a card, a section or a sidebar (AI usage monitoring details, monitoring alerts / mining, the AI Check sidebar). The short-indicator look above, deliberately quiet
-  - **Page tabs** (`page`): tabs below the page title that switch the page's main content (AI API, account settings, resource detail, class page, Gateway, course content). Every tab needs an `icon`; the icon sits in a 28px rounded square, the selected square turns solid primary with a white icon, and there is no indicator under the label. 16px text and a 44px row, one step heavier than section tabs, so a filter next to them can't outweigh them. The row is pulled left by one padding so the first square lines up with the page title. Always place them below `PageHeader` (never inside the header's right side), and give the tab row `@include page-tabs-row`, which brings the gap to the content down to 12px (title to tabs keeps the page's 24px), so the tabs sit with the content they control
+- Look: every tab needs an `icon`; the icon sits in a 28px rounded square, and the selected square turns solid primary with a white icon while the label turns dark and goes to weight 600 (each label reserves its bold width up front, so the tabs after it don't shift; badges stay at 500). No indicator under the label; a light tint on hover. 16px text and a 44px row, so a filter next to the tabs can't outweigh them. The row is pulled left by one padding so the first square lines up with the container's left edge (the page title, a card's content)
+- Below a page title, always place the tabs below `PageHeader` (never inside the header's right side), and give the tab row `@include page-tabs-row`, which brings the gap to the content down to 12px (title to tabs keeps the page's 24px), so the tabs sit with the content they control
+- A sidebar under 240px is too narrow for tabs; use `SegmentedControl compact fullWidth` there (AI Check sidebar)
 - `badge` is a count (0 is shown, `null` / `undefined` is not); on the selected tab it switches to a primary tint with primary text. Pass "—" when loading failed
-- Scrolls horizontally on its own when it doesn't fit (scrollbar hidden), so pages don't wrap it in `overflow-x`. `compact` (8px side padding) is for containers under 240px; `fullWidth` stretches and splits evenly; `page` is covered under page tabs above. A page's `className` is for layout only (`align-self` and the like) — don't override `.tab`
+- When it doesn't fit (narrow screens): the tabs that fit stay in the row, always with their labels, and the rest go into a "More ▾" button at the end that opens the shared `ListboxPopover` (a smaller icon square, the name and the badge). The selected tab is always in the row; picking a hidden one from "More" moves it into the last slot. As the container widens the tabs come back one by one, and "More" disappears once everything fits; only when not even one tab plus "More" fits does the row scroll horizontally (scrollbar hidden). Don't fall back to icons only (they can't be guessed). Pages don't wrap it in `overflow-x`; a tab inside "More" isn't on screen, and neither are guide anchors on it. A page's `className` is for layout only (`align-self` and the like) — don't override `.tab`
 - Accessibility: `role="tablist"` / `"tab"` with `aria-selected`; only the selected tab is in the Tab order, and the arrow keys (wrapping), Home and End move and switch straight away. Put guide anchors such as `data-guide-tab` in `buttonProps`, and find the current tab with `[aria-selected="true"]`
-- Inside a header bar that has its own bottom border (AI Check sidebar), let the tabs `align-self: stretch` to the bar's height so the indicator sits right on the border
 - A toolbar (filters + search) can sit to the right of the tabs: tabs on the left, toolbar on the right, and the toolbar wraps to the next line when there isn't room (AI usage monitoring details)
 
 ### List toolbar and batch actions (DataToolbar)

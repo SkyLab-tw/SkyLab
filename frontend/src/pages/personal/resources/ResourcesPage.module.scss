@@ -73,13 +73,34 @@
   table-layout: fixed;
 }
 
-/* 窄版收起的欄改畫在名稱欄、狀態欄裡的小字行 */
+/* 窄版收起的欄改畫在名稱欄、狀態欄裡的小字行。
+   跟名稱欄逐行對齊：行距同名稱欄的 2px、每行固定 19.2px（12px × 1.6）。
+   IP 的等寬字跟中文字型上下比例不同，照原本行高會把這一行撐到 21px；
+   行高縮成 1 讓它待在行框裡，仍然跟左邊的字同一條基線（改頂端對齊會讓 IP 比左邊高 2px） */
 .foldedLine {
-  margin-top: 4px;
+  margin-top: 2px;
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: $font-size-12;
   text-overflow: ellipsis;
+
+  .mono {
+    line-height: 1;
+  }
+}
+
+/* 狀態欄收進小字行（窄版收起 IP／到期日）時，名稱欄跟狀態欄逐行對齊：
+   兩格改頂端對齊（各自置中的話，名稱說明換行或多一行就會錯開），名稱第一行撐到跟狀態徽章同高
+   （12px × 1.6＋上下 4px 內距＝27.2px），之後兩邊都是 2px 行距＋19.2px 小字行，第二、三行也在同一條線上 */
+.table tr:has(> td > .foldedLine) {
+  > td:has(> .nameCell),
+  > td:has(> .foldedLine) {
+    vertical-align: top;
+  }
+
+  .nameCell :is(strong, .nameLink) {
+    line-height: 27.2px;
+  }
 }
 
 .foldedLabel {

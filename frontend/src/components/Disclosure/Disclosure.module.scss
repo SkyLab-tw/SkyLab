@@ -67,9 +67,11 @@
 }
 
 /* inline：只有「文字＋箭頭」、沒有框；字級跟著外框（頁面用 className 設），平常淡色、滑過或展開變主色。
-   內容緊接在收合列下面，間距由內容自己決定 */
-.inline > .summary {
+   內容緊接在收合列下面，間距由內容自己決定。
+   DisclosureToggle（展開的內容不接在下面、例如併進上方表格）的按鈕同一套樣子，共用這個 mixin */
+@mixin inline-row {
   display: inline-flex;
+  align-items: center;
   gap: 2px;
   width: fit-content;
   min-height: 0;
@@ -78,24 +80,48 @@
   border-radius: 4px;
   color: var(--color-text-muted);
   background: transparent;
-  font-size: inherit;
+  font: inherit;
+  font-weight: $font-weight-500;
+  cursor: pointer;
+  transition: color $transition-base;
 
   &:hover {
     color: var(--color-primary);
     background: transparent;
   }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary-on-surface);
+    outline-offset: 2px;
+  }
+
+  > .label {
+    flex: 0 1 auto;
+  }
+
+  > .chevron {
+    color: inherit;
+  }
 }
 
-.inline > .summary > .label {
-  flex: 0 1 auto;
-}
-
-.inline > .summary > .chevron {
-  color: inherit;
+.inline > .summary {
+  @include inline-row;
 }
 
 .inline[open] > .summary {
   color: var(--color-primary);
+}
+
+.toggle {
+  @include inline-row;
+
+  &[aria-expanded="true"] {
+    color: var(--color-primary);
+
+    > .chevron {
+      transform: rotate(180deg);
+    }
+  }
 }
 
 .inline > .body {
@@ -104,6 +130,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .summary,
+  .toggle,
   .chevron {
     transition: none;
   }
