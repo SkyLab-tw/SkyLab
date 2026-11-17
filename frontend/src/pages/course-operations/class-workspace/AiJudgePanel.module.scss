@@ -2035,9 +2035,14 @@ strong.reviewStatValue { font-size: $font-size-14; }
     padding: $spacing-8 12px;
   }
 
-  // 分頁撐滿側邊欄、內距收小都走 SegmentedControl 的 fullWidth／compact prop，這裡只管它在標頭列不被壓縮
+  // 分頁撐滿側邊欄、內距收小都走 Tabs 的 fullWidth／compact prop，這裡只管它在標頭列不被壓縮
   .sidebarTabs {
     flex: 0 0 auto;
+  }
+
+  // 標頭列只有分頁時（寬版）拉滿列高：選中的指示條剛好壓在標頭底線上；窄版跟換週同一列，維持 36px
+  .sidebarHead:not(.sidebarHeadCompact) .sidebarTabs {
+    align-self: stretch;
   }
 
   .sessionList {

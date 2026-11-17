@@ -5,6 +5,8 @@ import styles from "./AiApiReviewPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import DataTable from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import Modal from "../../../components/Modal/Modal";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
@@ -22,7 +24,7 @@ import SelectCheckbox from "../../../components/DataToolbar/SelectCheckbox";
 import BatchReviewDialog from "../../../components/BatchReviewDialog/BatchReviewDialog";
 import useRowSelection from "../../../hooks/useRowSelection";
 import { runBatch } from "../../../utils/runBatch";
-import { formatDateTime } from "../../../utils/formatDate";
+import { formatDate, formatDateTime } from "../../../utils/formatDate";
 
 function EmptyState() {
   const { t } = useTranslation("ai");
@@ -112,7 +114,7 @@ function ReviewActions({ item, onDone }) {
 
   if (item.status !== "pending") {
     return (
-      <span className={styles.reviewComment}>
+      <span className={styles.reviewComment} title={item.review_comment || undefined}>
         {item.review_comment || "—"}
       </span>
     );
@@ -176,11 +178,48 @@ function HeaderLabel({ column }) {
   return t(column.columnDef.meta.headerKey);
 }
 
+/* ── 窄版收欄（useTableFit，樣式規範「表格」規則四） ──
+   表格區不夠寬時依序收起審核時間、申請時間、申請者、用途；勾選、金鑰名稱、狀態、操作永遠在。
+   兩個時間一律排在一起：只收審核時間時接在申請時間底下；兩個都收時依先後排在狀態徽章底下
+   （只寫日期，完整時間在 title；還沒審核的不寫審核時間，狀態徽章已經是「待審核」）。
+   申請者、用途是「誰、為什麼要這把金鑰」，收進金鑰名稱底下（金鑰名稱是這一列的名字：勾選框、批量對話框都用它）。
+   欄寬只寫在這裡：完整日期時間（2026/09/10 14:30:15）要 170px；英文的 Pending Review 徽章要 160px；
+   英文的 Approve／Reject 兩顆鈕並排要 200px；勾選框 16px 加左右內距是 48px。
+   有勾選欄時全部 1258px：1440（表格區約 1003px）、1366 筆電（約 929～944px）收掉兩個時間剩 918px；
+   1100 寬視窗（約 678px）再收申請者、用途剩 558px，1440 開著 AI 助手（約 567px）也放得下。
+   手機（約 448px）收到底仍放不下，橫捲並固定第一欄（勾選欄）與操作欄，金鑰名稱會跟著捲。
+   沒有待審的分頁不畫勾選欄，少 48px（收到底 510px）；手機上固定的第一欄就是金鑰名稱 */
+const REQUEST_FIT_COLUMNS = Object.freeze([
+  { id: "applicant", width: 180, fold: 3 },
+  { id: "api_key_name", width: 150 },
+  { id: "purpose", width: 180, fold: 4 },
+  { id: "status", width: 160 },
+  { id: "created_at", width: 170, fold: 2 },
+  { id: "reviewed_at", width: 170, fold: 1 },
+  { id: "actions", width: 200 },
+]);
+
+const SELECTABLE_FIT_COLUMNS = Object.freeze([{ id: "select", width: 48, pinNext: true }, ...REQUEST_FIT_COLUMNS]);
+
+function applicantName(r) {
+  return r.user_full_name || r.user_email;
+}
+
+/* 收進金鑰名稱底下的申請者一行：「姓名 · Email」（沒有姓名就只有 Email） */
+function applicantLine(r) {
+  return [applicantName(r), r.user_full_name && r.user_email].filter(Boolean).join(" · ");
+}
+
+/* 用途：表格裡只放前 60 字（單行截斷），完整內容在 title 與審核對話框 */
+function purposePreview(purpose) {
+  return (purpose ?? "").length > 60 ? `${purpose.slice(0, 60)}…` : purpose;
+}
+
 function ApplicantCell({ row }) {
   const r = row.original;
   return (
     <div className={styles.userCell}>
-      <span className={styles.userName}>{r.user_full_name || r.user_email}</span>
+      <span className={styles.userName}>{applicantName(r)}</span>
       {r.user_full_name && r.user_email && (
         <span className={styles.userEmail}>{r.user_email}</span>
       )}
@@ -188,20 +227,55 @@ function ApplicantCell({ row }) {
   );
 }
 
+/* 窄版收欄時金鑰名稱底下多畫：申請者（姓名 · Email）一行、用途一行（單行截斷）；
+   用途的導覽錨點跟著搬過來，收欄後導覽照樣指得到 */
+function KeyNameCell({ row }) {
+  const fit = useTableFitContext();
+  const r = row.original;
+  return (
+    <>
+      <div className={styles.keyName}>{r.api_key_name}</div>
+      {fit.isFolded("applicant") && (
+        <div className={`${styles.foldedLine} ${styles.foldedTruncate}`} title={applicantLine(r)}>
+          {applicantLine(r)}
+        </div>
+      )}
+      {fit.isFolded("purpose") && r.purpose && (
+        <div className={`${styles.foldedLine} ${styles.foldedTruncate}`} title={r.purpose} data-guide="ai-review-purpose">
+          {purposePreview(r.purpose)}
+        </div>
+      )}
+    </>
+  );
+}
+
 function PurposeCell({ row }) {
   const r = row.original;
   return (
     <span className={styles.purposeCell} title={r.purpose}>
-      {(r.purpose ?? "").length > 60 ? `${r.purpose.slice(0, 60)}…` : r.purpose}
+      {purposePreview(r.purpose)}
     </span>
   );
 }
 
-/* error：上一次批量沒成功的那筆（{ action, reason }），原因標在狀態底下 */
+/* 收進其他欄的時間：欄名＋日期，完整時間在 title（同 AI API 頁金鑰表收起的建立時間） */
+function FoldedTimeLine({ labelKey, value }) {
+  const { t } = useTranslation("ai");
+  return (
+    <div className={styles.foldedLine} title={formatDateTime(value)}>
+      {t(labelKey)} {formatDate(value)}
+    </div>
+  );
+}
+
+/* error：上一次批量沒成功的那筆（{ action, reason }），原因標在狀態底下。
+   窄版兩個時間都收起時，依先後接在後面 */
 function StatusCell({ item, error }) {
   const { t } = useTranslation("ai");
+  const fit = useTableFitContext();
   const status = item.status;
   const labelKey = STATUS_LABEL_KEYS[status];
+  const timesFolded = fit.isFolded("created_at");
   return (
     <>
       <span className={`${styles.badge} ${styles[`badge_${status}`]}`}>
@@ -216,6 +290,10 @@ function StatusCell({ item, error }) {
           })}
         </div>
       )}
+      {timesFolded && <FoldedTimeLine labelKey="AiApiReviewPage.colAppliedAt" value={item.created_at} />}
+      {timesFolded && fit.isFolded("reviewed_at") && item.reviewed_at && (
+        <FoldedTimeLine labelKey="AiApiReviewPage.colReviewedAt" value={item.reviewed_at} />
+      )}
     </>
   );
 }
@@ -223,6 +301,20 @@ function StatusCell({ item, error }) {
 function DateTimeCell({ getValue }) {
   const { t } = useTranslation("ai");
   return formatDateTime(getValue(), t("AiApiReviewPage.notReviewed"));
+}
+
+/* 申請時間；窄版只收起審核時間時，審核時間接在底下（兩個時間排在一起） */
+function CreatedAtCell({ row, getValue }) {
+  const fit = useTableFitContext();
+  const reviewedAt = row.original.reviewed_at;
+  return (
+    <>
+      <DateTimeCell getValue={getValue} />
+      {fit.isFolded("reviewed_at") && reviewedAt && (
+        <FoldedTimeLine labelKey="AiApiReviewPage.colReviewedAt" value={reviewedAt} />
+      )}
+    </>
+  );
 }
 
 function ActionsCell({ row, table }) {
@@ -272,15 +364,16 @@ const selectColumn = columnHelper.display({
     />
   ),
   meta: {
-    thClassName: `${styles.th} ${styles.checkCell}`,
-    tdClassName: `${styles.td} ${styles.checkCell}`,
+    thClassName: styles.th,
+    tdClassName: styles.td,
     tdProps: { "data-guide": "ai-review-row-select" },
   },
 });
 
+/* 欄寬與收合順序在 REQUEST_FIT_COLUMNS（id 要對得上） */
 const dataColumns = [
   columnHelper.display({ id: "applicant", header: HeaderLabel, cell: ApplicantCell, meta: columnMeta("AiApiReviewPage.colApplicant") }),
-  columnHelper.accessor("api_key_name", { header: HeaderLabel, cell: ({ getValue }) => getValue(), meta: columnMeta("AiApiReviewPage.colKeyName") }),
+  columnHelper.accessor("api_key_name", { header: HeaderLabel, cell: KeyNameCell, meta: columnMeta("AiApiReviewPage.colKeyName") }),
   columnHelper.display({
     id: "purpose",
     header: HeaderLabel,
@@ -293,7 +386,7 @@ const dataColumns = [
     cell: ({ row, table }) => <StatusCell item={row.original} error={table.options.meta.batchErrors[row.original.id]} />,
     meta: columnMeta("AiApiReviewPage.colStatus"),
   }),
-  columnHelper.accessor("created_at", { header: HeaderLabel, cell: DateTimeCell, meta: columnMeta("AiApiReviewPage.colAppliedAt") }),
+  columnHelper.accessor("created_at", { header: HeaderLabel, cell: CreatedAtCell, meta: columnMeta("AiApiReviewPage.colAppliedAt") }),
   columnHelper.accessor("reviewed_at", { header: HeaderLabel, cell: DateTimeCell, meta: columnMeta("AiApiReviewPage.colReviewedAt") }),
   columnHelper.display({ id: "actions", header: HeaderLabel, cell: ActionsCell, meta: columnMeta("AiApiReviewPage.colActions") }),
 ];
@@ -441,9 +534,10 @@ export default function AiApiReviewPage() {
     refreshAfterReview();
   }
 
+  const selectable = selectableIds.length > 0;
   const table = useTable({
     features: baseFeatures,
-    columns: selectableIds.length > 0 ? selectableColumns : requestColumns,
+    columns: selectable ? selectableColumns : requestColumns,
     data: filtered,
     getRowId: (r) => String(r.id),
     meta: {
@@ -458,6 +552,8 @@ export default function AiApiReviewPage() {
       batchErrors,
     },
   });
+  /* 欄位表跟著有沒有勾選欄換（兩組都是模組層級常數，換分頁才會重新量） */
+  const fit = useTableFit(selectable ? SELECTABLE_FIT_COLUMNS : REQUEST_FIT_COLUMNS);
 
   /* 勾選狀態下（已勾了至少一筆）點待審的整列也是勾選；列內的通過／拒絕鈕照舊 */
   const requestRowClassName = (row) => {
@@ -513,10 +609,11 @@ export default function AiApiReviewPage() {
         ) : filtered.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className={styles.tableWrap} data-guide="ai-review-table">
+          <div ref={fit.ref} className={styles.tableWrap} data-guide="ai-review-table">
             <DataTable
               table={table}
-              className={`${styles.table}${selectableIds.length > 0 ? ` ${styles.tableSelectable}` : ""}`}
+              fit={fit}
+              className={styles.table}
               rowClassName={requestRowClassName}
               rowProps={requestRowProps}
             />

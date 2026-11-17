@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createColumnHelper, FlexRender, useTable } from "@tanstack/react-table";
+import { createColumnHelper, useTable } from "@tanstack/react-table";
 import styles from "./IpManagementPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import DataTable from "../../../components/DataTable/DataTable";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
 import { baseFeatures } from "../../../components/DataTable/features";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import SubnetConfigForm from "./SubnetConfigForm";
@@ -21,9 +22,10 @@ import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useToast } from "../../../hooks/useToast";
 import { useQueryView } from "../../../hooks/useQueryLoadState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import useTableFit from "../../../hooks/useTableFit";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import Pagination from "../../../components/Pagination/Pagination";
-import { formatDateTime } from "../../../utils/formatDate";
+import { formatDate, formatDateTime } from "../../../utils/formatDate";
 import { isAdminUser } from "../../../utils/roles";
 
 function EmptyState({ variant, canConfigure, onConfigure, onClearFilter }) {
@@ -81,27 +83,73 @@ function ColTitle({ name }) {
   return t(`IpManagementPage.${name}`);
 }
 
+/* ── 窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起備註、分配時間、VMID；IP 位址與用途永遠在（這張表沒有狀態與操作欄，用途徽章就是這一列的分類）。
+   VMID、備註是這個 IP 給誰用，收進 IP 位址底下；分配時間收到用途徽章底下（只寫日期，完整時間在 title）。
+   備註多半是系統寫的「VMID 101」「班級預留 …」，跟 VMID、用途重複，所以最先收。
+   欄寬只寫在這裡：IP 欄放得下圖示＋「192.168.100.254」（Mac 的等寬字較寬，約 200px）；
+   用途欄放得下英文最長的「Quick practice reserved」徽章（約 195px）；分配時間（英文 11/17/2026, 14:30:15）不換行要 180px。
+   全部欄 860px：1366、1440 筆電（約 929～1018px）不用收；1100 寬視窗（約 678px）收掉備註剩 660px；
+   1440 開著 AI 助手（約 567px）再收分配時間剩 480px；手機（約 448px）連 VMID 也收，只剩 IP、用途 400px */
+const ALLOCATION_FIT_COLUMNS = Object.freeze([
+  { id: "ip_address", width: 200 },
+  { id: "purpose", width: 200 },
+  { id: "vmid", width: 80, fold: 3 },
+  { id: "allocated_at", width: 180, fold: 2 },
+  { id: "description", width: 200, fold: 1 },
+]);
+
+/* IP 欄：IP 單行（不從中間折開，title 看全文），收起的 VMID、備註依序接在底下，都是單行截斷。
+   兩欄都收起時，備註已經寫了「VMID 101」（系統配發的備註就是這樣寫）就不再另起一行重複 */
+function AddressCell({ allocation }) {
+  const fit = useTableFitContext();
+  const { ip_address: ip, vmid, description } = allocation;
+  const foldedDescription = fit.isFolded("description") ? description : null;
+  const foldedVmid = fit.isFolded("vmid") && vmid != null && !foldedDescription?.includes(`VMID ${vmid}`);
+  return (
+    <div className={styles.nameCell}>
+      <div className={styles.nameIcon}>
+        <MIcon name="device_hub" size={18} />
+      </div>
+      <div className={styles.nameText}>
+        <div className={styles.namePrimary} title={ip}>{ip}</div>
+        {foldedVmid && <div className={styles.nameSub}>VMID {vmid}</div>}
+        {foldedDescription && <div className={styles.nameSub} title={foldedDescription}>{foldedDescription}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* 用途欄：收起的分配時間接在徽章底下，只寫日期（光看日期看不出是什麼，加欄名），完整時間在 title */
+function PurposeCell({ allocation }) {
+  const { t } = useTranslation("system");
+  const fit = useTableFitContext();
+  const allocatedAt = allocation.allocated_at;
+  return (
+    <>
+      <PurposeBadge purpose={allocation.purpose} />
+      {fit.isFolded("allocated_at") && allocatedAt && (
+        <div className={styles.foldedLine} title={formatDateTime(allocatedAt)}>
+          {t("IpManagementPage.colAllocatedAt")} {formatDate(allocatedAt)}
+        </div>
+      )}
+    </>
+  );
+}
+
 const columnHelper = createColumnHelper();
 
-/* 欄位定義放模組層級：FlexRender 把函式型的 header／cell 當元件掛載，render 裡新建會整格重新掛載 */
+/* 欄位定義放模組層級：FlexRender 把函式型的 header／cell 當元件掛載，render 裡新建會整格重新掛載。
+   欄寬與收合順序在 ALLOCATION_FIT_COLUMNS（id 要對得上） */
 const allocationColumns = columnHelper.columns([
   columnHelper.accessor("ip_address", {
     header: () => <ColTitle name="colIpAddress" />,
-    cell: ({ row }) => (
-      <div className={styles.nameCell}>
-        <div className={styles.nameIcon}>
-          <MIcon name="device_hub" size={18} />
-        </div>
-        <div>
-          <div className={styles.namePrimary}>{row.original.ip_address}</div>
-        </div>
-      </div>
-    ),
+    cell: ({ row }) => <AddressCell allocation={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.accessor("purpose", {
     header: () => <ColTitle name="colPurpose" />,
-    cell: ({ row }) => <PurposeBadge purpose={row.original.purpose} />,
+    cell: ({ row }) => <PurposeCell allocation={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.accessor("vmid", {
@@ -117,29 +165,16 @@ const allocationColumns = columnHelper.columns([
   columnHelper.accessor("description", {
     header: () => <ColTitle name="colDescription" />,
     cell: ({ row }) => row.original.description ?? "—",
-    /* 全文放在 td 的 title，滑過可看被截斷的備註 */
-    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.tdTruncate}`, tdTitle: (a) => a.description ?? undefined },
+    /* 單行截斷，全文放在 td 的 title，滑過可看被截斷的備註 */
+    meta: {
+      thClassName: styles.th,
+      tdClassName: `${styles.td} ${styles.tdTruncate}`,
+      tdProps: (row) => ({ title: row.original.description ?? undefined }),
+    },
   }),
 ]);
 
-/**
- * 備註欄的 td 要帶逐列不同的 title，共用的 DataTableCells 只吃固定的 tdProps，
- * 所以這裡自己畫儲存格（DOM 與 DataTableCells 相同，只多了 title）。
- */
-function renderAllocationRow(row) {
-  return (
-    <tr key={row.id} className={styles.tr}>
-      {row.getAllCells().map((cell) => {
-        const meta = cell.column.columnDef.meta;
-        return (
-          <td key={cell.id} className={meta.tdClassName} title={meta.tdTitle?.(row.original)}>
-            <FlexRender cell={cell} />
-          </td>
-        );
-      })}
-    </tr>
-  );
-}
+const allocationRowClassName = () => styles.tr;
 
 const PAGE_SIZE = 50;
 
@@ -234,6 +269,7 @@ export default function IpManagementPage() {
     data: pagedAllocations,
     getRowId: (a) => a.ip_address,
   });
+  const fit = useTableFit(ALLOCATION_FIT_COLUMNS);
 
   const emptyVariant = !configured
     ? "unconfigured"
@@ -389,21 +425,13 @@ export default function IpManagementPage() {
             onClearFilter={() => setFilter("")}
           />
         ) : (
-          <div className={styles.tableWrap} data-guide="ip-table">
+          <div ref={fit.ref} className={styles.tableWrap} data-guide="ip-table">
+            {/* 分頁與搜尋都會換掉整頁的列，欄寬由 fit 固定（colgroup）才不會每翻一頁就跳動（樣式規範表格規則二、四） */}
             <DataTable
               table={table}
+              fit={fit}
               className={styles.table}
-              /* 分頁與搜尋都會換掉整頁的列，欄寬固定才不會每翻一頁就跳動（樣式規範表格規則二） */
-              colgroup={(
-                <colgroup>
-                  <col className={styles.colIp} />
-                  <col className={styles.colPurpose} />
-                  <col className={styles.colVmid} />
-                  <col className={styles.colAllocatedAt} />
-                  <col />
-                </colgroup>
-              )}
-              renderRow={renderAllocationRow}
+              rowClassName={allocationRowClassName}
             />
           </div>
         )}

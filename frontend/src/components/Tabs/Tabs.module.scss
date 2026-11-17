@@ -1,0 +1,121 @@
+@use "../../assets/styles/variables" as *;
+
+/* 分頁：沒有外框軌道，選中的分頁字下有一條 2px 圓角主色短指示條（只跨文字＋圖示＋徽章，不拉滿整列）。
+   高度 36px，跟按鈕、輸入框、分段切換同一列對得齊；放不下時自己橫向捲動（不顯示捲軸） */
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  /* 下方多 2px 給指示條，文字在指示條上面垂直置中 */
+  padding: 0 12px 2px;
+  border: 0;
+  border-radius: $radius-8;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color $transition-base, background $transition-base;
+
+  /* 指示條：選中時從中間展開；左右內縮跟內距一樣，剛好對齊內容 */
+  &::after {
+    content: "";
+    position: absolute;
+    right: 12px;
+    bottom: 0;
+    left: 12px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--color-primary);
+    opacity: 0;
+    transform: scaleX(0.4);
+    transition: opacity $transition-base, transform $transition-base;
+  }
+
+  &:hover {
+    color: var(--color-text-primary);
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+}
+
+.tabActive {
+  color: var(--color-text-primary);
+
+  &::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 數量徽章：中性淡底；選中的分頁換主色淡底主色字（徽章不加外框） */
+.badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: $radius-pill;
+  line-height: 18px;
+  background: var(--color-hover);
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.tabActive .badge {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+/* compact：窄容器（側邊欄）左右內距收成 8px；fullWidth：撐滿容器、各分頁平分。
+   兩者都是元件自己的變體，頁面不要覆寫 .tab 的內距或 flex */
+.tabsCompact .tab {
+  padding: 0 $spacing-8 2px;
+
+  &::after {
+    right: $spacing-8;
+    left: $spacing-8;
+  }
+}
+
+.tabsFullWidth {
+  width: 100%;
+
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .tab::after {
+    transition: none;
+  }
+}

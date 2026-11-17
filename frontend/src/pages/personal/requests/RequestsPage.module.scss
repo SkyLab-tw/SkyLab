@@ -35,12 +35,47 @@
   @include table-wrap;
 }
 
+/* 申請表、規格調整表共用：欄寬、min-width 與窄版收欄由 RequestsPage.jsx 的
+   REQUEST_FIT_COLUMNS／SPEC_FIT_COLUMNS（useTableFit）決定，fixed layout 才會照欄寬排 */
 .table {
   @include table-base;
-  min-width: 960px;
+  table-layout: fixed;
 }
 
-/* 8 欄較擠，水平 padding 收窄一點（預設 16px）。 */
+/* 窄版收起的欄改畫在資源（機器）欄、狀態欄裡的小字行；資源欄裡行距由 .nameMeta 的 gap 給 */
+.foldedLine {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  overflow-wrap: anywhere;
+
+  .nameMeta > & {
+    margin-top: 0;
+  }
+
+  /* 收進狀態欄的預約期間跟其他小字行同色 */
+  .periodCell {
+    color: inherit;
+  }
+}
+
+/* 申請原因這類自由文字只留一行，全文在 title */
+.foldedLineTruncate {
+  @include text-truncate;
+}
+
+.foldedLabel {
+  margin-right: 4px;
+}
+
+/* 收到最窄（申請表收到規格、規格調整表收到變更內容）時資源欄很擠：拿掉類型圖示，
+   名稱與小字行才不會每行都折兩行（類型已經寫在第二行）。兩張表收起的欄 id 不重複，各自只會中一條 */
+.table[data-folded~="spec"] .nameIcon,
+.table[data-folded~="change"] .nameIcon {
+  display: none;
+}
+
+/* 10 欄較擠，水平 padding 收窄一點（預設 16px）。 */
 .th {
   @include table-th;
   padding-inline: 12px;
@@ -66,7 +101,7 @@
   display: flex;
   align-items: center;
   gap: $spacing-8;
-  min-width: 160px;
+  min-width: 0;
 }
 
 .nameIcon {
@@ -81,43 +116,49 @@
 
 .nameMeta {
   @include flex-column;
+  flex: 1;
   gap: 2px;
   min-width: 0;
 }
 
+/* 名稱放不下欄寬就截斷，全文在 title */
 .namePrimary {
-  max-width: 150px;
   font-size: $font-size-14;
   font-weight: $font-weight-500;
   color: var(--color-text-primary);
   @include text-truncate;
 }
 
+/* 類型＋編號：英文的 Virtual Machine (VM) · ID 123 比欄寬長，換行而不是截掉編號 */
 .nameSub {
   font-size: $font-size-12;
   color: var(--color-text-muted);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .osCell,
 .specCell {
   font-size: $font-size-12;
   color: var(--color-text);
-  white-space: nowrap;
 }
 
-/* 原始 template 名可能很長（ubuntu-22.04-standard_…），截斷保寬度。 */
+/* 規格、變更內容放不下欄寬就換行（變更內容可能有 CPU／記憶體／磁碟／到期日四段） */
+.specCell {
+  overflow-wrap: anywhere;
+}
+
+/* 原始 template 名可能很長（ubuntu-22.04-standard_…），截斷在欄寬內，全文靠 title。 */
 .osCell {
   display: inline-block;
-  max-width: 150px;
+  max-width: 100%;
   vertical-align: middle;
   @include text-truncate;
 }
 
-/* 原因是自由文字，設上限寬截斷，全文靠 title 提示。 */
+/* 原因是自由文字，截斷在欄寬內，全文靠 title 提示。 */
 .reasonCell {
   display: inline-block;
-  max-width: 160px;
+  max-width: 100%;
   font-size: $font-size-12;
   color: var(--color-text);
   vertical-align: middle;
@@ -147,21 +188,23 @@
   color: var(--color-text-muted);
 }
 
-/* 內容靠左對齊「操作」表頭；靠右會在表頭與按鈕之間留下一大片空白。 */
+/* 內容靠左對齊「操作」表頭；靠右會在表頭與按鈕之間留下一大片空白。
+   欄寬固定，英文／日文兩顆按鈕放不下同一行時換到下一行，不撐出欄外 */
 .rowActions {
   display: flex;
   align-items: center;
   gap: $spacing-8;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 
   > * { flex-shrink: 0; }
 }
 
 /* ── Status badge ── */
-/* 狀態徽章與錯誤記錄按鈕同列。 */
+/* 狀態徽章與錯誤記錄按鈕同列；英文長徽章放不下時小圖示換到下一行。 */
 .statusCell {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

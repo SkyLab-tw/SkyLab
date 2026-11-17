@@ -354,9 +354,10 @@ The standard form:
 
 - A clickable card's hover only gets a light tint (`background: var(--color-hover)`) or a shadow / lift, with a `transition` for fade-in and fade-out; **do not change the border colour** — a blue border is reserved for the "selected / current" state (such as an active tab or the current step of a flow)
 - "Selected / current" comes in two tiers; do not mix them:
-  - **Navigation** (sidebar, class tabs, `SegmentedControl`): solid primary with white text. One per level, short labels
+  - **Navigation** (sidebar, the selected segment of a `SegmentedControl`): solid primary with white text. One per level, short labels
+  - **Tabs** (`Tabs`): a 2px primary indicator under the selected label, no fill and no border. Deliberately unlike the solid segmented control, so "switch content" and "filter" can sit on the same row and still be told apart
   - **Current item of a content list** (the row in a master–detail list whose details are shown on the right, such as the week list in AI Check): `@include item-current;` — an 8% primary tint plus a 3px primary bar on the left, **no border**. The tint alone is indistinguishable from the hover tint, so the bar is the marker; it is deliberately one step lighter than navigation so it does not compete with the page's primary button. Covers the AI Check week list, the request review list and the environment picked when setting up a class; when the row itself is a white card pass `item-current(var(--color-surface))`
-- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons
+- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons. Tabs that switch a whole block of content use `Tabs` instead (see "Tabs")
 - Option buttons that carry a swatch, a description or their own border (appearance settings, template visibility): the selected one uses `@include option-selected;` — primary border, 8% tint, primary text. These are options, not the current item of a list, so a border is fine
 - Expanded is not selected: an expanded card only gets a deeper shadow (`var(--shadow-md)`) and keeps its border colour; an info row that is the only item and cannot be chosen gets no selected style
 - Do not build the tint with a `linear-gradient` layer: gradients cannot transition, so the hover colour would jump instantly
@@ -592,7 +593,8 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 - Put folded content in the main column closest in meaning: identity (node, environment, source, VMID) goes into the name column, state (IP, expiry, visibility) goes under the status; add the column name when the value alone is unclear ("Expiry 2026/12/31")
 - Check at least two widths: a 1366 laptop (944px) does not scroll; 1440 with the AI assistant open (567px) fits once folded down to the main columns
 - Pinning is built into `table-base` (it only applies with `data-overflow="start|both"`). Rows with their own background (group rows, hover) set it with `@include table-row-bg(colour)` so the pinned cells match the rest of the row
-- Currently used on: My resources, Machine templates
+- When the first column is a checkbox, set `pinNext: true` on it: when scrolling, the checkbox and the name column after it stay pinned together. Pages that build their own body (for example one tbody for group rows and one for virtualized rows) use `DataTableShell`, which handles the fold colgroup, min-width and context
+- Currently used on: My resources, Resource management, Machine templates, GPU management, My requests, AI API keys and request history, AI key request review, AI key management, AI monitoring, Course environment templates, IP management, Background jobs, Audit logs, System monitoring
 
 #### Rule 5: with lots of rows, choose pagination, virtual scrolling or load more by the kind of data
 
@@ -604,6 +606,35 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 
 - A user's own small set of data (their keys, their machines) is simply listed in full, with secondary items (expired) collapsed
 - Pagination bars always use `components/Pagination`, never a hand-written copy in the page; the info text follows "N total · Page x of y"
+
+### Tabs
+
+**Switching a whole block of content always uses `components/Tabs`; filters and options use `SegmentedControl`.** Do not swap them:
+
+| Purpose | Component | Examples |
+| --- | --- | --- |
+| Tabs: switch a whole block of content (page tabs, tabs inside a card) | `Tabs` | Resource detail, AI API, Gateway, account settings, course content, class page (active), AI Check sidebar, AI usage monitoring details, monitoring alerts / mining |
+| Filter: narrow the same list | `SegmentedControl` | Status on the review pages, resource management, class management, background jobs, user feedback, storage |
+| Option: change how the same content is shown, or a mode in a form | `SegmentedControl` | Time range, chart metric, sign-in method, request mode, switching machines in class monitoring |
+
+```jsx
+<Tabs
+  ariaLabel={t("…tabsAriaLabel")}
+  value={tab}
+  onChange={setTab}
+  options={[
+    { value: "models", label: t("…tabModels"), icon: "model_training", badge: count, buttonProps: { "data-guide-tab": "…" } },
+    …
+  ]}
+/>
+```
+
+- Look: no track; a 2px rounded primary indicator under the selected label (it spans the content only, not the whole row, and grows from the centre), and the label turns dark; a light tint on hover. 36px tall so it lines up with buttons, fields and segmented controls; 14px text, one step above the segmented control's 12px, so tabs read as a higher level than filters
+- `badge` is a count (0 is shown, `null` / `undefined` is not); on the selected tab it switches to a primary tint with primary text. Pass "—" when loading failed
+- Scrolls horizontally on its own when it doesn't fit (scrollbar hidden), so pages don't wrap it in `overflow-x`. `compact` (8px side padding) is for containers under 240px; `fullWidth` stretches and splits evenly. A page's `className` is for layout only (`align-self` and the like) — don't override `.tab`
+- Accessibility: `role="tablist"` / `"tab"` with `aria-selected`; only the selected tab is in the Tab order, and the arrow keys (wrapping), Home and End move and switch straight away. Put guide anchors such as `data-guide-tab` in `buttonProps`, and find the current tab with `[aria-selected="true"]`
+- Inside a header bar that has its own bottom border (AI Check sidebar), let the tabs `align-self: stretch` to the bar's height so the indicator sits right on the border
+- A toolbar (filters + search) can sit to the right of the tabs: tabs on the left, toolbar on the right, and the toolbar wraps to the next line when there isn't room (AI usage monitoring details)
 
 ### List toolbar and batch actions (DataToolbar)
 
@@ -640,7 +671,8 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 - **Batch review (approve / reject)** uses the shared `components/BatchReviewDialog`: it lists the items about to be processed (up to 5) plus one shared review note (optional, saved on every item). `tone="reject"` shows the red warning icon and a danger button; `tone="approve"` shows the primary-colour icon and a primary button. Approve sits with the normal actions, reject goes after a `BatchDivider`. When approving takes up resources (request review: the backend picks a node and reserves capacity), pass `concurrency: 1` to `runBatch` so requests go one at a time; the failed ones stay ticked and the reason goes into the toast
 - When there is no batch API on the backend, use `utils/runBatch` to call the single-item API one by one (4 at a time by default; one failure doesn't stop the rest)
 - Ticked rows get `@include row-selected;` for their background (list rows that are cards themselves pass `var(--color-surface)`)
-- Guide attributes such as `data-guide` can be passed straight to `DataToolbar` (attached to the toolbar's outer frame), so a tour step can spotlight the whole filters + search bar
+- Guide attributes such as `data-guide` can be passed straight to `DataToolbar` (attached to the toolbar's outer frame), so a tour step can spotlight the whole filters + search bar; pass them to `ToolbarSearch` to spotlight just the search box
+- **Search boxes** always use `ToolbarSearch` (36px, Esc clears) — don't hand-roll one. Add `clearable` when a visible clear button helps: an ✕ appears on the right while there is text, and focus stays in the box after clearing
 - **Re-check widths after adding a checkbox column**: when list rows use grid, decide between one line and two lines by the **container width** (`container-type: inline-size` + `@container`), not the viewport — once the sidebar appears (≥1024) the content area is narrower than at 992, so a viewport switch overflows sideways between 1024 and 1180
 - Currently used on: resource management, user management (batch enable / disable, add to or remove from a group, delete), request review and AI API review (batch approve / reject), class management (batch archive and reclaim), and the class workspace student roster (batch remove)
 

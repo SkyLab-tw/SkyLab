@@ -21,40 +21,7 @@
   gap: $spacing-16;
 }
 
-/* ── 控制列（排版比照 AI 金鑰管理）：窄螢幕上下堆疊，寬螢幕分頁在左、動作在右 ── */
-.controlsRow {
-  @include flex-column;
-  gap: $spacing-16;
-
-  /* 桌機並排；內容欄不夠寬（側欄展開＋小筆電）時按鈕換到下一行靠右，不凸出內容右緣 */
-  @include respond-to(lg) {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: $spacing-16 $spacing-32;
-  }
-}
-
 /* 分頁切換：窄螢幕放不下時橫向捲動，留細捲軸當提示（藏起來會看不出還有分頁） */
-.pageTabs {
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.headerActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: $spacing-8;
-  flex-shrink: 0;
-
-  /* 換行後仍靠右；手機直排維持靠左 */
-  @include respond-to(lg) { margin-left: auto; }
-}
-
 /* ── 表單：共用 form-field／form-control（控制項 36px） ── */
 .field {
   @include form-field;
@@ -142,11 +109,17 @@
 
 .table {
   @include table-base;
-  min-width: 760px;
 }
 
+/* 金鑰表：欄寬、min-width 與窄版收欄由 AiApiPage.jsx 的 KEY_FIT_COLUMNS（useTableFit）決定，
+   fixed layout 才會照欄寬排 */
+.tableKeys {
+  table-layout: fixed;
+}
+
+/* 申請紀錄表：同金鑰表，欄寬、min-width 與窄版收欄由 AiApiPage.jsx 的 RECORD_FIT_COLUMNS 決定 */
 .tableRecords {
-  min-width: 960px;
+  table-layout: fixed;
 }
 
 .th {
@@ -249,6 +222,21 @@
   margin-top: 2px;
   font-size: $font-size-12;
   color: var(--color-text-muted);
+}
+
+/* 收進狀態底下的到期日已過期：只換紅字，字級維持小字（.textDanger 自帶 14px） */
+.cellSublineDanger {
+  color: var(--color-danger);
+}
+
+/* 收到名稱底下的申請用途：最多兩行，全文在 title */
+.cellSublineClamp {
+  @include text-clamp(2);
+}
+
+/* 收到狀態底下的審核意見：整段換行，長網址也不撐出欄外 */
+.cellSublineWrap {
+  overflow-wrap: anywhere;
 }
 
 .tdActions {

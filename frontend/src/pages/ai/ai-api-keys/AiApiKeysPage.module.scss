@@ -221,9 +221,11 @@
   }
 }
 
+/* 欄寬、min-width 與窄版收欄由 AiApiKeysPage.jsx 的 CREDENTIAL_FIT_COLUMNS（useTableFit）決定，
+   fixed layout 才會照欄寬排 */
 .table {
   @include table-base;
-  min-width: 880px;
+  table-layout: fixed;
 }
 
 .th {
@@ -245,13 +247,19 @@
   gap: $spacing-8;
 }
 
-/* 擁有者／申請用途：截斷保欄寬，全文靠 title */
+/* 擁有者／申請用途：單行截斷（寬度跟著欄），全文靠 title */
 .cellText {
-  display: inline-block;
-  max-width: 200px;
-  vertical-align: middle;
+  display: block;
   font-size: $font-size-14;
   @include text-truncate;
+}
+
+/* 窄版收起的欄（useTableFit）：時間改畫在活動或狀態徽章底下。
+   「欄名 日期」放不下時在空白處換行，不從日期中間折 */
+.foldedLine {
+  margin-top: 2px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
 }
 
 .cellMuted {
@@ -294,8 +302,8 @@
   }
 }
 
+/* 名稱、Email（窄版另有收進來的「姓名 · Email」、申請用途）：單行截斷，寬度跟著欄，全文在 title */
 .rowName {
-  max-width: 220px;
   font-size: $font-size-14;
   font-weight: $font-weight-500;
   color: var(--color-text-primary);
@@ -303,7 +311,6 @@
 }
 
 .rowMeta {
-  max-width: 220px;
   font-size: $font-size-12;
   color: var(--color-text-muted);
   @include text-truncate;

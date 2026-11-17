@@ -20,7 +20,7 @@ import AppearanceTab from "./AppearanceTab";
 import AboutTab from "./AboutTab";
 import { AppearanceResetButton } from "./AppearanceSettings";
 import PageHeader from "../../../components/PageHeader/PageHeader";
-import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
 
 /* 密碼與刪除帳號都屬「帳號本身」的事，跟個人資料同一個分頁直向堆疊
    （危險區域照慣例壓底）；「關於」放版本、授權與開源元件清單。
@@ -577,7 +577,7 @@ export default function AccountSettingsPage() {
       {/* 分頁列：外觀分頁的「重設為系統預設值」放右側，一進頁面就看得到
           （原本壓在表單最底，使用者反映會直接忽略） */}
       <div className={styles.tabBar} data-guide="account-tabs">
-        <SegmentedControl
+        <Tabs
           options={TABS.map((tab) => ({
             value: tab.key,
             label: t(tab.labelKey),

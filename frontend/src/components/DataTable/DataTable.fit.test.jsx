@@ -131,6 +131,16 @@ describe("fitColumns", () => {
     expect(fitColumns(wideMiddle, 380)).toMatchObject({ minWidth: 500, overflow: "both" });
   });
 
+  test("a leading checkbox column (pinNext) pins the next visible column with it", () => {
+    const withSelect = [{ id: "select", width: 40, pinNext: true }, { id: "name", width: 200 }, { id: "status", width: 150 }, { id: "actions", width: 100 }];
+    /* 放得下：不橫捲，但仍算出固定兩欄與第二欄的位移，給收到底時用 */
+    expect(fitColumns(withSelect, 600)).toMatchObject({ overflow: null, pinLead: 2, pinOffset: 40 });
+    /* 勾選＋名稱 240、操作 100，中間只剩 60px：只固定前兩欄 */
+    expect(fitColumns(withSelect, 400)).toMatchObject({ overflow: "start", pinLead: 2, pinOffset: 40 });
+    /* 沒有 pinNext 時照舊只固定第一欄 */
+    expect(fitColumns(FIT_COLUMNS, 400)).toMatchObject({ pinLead: 1, pinOffset: 0 });
+  });
+
   test("no width measured yet (not mounted, tests): nothing folds", () => {
     expect(fitColumns(FIT_COLUMNS, 0)).toMatchObject({ minWidth: 700, overflow: null });
     expect([...fitColumns(FIT_COLUMNS, 0).folded]).toEqual([]);

@@ -21,7 +21,7 @@ import {
   useWireGuardOverviewQuery,
 } from "../../../queries/gateway";
 import PageHeader from "../../../components/PageHeader/PageHeader";
-import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
 
 /* 日誌變化快，比站上預設的 30 秒更新得勤；每次重抓只是一次短暫的 SSH journalctl */
 const LOG_REFRESH_MS = 10_000;
@@ -687,8 +687,7 @@ export default function GatewayPage() {
       <PageHeader title={t("GatewayPage.pageTitle")}>
 
         {/* 切換前若設定檔有未存修改，handleTabSelect 會先跳確認 */}
-        <SegmentedControl
-          className={styles.tabs}
+        <Tabs
           ariaLabel={t("GatewayPage.tabsAriaLabel")}
           value={activeTab}
           onChange={handleTabSelect}

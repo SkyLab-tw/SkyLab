@@ -16,8 +16,11 @@ import { formatDateTime, formatTime } from "../../../utils/formatDate";
 import i18n from "../../../i18n";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
+import ErrorState from "../../../components/ErrorState/ErrorState";
 import DataTable from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import { MonitoringService } from "../../../services/monitoring";
 import {
   useAiMonitoringOverviewQuery,
@@ -30,6 +33,8 @@ import { useToast } from "../../../hooks/useToast";
 import { useQueryView } from "../../../hooks/useQueryLoadState";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
+import Tabs from "../../../components/Tabs/Tabs";
 import {
   formatDuration,
   formatModelDisplay,
@@ -129,13 +134,20 @@ function StatusBadge({ status }) {
   );
 }
 
+/* 姓名、Email 單行截斷（Email 不從中間折成兩行），全文在 title */
 function UserCell({ email, fullName, fallback }) {
+  const name = fullName || fallback || "—";
   return (
     <div className={styles.userCell}>
-      <div className={styles.userName}>{fullName || fallback || "—"}</div>
-      {email ? <div className={styles.userEmail}>{email}</div> : null}
+      <div className={styles.userName} title={String(name)}>{name}</div>
+      {email ? <div className={styles.userEmail} title={email}>{email}</div> : null}
     </div>
   );
+}
+
+/* 收進其他欄的使用者一行：「姓名 · Email」（沒有姓名就只有 Email，兩個都沒有才寫使用者 ID） */
+function userLine(item) {
+  return [item.user_full_name, item.user_email].filter(Boolean).join(" · ") || String(item.user_id ?? "—");
 }
 
 function MetricCard({ icon, tone, label, value, detail, delta, deltaTone }) {
@@ -306,24 +318,6 @@ export function buildAttentionItems({ overview, runtime, overviewError, runtimeE
   return rows;
 }
 
-function DetailSummary({ summary, t }) {
-  const items = [
-    { key: "success", icon: "check_circle", tone: "success", label: t("AiMonitoringPage.successfulCalls"), value: formatNumber(summary?.successful_calls) },
-    { key: "failed", icon: "error_outline", tone: "danger", label: t("AiMonitoringPage.statFailedCalls"), value: formatNumber(summary?.failed_calls) },
-    { key: "users", icon: "groups", tone: "info", label: t("AiMonitoringPage.activeUsers"), value: formatNumber(summary?.active_users) },
-  ];
-  return (
-    <div className={styles.detailSummary} aria-label={t("AiMonitoringPage.detailSummaryTitle")}>
-      {items.map((item) => (
-        <div className={styles.detailSummaryItem} key={item.key}>
-          <span className={`${styles.detailSummaryIcon} ${styles[`detailSummaryIcon_${item.tone}`]}`}><MIcon name={item.icon} size={17} /></span>
-          <span><small>{item.label}</small><strong>{item.value}</strong></span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ── 明細的三張表（TanStack Table）──
    欄位定義放模組層級：v9 的 FlexRender 把函式型的 header／cell 當元件掛載，render 裡新建會讓整格重新掛載。
    表頭文字取 meta.headerKey 的翻譯；點模型看呼叫紀錄經 table meta 交回頁面。
@@ -338,43 +332,110 @@ function HeaderLabel({ column }) {
   return t(column.columnDef.meta.headerKey);
 }
 
-function NumberCell({ getValue }) {
-  useTranslation("ai");
-  return formatNumber(getValue());
-}
-
 function columnMeta(headerKey, tdClassName = styles.td, extra) {
   return { headerKey, thClassName: styles.th, tdClassName, ...extra };
 }
 
+/* 窄版收起的指標改畫在主欄底下：欄名＋值（光看「1.2s」分不出是哪個指標）；沒有值的不畫一行「—」 */
+function FoldedMetricLine({ labelKey, value, format }) {
+  const { t } = useTranslation("ai");
+  if (value == null) return null;
+  return <div className={styles.foldedLine}>{t(labelKey)} {format(value)}</div>;
+}
+
+/* ── 模型表窄版收欄（useTableFit，樣式規範「表格」規則四） ──
+   表格區不夠寬時依序收起部署狀態、Tokens 總計、平均延遲、失敗率、呼叫次數；模型、Runtime 狀態永遠在。
+   部署狀態（健康幾個・異常幾個）是執行狀態的細節，收到 Runtime 狀態徽章底下（數字本身看得懂，不加欄名）；
+   Tokens、失敗率、延遲都是這段區間呼叫的統計，收到呼叫次數底下；手機上連呼叫次數也收，這組統計整個接在狀態底下。
+   欄寬只寫在這裡：模型名稱單行截斷、全名在 title；Runtime 狀態 170px 放得下收進來的英文「Healthy 2 · Unhealthy 1」；
+   呼叫次數 150px 放得下收進來的「Total Tokens 1.2M」「Avg. Latency 1.2s」。
+   明細區在卡片裡（左右各少 17px 內距與框線），表格區比其他頁窄約 34px。全部 1040px：
+   1440（約 970px）、1366 筆電（約 895～910px）收掉部署狀態剩 860px；1100 寬視窗（約 644px）再收 Tokens、延遲剩 630px；
+   1440 開著 AI 助手（約 533px）再收失敗率剩 520px；手機（約 422px）再收呼叫次數，只剩模型、狀態 370px */
+const MODEL_FIT_COLUMNS = Object.freeze([
+  { id: "model", width: 200 },
+  { id: "runtime", width: 170 },
+  { id: "deployments", width: 180, fold: 1 },
+  { id: "total_calls", width: 150, fold: 5 },
+  { id: "total_tokens", width: 110, fold: 2 },
+  { id: "error_rate", width: 110, fold: 4 },
+  { id: "avg_latency_ms", width: 120, fold: 3 },
+]);
+
+/* 模型名稱多半是沒有空白的長字串（Qwen/Qwen2.5-7B-Instruct）：單行截斷，全名在 title（可點的在「查看呼叫紀錄」說明裡） */
 function ModelNameCell({ row, table }) {
   const { t } = useTranslation("ai");
   const model = row.original;
-  if (!(model.total_calls > 0)) return <span>{formatModelDisplay(model.model_name)}</span>;
+  const name = formatModelDisplay(model.model_name);
+  if (!(model.total_calls > 0)) return <span className={styles.truncate} title={name}>{name}</span>;
   return (
-    <button type="button" className={styles.modelDrilldown} onClick={() => table.options.meta.onModelSelect(model.model_name)} title={t("AiMonitoringPage.viewModelCalls", { model: formatModelDisplay(model.model_name) })}>
-      <span>{formatModelDisplay(model.model_name)}</span>
+    <button type="button" className={styles.modelDrilldown} onClick={() => table.options.meta.onModelSelect(model.model_name)} title={t("AiMonitoringPage.viewModelCalls", { model: name })}>
+      <span className={styles.modelDrilldownName}>{name}</span>
       <MIcon name="arrow_forward" size={15} />
     </button>
   );
 }
 
+function deploymentText(model, t) {
+  return t("AiMonitoringPage.deploymentCount", { healthy: model.healthy_deployments, unhealthy: model.unhealthy_deployments });
+}
+
+/* 收起的 Tokens、失敗率、延遲（依欄位順序），接在呼叫次數底下；呼叫次數也收起時一起到狀態底下 */
+function ModelStatLines({ model }) {
+  const fit = useTableFitContext();
+  return (
+    <>
+      {fit.isFolded("total_tokens") && <FoldedMetricLine labelKey="AiMonitoringPage.colTokensTotal" value={model.total_tokens} format={formatTokens} />}
+      {fit.isFolded("error_rate") && <FoldedMetricLine labelKey="AiMonitoringPage.colFailRate" value={model.error_rate} format={formatPercent} />}
+      {fit.isFolded("avg_latency_ms") && <FoldedMetricLine labelKey="AiMonitoringPage.colAvgLatency" value={model.avg_latency_ms} format={formatDuration} />}
+    </>
+  );
+}
+
+/* Runtime 狀態；窄版收起的部署狀態接在徽章底下，手機上呼叫次數與其他統計也接在這裡 */
 function ModelRuntimeCell({ row }) {
   const { t } = useTranslation("ai");
-  return <ModelRuntimeBadge status={row.original.runtime_status} t={t} />;
+  const fit = useTableFitContext();
+  const model = row.original;
+  return (
+    <>
+      <ModelRuntimeBadge status={model.runtime_status} t={t} />
+      {fit.isFolded("deployments") && model.runtime_status && (
+        <div className={styles.foldedLine}>{deploymentText(model, t)}</div>
+      )}
+      {fit.isFolded("total_calls") && (
+        <>
+          <FoldedMetricLine labelKey="AiMonitoringPage.colCallCount" value={model.total_calls} format={formatNumber} />
+          <ModelStatLines model={model} />
+        </>
+      )}
+    </>
+  );
 }
 
 function ModelDeploymentsCell({ row }) {
   const { t } = useTranslation("ai");
   const model = row.original;
-  return model.runtime_status ? t("AiMonitoringPage.deploymentCount", { healthy: model.healthy_deployments, unhealthy: model.unhealthy_deployments }) : "—";
+  return model.runtime_status ? deploymentText(model, t) : "—";
 }
 
+function ModelCallsCell({ row }) {
+  useTranslation("ai");
+  const model = row.original;
+  return (
+    <>
+      {formatNumber(model.total_calls)}
+      <ModelStatLines model={model} />
+    </>
+  );
+}
+
+/* 欄寬與收合順序在 MODEL_FIT_COLUMNS（id 要對得上） */
 const modelColumns = columnHelper.columns([
   columnHelper.display({ id: "model", header: HeaderLabel, cell: ModelNameCell, meta: columnMeta("AiMonitoringPage.colModel", MONO_TD) }),
   columnHelper.display({ id: "runtime", header: HeaderLabel, cell: ModelRuntimeCell, meta: columnMeta("AiMonitoringPage.colRuntimeStatus") }),
   columnHelper.display({ id: "deployments", header: HeaderLabel, cell: ModelDeploymentsCell, meta: columnMeta("AiMonitoringPage.colDeployments") }),
-  columnHelper.accessor("total_calls", { header: HeaderLabel, cell: NumberCell, meta: columnMeta("AiMonitoringPage.colCallCount", NUMERIC_TD) }),
+  columnHelper.accessor("total_calls", { header: HeaderLabel, cell: ModelCallsCell, meta: columnMeta("AiMonitoringPage.colCallCount", NUMERIC_TD) }),
   columnHelper.accessor("total_tokens", { header: HeaderLabel, cell: ({ getValue }) => formatTokens(getValue()), meta: columnMeta("AiMonitoringPage.colTokensTotal", NUMERIC_TD) }),
   columnHelper.accessor("error_rate", { header: HeaderLabel, cell: ({ getValue }) => formatPercent(getValue()), meta: columnMeta("AiMonitoringPage.colFailRate", NUMERIC_TD) }),
   columnHelper.accessor("avg_latency_ms", { header: HeaderLabel, cell: ({ getValue }) => formatDuration(getValue()), meta: columnMeta("AiMonitoringPage.colAvgLatency", NUMERIC_TD) }),
@@ -389,6 +450,34 @@ function userTotalTokens(user) {
     + (user.template_input_tokens ?? 0) + (user.template_output_tokens ?? 0);
 }
 
+/* ── 使用者表窄版收欄 ──
+   依序收起 Tokens 總計、平均延遲、失敗率，收到呼叫次數底下（同模型表）；使用者、呼叫次數永遠在。
+   全部 710px，1366、1440 筆電都不用收；1100 寬視窗（明細區約 644px）收 Tokens 剩 600px；
+   1440 開著 AI 助手（約 533px）再收延遲剩 480px；手機（約 422px）再收失敗率，只剩使用者、呼叫次數 370px */
+const USER_FIT_COLUMNS = Object.freeze([
+  { id: "user", width: 220 },
+  { id: "calls", width: 150 },
+  { id: "tokens", width: 110, fold: 1 },
+  { id: "avg_latency_ms", width: 120, fold: 2 },
+  { id: "error_rate", width: 110, fold: 3 },
+]);
+
+/* 呼叫次數；窄版收起的 Tokens、延遲、失敗率依欄位順序接在底下 */
+function UserCallsCell({ row }) {
+  useTranslation("ai");
+  const fit = useTableFitContext();
+  const user = row.original;
+  return (
+    <>
+      {formatNumber(userTotalCalls(user))}
+      {fit.isFolded("tokens") && <FoldedMetricLine labelKey="AiMonitoringPage.colTokensTotal" value={userTotalTokens(user)} format={formatTokens} />}
+      {fit.isFolded("avg_latency_ms") && <FoldedMetricLine labelKey="AiMonitoringPage.colAvgLatency" value={user.avg_latency_ms} format={formatDuration} />}
+      {fit.isFolded("error_rate") && <FoldedMetricLine labelKey="AiMonitoringPage.colFailRate" value={user.error_rate} format={formatPercent} />}
+    </>
+  );
+}
+
+/* 欄寬與收合順序在 USER_FIT_COLUMNS（id 要對得上） */
 const userColumns = columnHelper.columns([
   columnHelper.display({
     id: "user",
@@ -396,35 +485,166 @@ const userColumns = columnHelper.columns([
     cell: ({ row }) => <UserCell email={row.original.user_email} fullName={row.original.user_full_name} fallback={row.original.user_id} />,
     meta: columnMeta("AiMonitoringPage.colUser"),
   }),
-  columnHelper.accessor(userTotalCalls, { id: "calls", header: HeaderLabel, cell: NumberCell, meta: columnMeta("AiMonitoringPage.colCallCount", NUMERIC_TD) }),
+  columnHelper.accessor(userTotalCalls, { id: "calls", header: HeaderLabel, cell: UserCallsCell, meta: columnMeta("AiMonitoringPage.colCallCount", NUMERIC_TD) }),
   columnHelper.accessor(userTotalTokens, { id: "tokens", header: HeaderLabel, cell: ({ getValue }) => formatTokens(getValue()), meta: columnMeta("AiMonitoringPage.colTokensTotal", NUMERIC_TD) }),
   columnHelper.accessor("avg_latency_ms", { header: HeaderLabel, cell: ({ getValue }) => formatDuration(getValue()), meta: columnMeta("AiMonitoringPage.colAvgLatency", NUMERIC_TD) }),
   columnHelper.accessor("error_rate", { header: HeaderLabel, cell: ({ getValue }) => formatPercent(getValue()), meta: columnMeta("AiMonitoringPage.colFailRate", NUMERIC_TD) }),
 ]);
 
-function CallTimeCell({ row }) {
-  useTranslation("ai");
-  const call = row.original;
-  return (
-    <>
-      {formatDateTime(call.created_at)}
-      {call.request_id ? <small className={`${styles.monoCell} ${styles.callRequestId}`} title={[call.request_id, call.upstream_request_id].filter(Boolean).join(" / ")}>{call.request_id.slice(0, 8)}</small> : null}
-    </>
-  );
-}
+/* ── 呼叫紀錄表（代理／範本兩個分頁共用）窄版收欄 ──
+   時間（含 Request ID）是這一列的名字，跟狀態永遠在；其他欄依重要度從細節開始收：
+   Token 證據 → 輸出速度 → 首 Token → 類型 → 輸出 → 輸入 → 模型 → 使用者 → 耗時。
+   收到哪裡依意思分三組，同一組的值一律排在一起：
+   - 誰、呼叫什麼（使用者、模型、類型）收進時間欄底下，各自單行截斷、全文在 title（Email、模型名稱不從中間折行）；
+   - Token（輸出、Token 證據）先接在輸入底下，輸入也收起時整組到狀態底下（「輸入 1.2K · 輸出 345」一行＋證據）；
+   - 速度（首 Token、輸出速度）先接在耗時底下，耗時也收起時整組到狀態底下。
+   欄寬只寫在這裡：完整時間（英文 11/17/2026, 14:30:15）要 170px；輸入、耗時欄 140px 放得下收進來的
+   「Reported upstream」「First token 350ms」；呼叫類型（contextual_help_adherence）會截斷、全文在 title。
+   明細區在卡片裡，表格區比其他頁窄約 34px。全部 1560px：1440（約 970px）收到剩 950px（時間、使用者、模型、輸入、耗時、狀態）；
+   1366 筆電（約 895～910px）再收輸入剩 810px；1100 寬視窗（約 644px）再收模型剩 630px；
+   1440 開著 AI 助手（約 533px）再收使用者剩 470px；手機（約 422px）再收耗時，只剩時間、狀態 330px */
+const CALL_FIT_COLUMNS = Object.freeze([
+  { id: "time", width: 170 },
+  { id: "user", width: 160, fold: 8 },
+  { id: "model", width: 180, fold: 7 },
+  { id: "type", width: 140, fold: 4 },
+  { id: "input", width: 140, fold: 6 },
+  { id: "output", width: 80, fold: 5 },
+  { id: "request_duration_ms", width: 140, fold: 9 },
+  { id: "first_token_ms", width: 100, fold: 3 },
+  { id: "e2e_output_tokens_per_second", width: 130, fold: 2 },
+  { id: "usage", width: 160, fold: 1 },
+  { id: "status", width: 160 },
+]);
 
-function CallModelCell({ row }) {
-  const call = row.original;
+function callModelText(call) {
   return call.response_model && call.response_model !== call.model_name
     ? `${formatModelDisplay(call.model_name)} → ${formatModelDisplay(call.response_model)}`
     : formatModelDisplay(call.model_name);
 }
 
-function CallUsageCell({ row }) {
-  const { t } = useTranslation("ai");
-  return t(row.original.usage_reported ? "AiMonitoringPage.usageReported" : "AiMonitoringPage.usageMissing");
+/* 模型欄的 title：原始名稱（模型 → 實際回應的模型） */
+function callModelTitle(call) {
+  return [call.model_name, call.response_model].filter(Boolean).join(" → ");
 }
 
+function callTypeText(call) {
+  return call.request_type ?? call.call_type ?? "—";
+}
+
+function usageLabelKey(call) {
+  return call.usage_reported ? "AiMonitoringPage.usageReported" : "AiMonitoringPage.usageMissing";
+}
+
+/* 時間＋Request ID；窄版收起的使用者、模型、類型依欄位順序接在底下 */
+function CallTimeCell({ row }) {
+  useTranslation("ai");
+  const fit = useTableFitContext();
+  const call = row.original;
+  return (
+    <>
+      {formatDateTime(call.created_at)}
+      {call.request_id ? <small className={`${styles.monoCell} ${styles.callRequestId}`} title={[call.request_id, call.upstream_request_id].filter(Boolean).join(" / ")}>{call.request_id.slice(0, 8)}</small> : null}
+      {fit.isFolded("user") && (
+        <div className={`${styles.foldedLine} ${styles.truncate}`} title={userLine(call)}>{userLine(call)}</div>
+      )}
+      {fit.isFolded("model") && (
+        <div className={`${styles.foldedLine} ${styles.truncate} ${styles.monoCell}`} title={callModelTitle(call)}>{callModelText(call)}</div>
+      )}
+      {fit.isFolded("type") && (
+        <div className={`${styles.foldedLine} ${styles.truncate}`} title={callTypeText(call)}>{callTypeText(call)}</div>
+      )}
+    </>
+  );
+}
+
+function CallModelCell({ row }) {
+  return <span className={styles.truncate}>{callModelText(row.original)}</span>;
+}
+
+function CallTypeCell({ row }) {
+  const type = callTypeText(row.original);
+  return <span className={styles.truncate} title={type}>{type}</span>;
+}
+
+function CallUsageCell({ row }) {
+  const { t } = useTranslation("ai");
+  return t(usageLabelKey(row.original));
+}
+
+/* 收起的 Token 證據：值本身（上游已回報／未回報），緊接在 Token 數字底下才看得懂是在說 Token */
+function FoldedUsageLine({ call }) {
+  const { t } = useTranslation("ai");
+  return <div className={styles.foldedLine}>{t(usageLabelKey(call))}</div>;
+}
+
+/* 輸入 Token；窄版收起的輸出、Token 證據接在底下（Token 一組排在一起） */
+function CallInputCell({ row }) {
+  const fit = useTableFitContext();
+  const call = row.original;
+  return (
+    <>
+      {formatTokens(call.input_tokens ?? 0)}
+      {fit.isFolded("output") && <FoldedMetricLine labelKey="AiMonitoringPage.colOutput" value={call.output_tokens ?? 0} format={formatTokens} />}
+      {fit.isFolded("usage") && <FoldedUsageLine call={call} />}
+    </>
+  );
+}
+
+/* 收起的首 Token、輸出速度（依欄位順序），接在耗時底下；耗時也收起時一起到狀態底下。
+   輸出速度帶單位（tok/s）本身看得懂，不加欄名 */
+function CallSpeedLines({ call }) {
+  const fit = useTableFitContext();
+  const rate = formatTokenRate(call.e2e_output_tokens_per_second);
+  return (
+    <>
+      {fit.isFolded("first_token_ms") && <FoldedMetricLine labelKey="AiMonitoringPage.colFirstToken" value={call.first_token_ms} format={formatDuration} />}
+      {fit.isFolded("e2e_output_tokens_per_second") && rate !== "—" && <div className={styles.foldedLine}>{rate}</div>}
+    </>
+  );
+}
+
+function CallDurationCell({ row }) {
+  const call = row.original;
+  return (
+    <>
+      {formatDuration(call.request_duration_ms)}
+      <CallSpeedLines call={call} />
+    </>
+  );
+}
+
+/* 狀態；窄版輸入收起時 Token 一組（「輸入 · 輸出」一行＋證據）、耗時收起時速度一組，依欄位順序接在徽章底下 */
+function CallStatusCell({ row }) {
+  const { t } = useTranslation("ai");
+  const fit = useTableFitContext();
+  const call = row.original;
+  return (
+    <>
+      <StatusBadge status={call.status} />
+      {fit.isFolded("input") && (
+        <div className={styles.foldedLine}>
+          <span className={styles.foldedPair}>{t("AiMonitoringPage.colInput")} {formatTokens(call.input_tokens ?? 0)}</span>
+          {fit.isFolded("output") && (
+            <>
+              {" · "}
+              <span className={styles.foldedPair}>{t("AiMonitoringPage.colOutput")} {formatTokens(call.output_tokens ?? 0)}</span>
+            </>
+          )}
+        </div>
+      )}
+      {fit.isFolded("input") && fit.isFolded("usage") && <FoldedUsageLine call={call} />}
+      {fit.isFolded("request_duration_ms") && (
+        <>
+          <FoldedMetricLine labelKey="AiMonitoringPage.colDuration" value={call.request_duration_ms} format={formatDuration} />
+          <CallSpeedLines call={call} />
+        </>
+      )}
+    </>
+  );
+}
+
+/* 欄寬與收合順序在 CALL_FIT_COLUMNS（id 要對得上） */
 const callColumns = columnHelper.columns([
   columnHelper.display({ id: "time", header: HeaderLabel, cell: CallTimeCell, meta: columnMeta("AiMonitoringPage.colTime") }),
   columnHelper.display({
@@ -439,21 +659,22 @@ const callColumns = columnHelper.columns([
     cell: CallModelCell,
     /* td 的 title 依列決定（模型 → 實際回應的模型） */
     meta: columnMeta("AiMonitoringPage.colModel", MONO_TD, {
-      tdProps: (row) => ({ title: [row.original.model_name, row.original.response_model].filter(Boolean).join(" → ") }),
+      tdProps: (row) => ({ title: callModelTitle(row.original) }),
     }),
   }),
-  columnHelper.display({ id: "type", header: HeaderLabel, cell: ({ row }) => row.original.request_type ?? row.original.call_type ?? "—", meta: columnMeta("AiMonitoringPage.colType") }),
-  columnHelper.display({ id: "input", header: HeaderLabel, cell: ({ row }) => formatTokens(row.original.input_tokens ?? 0), meta: columnMeta("AiMonitoringPage.colInput", NUMERIC_TD) }),
+  columnHelper.display({ id: "type", header: HeaderLabel, cell: CallTypeCell, meta: columnMeta("AiMonitoringPage.colType") }),
+  columnHelper.display({ id: "input", header: HeaderLabel, cell: CallInputCell, meta: columnMeta("AiMonitoringPage.colInput", NUMERIC_TD) }),
   columnHelper.display({ id: "output", header: HeaderLabel, cell: ({ row }) => formatTokens(row.original.output_tokens ?? 0), meta: columnMeta("AiMonitoringPage.colOutput", NUMERIC_TD) }),
-  columnHelper.accessor("request_duration_ms", { header: HeaderLabel, cell: ({ getValue }) => formatDuration(getValue()), meta: columnMeta("AiMonitoringPage.colDuration", NUMERIC_TD) }),
+  columnHelper.accessor("request_duration_ms", { header: HeaderLabel, cell: CallDurationCell, meta: columnMeta("AiMonitoringPage.colDuration", NUMERIC_TD) }),
   columnHelper.accessor("first_token_ms", { header: HeaderLabel, cell: ({ getValue }) => formatDuration(getValue()), meta: columnMeta("AiMonitoringPage.colFirstToken", NUMERIC_TD) }),
   columnHelper.accessor("e2e_output_tokens_per_second", { header: HeaderLabel, cell: ({ getValue }) => formatTokenRate(getValue()), meta: columnMeta("AiMonitoringPage.colOutputRate", NUMERIC_TD) }),
   columnHelper.display({ id: "usage", header: HeaderLabel, cell: CallUsageCell, meta: columnMeta("AiMonitoringPage.colUsageEvidence") }),
-  columnHelper.display({ id: "status", header: HeaderLabel, cell: ({ row }) => <StatusBadge status={row.original.status} />, meta: columnMeta("AiMonitoringPage.colStatus") }),
+  columnHelper.display({ id: "status", header: HeaderLabel, cell: CallStatusCell, meta: columnMeta("AiMonitoringPage.colStatus") }),
 ]);
 
 const detailRowClassName = () => styles.tr;
 
+/* 三張表各自量自己的表格區（useTableFit 的 ref 掛在會橫捲的 .tableWrap） */
 function ModelsTable({ models, onModelSelect }) {
   const table = useTable({
     features: baseFeatures,
@@ -462,28 +683,37 @@ function ModelsTable({ models, onModelSelect }) {
     getRowId: (model) => `${model.model_name}:${model.runtime_name ?? "usage"}`,
     meta: { onModelSelect },
   });
-  return <div className={styles.tableWrap}><DataTable table={table} className={styles.table} rowClassName={detailRowClassName} /></div>;
+  const fit = useTableFit(MODEL_FIT_COLUMNS);
+  return (
+    <div ref={fit.ref} className={styles.tableWrap}>
+      <DataTable table={table} fit={fit} className={styles.table} rowClassName={detailRowClassName} />
+    </div>
+  );
 }
 
 function UsersTable({ users }) {
   const table = useTable({ features: baseFeatures, columns: userColumns, data: users, getRowId: (user) => String(user.user_id) });
+  const fit = useTableFit(USER_FIT_COLUMNS);
   return (
-    <div className={styles.tableWrap}>
-      <DataTable table={table} className={styles.table} rowClassName={detailRowClassName} />
+    <div ref={fit.ref} className={styles.tableWrap}>
+      <DataTable table={table} fit={fit} className={styles.table} rowClassName={detailRowClassName} />
     </div>
   );
 }
 
 function CallsTable({ calls }) {
   const table = useTable({ features: baseFeatures, columns: callColumns, data: calls, getRowId: (call) => String(call.id) });
+  const fit = useTableFit(CALL_FIT_COLUMNS);
   return (
-    <div className={styles.tableWrap}>
-      <DataTable table={table} className={styles.table} rowClassName={detailRowClassName} />
+    <div ref={fit.ref} className={styles.tableWrap}>
+      <DataTable table={table} fit={fit} className={styles.table} rowClassName={detailRowClassName} />
     </div>
   );
 }
 
-function DetailTable({ tab, calls, users, modelRows, query, statusFilter, onModelSelect, onClearFilters, t }) {
+function DetailTable({ tab, calls, users, modelRows, query, statusFilter, onModelSelect, onClearFilters, onRetry, t }) {
+  /* 這個分頁的資料還沒拿到就失敗：顯示錯誤＋重試，不要顯示成「沒有資料」 */
+  if (onRetry) return <ErrorState onRetry={onRetry} />;
   const q = query.trim().toLowerCase();
   /* 搜尋或狀態篩選把資料濾光時，空狀態給一顆清除鈕；本來就沒資料則只說明 */
   const statusFiltered = tab !== "models" && tab !== "users" && statusFilter !== "all";
@@ -592,6 +822,17 @@ export default function AiMonitoringPage() {
     () => mergeModelRows(overview?.model_breakdown, runtime?.models),
     [overview?.model_breakdown, runtime?.models],
   );
+
+  /* 明細各分頁的資料一筆都還沒拿到就失敗時給重試（分頁數字顯示「—」）；有舊資料就照常顯示，告警列會提示。
+     模型分頁合併總覽與執行狀態兩份，任一份有列就顯示，兩份都沒列且有失敗才算失敗、重試失敗的那份 */
+  const failedRetry = (view, query) => (query.data === undefined && view.error ? view.retry : null);
+  const modelRetries = [failedRetry(overviewView, overviewQuery), failedRetry(runtimeView, runtimeQuery)].filter(Boolean);
+  const detailRetry = {
+    models: modelRows.length === 0 && modelRetries.length ? () => modelRetries.forEach((retry) => retry()) : null,
+    proxy: failedRetry(proxyView, proxyQuery),
+    template: failedRetry(templateView, templateQuery),
+    users: failedRetry(usersView, usersQuery),
+  };
 
   const PRESETS = [
     { value: "7d", label: t("AiMonitoringPage.preset7d") },
@@ -720,6 +961,13 @@ export default function AiMonitoringPage() {
           delta={comparison ? formatDelta(comparison.error_rate_delta, "pp") : null}
           deltaTone={comparison?.error_rate_delta > 0 ? "danger" : "positive"}
         />
+        <MetricCard
+          icon="groups"
+          tone="success"
+          label={t("AiMonitoringPage.activeUsers")}
+          value={formatNumber(summary?.active_users)}
+          detail={t("AiMonitoringPage.currentPeriod")}
+        />
       </section>
 
       <section className={`${styles.primaryGrid} ${!overviewLoading && !runtimeLoading && attentionItems.length === 0 ? styles.primaryGridSingle : ""}`}>
@@ -741,9 +989,22 @@ export default function AiMonitoringPage() {
 
       <section ref={detailSectionRef} id="monitoring-details" className={styles.detailSection} data-guide="ai-monitoring-detail" aria-labelledby="detail-heading">
         <div className={styles.detailHeader}>
-          <div>
-            <h2 id="detail-heading" className={styles.detailTitle}>{t("AiMonitoringPage.detailTitle")}</h2>
-          </div>
+          <h2 id="detail-heading" className={styles.panelTitle}><MIcon name="receipt_long" size={18} />{t("AiMonitoringPage.detailTitle")}</h2>
+        </div>
+        {/* 篩選與搜尋只作用在分頁下方的表格，跟分頁放同一排（靠右）；放不下時整組換到分頁下一行 */}
+        <div className={styles.detailBar}>
+          <Tabs
+            options={DETAIL_TABS.map((item) => ({
+              value: item.key,
+              label: item.label,
+              icon: item.icon,
+              badge: detailRetry[item.key] ? "—" : formatNumber(item.count),
+              buttonProps: item.buttonProps,
+            }))}
+            value={detailTab}
+            onChange={(key) => { setDetailTab(key); setQuery(""); }}
+            ariaLabel={t("AiMonitoringPage.detailTitle")}
+          />
           <div className={styles.detailToolbar}>
             {detailTab === "proxy" ? (
               <SegmentedControl
@@ -753,30 +1014,11 @@ export default function AiMonitoringPage() {
                 ariaLabel={t("AiMonitoringPage.statusFilterLabel")}
               />
             ) : null}
-            <div className={styles.search}>
-              <MIcon name="search" size={16} />
-              <input
-                type="text"
-                className={styles.searchInput}
-                placeholder={detailPlaceholder}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                aria-label={detailPlaceholder}
-              />
-              {query ? <button type="button" className={styles.clearSearch} onClick={() => setQuery("")} aria-label={t("AiMonitoringPage.clearSearch")}><MIcon name="close" size={14} /></button> : null}
-            </div>
+            <ToolbarSearch value={query} onChange={setQuery} placeholder={detailPlaceholder} clearable className={styles.detailSearch} />
           </div>
         </div>
-        <DetailSummary summary={summary} t={t} />
-        <div className={styles.detailTabs} role="tablist" aria-label={t("AiMonitoringPage.detailTitle")}>
-          {DETAIL_TABS.map((item) => (
-            <button key={item.key} type="button" {...item.buttonProps} role="tab" aria-selected={detailTab === item.key} className={`${styles.detailTab} ${detailTab === item.key ? styles.detailTabActive : ""}`} onClick={() => { setDetailTab(item.key); setQuery(""); }}>
-              <MIcon name={item.icon} size={16} />{item.label}<span className={styles.tabCount}>{formatNumber(item.count)}</span>
-            </button>
-          ))}
-        </div>
         <div className={styles.detailContent}>
-          {detailLoading ? <LoadingState /> : <DetailTable tab={detailTab} calls={detailTab === "template" ? templateCalls : proxyCalls} users={users} modelRows={modelRows} query={query} statusFilter={statusFilter} onModelSelect={selectModel} onClearFilters={() => { setQuery(""); setStatusFilter("all"); }} t={t} />}
+          {detailLoading ? <LoadingState /> : <DetailTable tab={detailTab} calls={detailTab === "template" ? templateCalls : proxyCalls} users={users} modelRows={modelRows} query={query} statusFilter={statusFilter} onModelSelect={selectModel} onClearFilters={() => { setQuery(""); setStatusFilter("all"); }} onRetry={detailRetry[detailTab]} t={t} />}
         </div>
       </section>
     </div>

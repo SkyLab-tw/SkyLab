@@ -6,6 +6,7 @@ import PasswordInput from "../../../components/PasswordInput/PasswordInput";
 import PasswordRules from "../../../components/PasswordRules/PasswordRules";
 import NumberInput from "../../../components/NumberInput/NumberInput";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
 import Switch from "../../../components/Switch/Switch";
 import Stepper from "../../../components/Stepper/Stepper";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
@@ -214,7 +215,7 @@ export function SegmentSection() {
       id="segment"
       title="分段切換 SegmentedControl"
       refs={["components/SegmentedControl/SegmentedControl.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]"]}
-      intro="互斥選項的即時切換一律用共用 SegmentedControl；固定 36px、選中段主色實心。超過 4 段在 className 加 max-width:100% + overflow-x:auto。"
+      intro="篩選同一份清單（狀態、類型）與短選項（時間區間、圖表指標、表單模式）一律用共用 SegmentedControl；固定 36px、選中段主色實心。切換整塊內容的分頁改用 Tabs（下一節）。超過 4 段在 className 加 max-width:100% + overflow-x:auto。"
     >
       <div className={styles.demoGrid}>
         <Demo label="基本＋圖示" refs={["icon"]}>
@@ -242,32 +243,103 @@ export function SegmentSection() {
             ]}
           />
         </Demo>
-        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="AI 導師檢查頁 220px 側邊欄的分頁：compact 把各段內距收成 8px，fullWidth 撐滿容器、各段平分。兩個都是元件的 prop，頁面 SCSS 不要再覆寫 .segmentBtn。">
+        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="240px 以下的窄容器：compact 把各段內距收成 8px，fullWidth 撐滿容器、各段平分。兩個都是元件的 prop，頁面 SCSS 不要再覆寫 .segmentBtn。">
           <div className={styles.narrowBox}>
             <SegmentedControl
-              ariaLabel="側欄分頁"
+              ariaLabel="檢查結果篩選"
               compact
               fullWidth
               value={status === "approved" ? "approved" : "pending"}
               onChange={setStatus}
               options={[
-                { value: "pending", label: "本週檢查", icon: "fact_check" },
-                { value: "approved", label: "檢查表助理", icon: "support_agent" },
+                { value: "pending", label: "待確認", icon: "pending" },
+                { value: "approved", label: "已通過", icon: "check_circle" },
               ]}
             />
           </div>
         </Demo>
         <Demo label="5 段以上橫向捲動" refs={["className → overflow-x: auto"]} wide>
           <SegmentedControl
-            ariaLabel="分頁"
+            ariaLabel="背景任務類型"
             className={styles.segmentScroll}
             value={many}
             onChange={setMany}
             options={["a", "b", "c", "d", "e", "f"].map((key, index) => ({
               value: key,
-              label: ["基本資料", "學生名單", "上課環境", "課表", "AI 導師檢查", "成績"][index],
+              label: ["全部", "建立", "開關機", "快照", "備份", "還原"][index],
             }))}
           />
+        </Demo>
+      </div>
+    </Section>
+  );
+}
+
+export function TabsSection() {
+  const [detail, setDetail] = useState("proxy");
+  const [status, setStatus] = useState("all");
+  const [page, setPage] = useState("overview");
+  const [side, setSide] = useState("rubrics");
+  return (
+    <Section
+      id="tabs"
+      title="分頁 Tabs"
+      refs={["components/Tabs/Tabs.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "compact", "fullWidth"]}
+      intro="切換整塊內容（頁面分頁、卡片內分頁）一律用 Tabs：沒有軌道，選中的字下一條 2px 主色短指示條。篩選與選項用 SegmentedControl，兩者並排時一眼分得出來。role=tablist／tab＋aria-selected，左右鍵、Home／End 切換；放不下自己橫捲。"
+    >
+      <div className={styles.demoGrid}>
+        <Demo label="分頁＋右側篩選與搜尋" refs={["Tabs", "SegmentedControl", "ToolbarSearch"]} wide note="AI 用量監控的呼叫明細：分頁換內容、右邊的分段切換只篩目前分頁的清單。徽章 0 也顯示，載入失敗傳「—」。">
+          <div className={styles.alignRow}>
+            <Tabs
+              ariaLabel="呼叫明細"
+              value={detail}
+              onChange={setDetail}
+              options={[
+                { value: "models", label: "模型", icon: "model_training", badge: 3 },
+                { value: "proxy", label: "金鑰 API 呼叫", icon: "swap_horiz", badge: 128 },
+                { value: "template", label: "Template 呼叫", icon: "smart_toy", badge: 0 },
+                { value: "users", label: "使用者用量", icon: "groups", badge: "—" },
+              ]}
+            />
+            <SegmentedControl
+              ariaLabel="狀態篩選"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: "全部" },
+                { value: "success", label: "成功" },
+                { value: "error", label: "失敗" },
+              ]}
+            />
+          </div>
+        </Demo>
+        <Demo label="頁面分頁（純文字＋圖示）" refs={["icon"]}>
+          <Tabs
+            ariaLabel="資源詳情"
+            value={page}
+            onChange={setPage}
+            options={[
+              { value: "overview", label: "總覽", icon: "info" },
+              { value: "monitoring", label: "監控", icon: "monitor_heart" },
+              { value: "specifications", label: "規格", icon: "tune" },
+              { value: "snapshots", label: "快照", icon: "photo_camera" },
+            ]}
+          />
+        </Demo>
+        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="AI 導師檢查 220px 側欄：compact 左右內距 8px、fullWidth 平分。放在有底線的標頭列裡時，頁面讓分頁 align-self: stretch，指示條剛好壓在底線上。">
+          <div className={styles.narrowBox}>
+            <Tabs
+              ariaLabel="側欄分頁"
+              compact
+              fullWidth
+              value={side}
+              onChange={setSide}
+              options={[
+                { value: "rubrics", label: "任務設定", icon: "description" },
+                { value: "review", label: "導師核查", icon: "rate_review" },
+              ]}
+            />
+          </div>
         </Demo>
       </div>
     </Section>

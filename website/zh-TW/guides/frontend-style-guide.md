@@ -355,9 +355,10 @@ import MIcon from "../components/MIcon";
 
 - 可點卡片的 hover 只給淡底（`background: var(--color-hover)`）或陰影／上浮，並保留 `transition` 淡入淡出；**不改邊框色**，藍框只留給「選中／目前」狀態（如分頁 active、流程目前步驟）
 - 「選中／目前」分兩層，不要混用：
-  - **導覽層級**（側欄、班級分頁、`SegmentedControl`）：實心主色＋白字。每一層只有一個，標籤短
+  - **導覽層級**（側欄、`SegmentedControl` 的選中段）：實心主色＋白字。每一層只有一個，標籤短
+  - **分頁**（`Tabs`）：選中的字下一條 2px 主色短指示條，不鋪底色、不圍框。刻意跟實心主色的分段切換長得不一樣，同一列並排也分得出「換內容」與「篩選」
   - **內容清單的目前項目**（主從版面左側清單裡、右側正在顯示的那一列，例如 AI 導師檢查的週次清單、申請審核清單、建班時選的教學環境）：`@include item-current;`，8% 主色淡底＋左側 3px 主色條，**不圍框**。淡底單獨跟 hover 的淺藍分不開，主色條才是記號；刻意比導覽輕一階，才不會跟同頁的主要按鈕搶。列本身是白底卡片時傳 `item-current(var(--color-surface))`
-- 兩三個字的短選項並排二選一／多選一，一律用 `SegmentedControl`（例如申請表的預約／立即、課堂監看切換機器），不要手寫一排按鈕
+- 兩三個字的短選項並排二選一／多選一，一律用 `SegmentedControl`（例如申請表的預約／立即、課堂監看切換機器），不要手寫一排按鈕；切換整塊內容的分頁改用 `Tabs`（見「分頁（Tabs）」）
 - 帶色票、說明或自己有框的選項鈕（外觀設定、機器範本可見範圍）：選中用 `@include option-selected;`，主色框＋8% 淡底＋主色字。這是「選項」，跟清單的目前項目不同，可以有框
 - 展開不是選中：展開的卡片只加深陰影（`var(--shadow-md)`），框色不變；只有一項、沒得選的資訊列不要掛選中樣式
 - 淡底不要用 `linear-gradient` 疊層：漸層無法 transition，hover 會瞬間跳色
@@ -593,7 +594,8 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 - 收起的內容放進「意思最近」的主欄：身分類（節點、環境、來源、VMID）進名稱欄，狀態類（IP、到期日、可見範圍）進狀態欄；光看值看不出是什麼的加欄名（「到期日 2026/12/31」）
 - 至少算到兩個寬度：1366 筆電（944px）不用捲；1440 開著 AI 助手（567px）收到只剩主要欄也放得下
 - 固定欄由 `table-base` 內建（`data-overflow="start|both"` 時才生效）。有自己底色的列（群組列、hover）用 `@include table-row-bg(色)` 設底色，固定欄才會跟同一列同色
-- 目前用在：我的資源、機器範本
+- 第一欄是勾選框時，在它的欄位設 `pinNext: true`：橫捲時勾選框和後面的名稱欄一起固定。表身要自己組（例如群組列和虛擬化的列各一個 tbody）時用 `DataTableShell`，收欄的 colgroup、min-width 與 context 由它處理
+- 目前用在：我的資源、資源管理、機器範本、GPU 管理、我的申請、AI API 金鑰與申請紀錄、AI 金鑰申請審核、AI 金鑰管理、AI 監控、課程環境範本管理、IP 管理、背景任務、稽核日誌、系統監控
 
 #### 規則五：資料多時依性質挑分頁、虛擬捲動或載入更多
 
@@ -605,6 +607,35 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 
 - 使用者自己的少量資料（自己的金鑰、機器）全部列出就好，次要的（已失效）摺疊起來
 - 分頁列一律用 `components/Pagination`，不要在頁面裡手抄；頁數文字照「共 N 筆 · 第 x / y 頁」
+
+### 分頁（Tabs）
+
+**切換整塊內容一律用 `components/Tabs`；篩選與選項用 `SegmentedControl`**，兩者不要互換：
+
+| 用途 | 元件 | 例子 |
+| --- | --- | --- |
+| 分頁：換一整塊內容（頁面分頁、卡片內分頁） | `Tabs` | 資源詳情、AI API、Gateway、帳號設定、課程內容、班級頁（已啟用）、AI 導師檢查側欄、AI 用量監控明細、資源監控警告／挖礦 |
+| 篩選：縮小同一份清單 | `SegmentedControl` | 各審核頁的狀態、資源管理、班級管理、背景任務、使用者回饋、儲存 |
+| 選項：同一份內容換呈現或表單裡的模式 | `SegmentedControl` | 時間區間、圖表指標、登入方式、申請模式、課堂監看切換機器 |
+
+```jsx
+<Tabs
+  ariaLabel={t("…tabsAriaLabel")}
+  value={tab}
+  onChange={setTab}
+  options={[
+    { value: "models", label: t("…tabModels"), icon: "model_training", badge: count, buttonProps: { "data-guide-tab": "…" } },
+    …
+  ]}
+/>
+```
+
+- 樣式：沒有外框軌道；選中的字下一條 2px 圓角主色短指示條（只跨內容、不拉滿整列，從中間展開），字變深色；hover 淡底。高 36px，跟按鈕、欄位、分段切換同一列對得齊；14px 字比分段切換的 12px 大一階，看得出層級比篩選高
+- `badge` 是數量徽章（0 也顯示、`null`／`undefined` 不畫），選中的分頁換主色淡底主色字；載入失敗時傳「—」
+- 放不下時自己橫向捲動（不顯示捲軸），頁面不用再包 `overflow-x`；`compact`（左右內距 8px）給 240px 以下的窄容器，`fullWidth` 撐滿並平分。頁面的 `className` 只管排版（`align-self` 之類），不要覆寫 `.tab`
+- 無障礙：`role="tablist"`／`"tab"`＋`aria-selected`；只有選中的分頁在 Tab 鍵順序裡，左右鍵（頭尾相接）、Home／End 移動並直接切換。導覽錨點用 `buttonProps` 掛 `data-guide-tab`，找目前分頁用 `[aria-selected="true"]`
+- 放在標頭列裡、列本身有底線時（AI 導師檢查側欄），讓分頁 `align-self: stretch` 撐滿列高，指示條剛好壓在底線上
+- 分頁右側可以放工具列（篩選＋搜尋）：分頁靠左、工具列靠右，放不下時工具列換到下一行（AI 用量監控明細）
 
 ### 清單工具列與批量操作（DataToolbar）
 
@@ -641,7 +672,8 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 - **批量審核（核准／拒絕）**用共用的 `components/BatchReviewDialog`：列出這次會處理的項目（最多 5 筆）＋一段共用的審核備註（選填，寫進每一筆）；`tone="reject"` 是紅色警告圖示＋危險鈕，`tone="approve"` 是主色圖示＋主要鈕。核准放一般動作、拒絕放 `BatchDivider` 後面。核准會佔用資源的（申請審核由後端挑節點並預留）`runBatch` 傳 `concurrency: 1` 一筆一筆送，失敗的保留勾選並把原因帶進提示
 - 沒有後端批量 API 時用 `utils/runBatch` 逐筆呼叫單筆 API（預設同時 4 筆，一筆失敗不影響其他筆）
 - 勾選中的列底色用 `@include row-selected;`（自己就是卡片的清單列傳 `var(--color-surface)`）
-- 導覽用的 `data-guide` 等屬性可以直接傳給 `DataToolbar`（掛在工具列外框），讓導覽步驟框住整條「篩選＋搜尋」
+- 導覽用的 `data-guide` 等屬性可以直接傳給 `DataToolbar`（掛在工具列外框），讓導覽步驟框住整條「篩選＋搜尋」；只想框住搜尋框時傳給 `ToolbarSearch`
+- **搜尋框**一律用 `ToolbarSearch`（36px，Esc 清除），不要手寫；需要明顯的清除鈕時加 `clearable`，有字時右側出現 ✕，清完游標留在框裡
 - **加了勾選欄要重算寬度**：清單列用 grid 時，一行排完或分兩行要看**容器寬度**（`container-type: inline-size`＋`@container`），不要看視窗——側邊欄出現（≥1024）後內容比 992 時還窄，用視窗切會在 1024～1180 之間撐出橫向捲動
 - 目前用在：資源管理、使用者管理（批量啟用／停用、加入／移出群組、刪除）、申請審核與 AI API 審核（批量核准／拒絕）、班級管理（批量封存並回收）、班級工作頁學生名單（批量移除）
 

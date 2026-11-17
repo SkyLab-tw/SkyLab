@@ -113,75 +113,10 @@
   }
 }
 
-/* 警告／挖礦事件頁籤：資料夾式——分頁本體是「頁」的形狀，選中的那頁
-   與下方卡片共用同一塊玻璃面，作用範圍一目瞭然，不會被誤讀成整頁篩選 */
+/* 警告／挖礦事件分頁：共用 Tabs 放在兩張卡片上方，兩個面板保持掛載 */
 .tabbedPanels {
   @include flex-column;
-  gap: 0;
-}
-
-.panelTabBar {
-  display: flex;
-  gap: $spacing-4;
-}
-
-/* 頁籤貼齊卡片左緣：左上角改直角，第一頁才能與卡片完全密合 */
-.tabbedPanels .card {
-  border-top-left-radius: 0;
-}
-
-.panelTab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px $spacing-24;
-  border: 1px solid var(--color-surface-glass-border);
-  border-bottom: 0;
-  border-radius: $radius-12 $radius-12 0 0;
-  background: color-mix(in srgb, var(--color-surface) 45%, transparent);
-  font-size: $font-size-14;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background $transition-base, color $transition-base;
-
-  &:hover {
-    color: var(--color-text);
-    background: color-mix(in srgb, var(--color-surface) 70%, transparent);
-  }
-}
-
-.panelTabActive {
-  position: relative;
-  z-index: 1;
-  /* 往下壓過卡片頂邊線，分頁與面板融為同一塊面 */
-  margin-bottom: -2px;
-  padding-bottom: 12px;
-  @include glass-surface($shadow: none);
-  border-bottom: 0;
-  color: var(--color-text-primary);
-  font-weight: $font-weight-500;
-
-  &:hover {
-    color: var(--color-text-primary);
-    background: var(--color-surface-glass);
-  }
-}
-
-.panelTabBadge {
-  min-width: 18px;
-  padding: 1px 6px;
-  border-radius: $radius-pill;
-  background: var(--color-hover);
-  color: var(--color-text-secondary);
-  font-size: $font-size-10;
-  font-weight: $font-weight-500;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.panelTabActive .panelTabBadge {
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  color: var(--color-primary);
+  gap: $spacing-8;
 }
 
 /* 未選中的面板隱藏但保持掛載：輪詢與角標筆數持續更新 */
@@ -382,29 +317,50 @@
   flex-shrink: 0;
 }
 
-/* 卡片內表格沒有 table-wrap，橫向卷動由 .tableScroll 提供 */
+/* 卡片內表格沒有 table-wrap，橫向卷動由 .tableScroll 提供（useTableFit 也量這一層） */
 .tableScroll {
   overflow-x: auto;
 }
 
+/* 節點用量、挖礦事件、系統健康任務、Top 5 共用：欄寬、min-width 與窄版收欄由各表的
+   *_FIT_COLUMNS（useTableFit）決定，fixed layout 才會照欄寬排 */
 .table {
   @include table-base;
-  min-width: 880px;
+  table-layout: fixed;
 }
 
-/* Top 5 表在半版寬的卡片內，min-width 取小值讓它卷動而非硬擠（#24 重排前的過渡） */
-/* Top 5 在半版寬的卡片內：min-width 撐出橫向卷動，欄位不互擠 */
-.topTable {
-  @include table-base;
-  min-width: 520px;
+/* 窄版收起的欄改畫在主欄（名稱、VMID）或狀態欄裡的小字行。
+   VMID、平均 CPU 這類等寬字的儲存格裡也用一般字型 */
+.foldedLine {
+  margin-top: 4px;
+  font-family: $font-family-base;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 自由文字（擁有者、最近錯誤）只留一行，全文在 title */
+.foldedLineTruncate {
+  @include text-truncate;
+}
+
+.foldedLabel {
+  margin-right: 4px;
+}
+
+/* 收進狀態欄的用量 ≥ 90%、最近錯誤：紅字，跟用量條與錯誤欄同色 */
+.foldedDanger {
+  color: var(--color-danger);
+}
+
+/* 欄寬固定後放不下就截斷的單行文字（Top 5 的名稱），全文在 title */
+.truncateCell {
+  display: block;
+  @include text-truncate;
 }
 
 .th {
   @include table-th;
-}
-
-.thWide {
-  width: 20%;
 }
 
 .tr {
@@ -431,21 +387,41 @@
 }
 
 .nodeCell {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: var(--color-text-secondary);
 
+  > :not(.nodeText) {
+    flex-shrink: 0;
+  }
+
   strong {
+    min-width: 0;
     color: var(--color-text-primary);
     font-weight: $font-weight-500;
+    @include text-truncate;
   }
+}
+
+/* 節點名稱＋連線名稱一行（放不下時連線名稱換行），收起的 VM／LXC 數接在下面 */
+.nodeText {
+  @include flex-column;
+  min-width: 0;
+}
+
+.nodeNameLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
 }
 
 .usageCell {
   @include flex-column;
   gap: 4px;
-  min-width: 120px;
 }
 
 .usageMeta {
@@ -487,18 +463,19 @@
 .badge_success { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
 .badge_danger { background: color-mix(in srgb, var(--color-danger)  12%, transparent); color: var(--color-danger); }
 
-.tdActions {
-  white-space: nowrap;
-
-  button + button {
-    margin-left: $spacing-8;
-  }
+/* 挖礦事件的停權／誤判解除：欄寬固定，英文／日文兩顆放不下同一行時換到下一行 */
+.incidentActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-8;
 }
 
+/* 存證快照名稱可能比欄寬長（等寬字），放不下就換行 */
 .snapCell {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  overflow-wrap: anywhere;
 }
 
 /* 挖礦事件的 VMID：連到資源詳情 */
@@ -514,12 +491,13 @@
   }
 }
 
-/* 挖礦事件的擁有者：姓名一行、email 一行 */
+/* 挖礦事件的擁有者：姓名一行、email 一行（長 email 換行，不撐出欄外） */
 .ownerCell {
   display: flex;
   flex-direction: column;
   gap: 2px;
   font-size: $font-size-12;
+  overflow-wrap: anywhere;
 }
 
 /* 結案備註（含後端附加的處置失敗原因）：狀態 badge 下方一行，過長截斷、滑鼠移上看全文 */
@@ -599,14 +577,12 @@
 }
 
 /* ── Top VMs ── */
+/* 依實際寬度排欄：每張至少 440px 才並排（收掉類型的表 450px 左右放得下），
+   不然上下排、一張佔滿寬。原本照視窗寬度（≥ 992px）就並排，開著 AI 助手時每張只剩約 275px，表格一定要橫捲 */
 .topGrid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
   gap: $spacing-16;
-
-  @include respond-to(lg) {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 /* ── 系統健康 ── */
@@ -681,27 +657,8 @@
   color: var(--color-text-primary);
 }
 
-/* 任務數固定、但狀態與錯誤訊息長度會變：固定欄寬避免每次輪詢表格跳動 */
-.healthTable {
-  table-layout: fixed;
-  min-width: 960px;
-}
-
-.healthColTask {
-  width: 240px;
-}
-
-.healthColStatus {
-  width: 110px;
-}
-
-.healthColTime {
-  width: 110px;
-}
-
-.healthColNum {
-  width: 90px;
-}
+/* 任務數固定、但狀態與錯誤訊息長度會變：欄寬固定（.table 的 fixed layout）避免每次輪詢表格跳動，
+   欄寬與窄版收欄在 SystemHealthCard.jsx 的 TASK_FIT_COLUMNS */
 
 /* 任務名稱為主、所屬排程為輔：名稱 13px 等寬字，排程 12px 淡字（原本排程字比名稱還大） */
 .healthTaskName {

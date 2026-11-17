@@ -26,7 +26,11 @@ import { TableFitContext, useTableFitContext } from "./TableFitContext";
  * 窄版收欄：傳 `fit`（hooks/useTableFit 的結果）時，`<colgroup>` 與 min-width 由 fit 的欄寬畫，
  * 收起的欄不畫表頭與儲存格；fit 也經 TableFitContext 交給列與儲存格（useTableFitContext）。
  * 收起的欄寫在 `data-folded`（空白分隔，SCSS 用 `[data-folded~="id"]`）；
- * 收到底仍放不下時標 `data-overflow="start|both"`，table-base 會固定第一欄（both 連最後一欄）。
+ * 收到底仍放不下時標 `data-overflow="start|both"`，table-base 會固定第一欄（both 連最後一欄）；
+ * 第一欄是勾選框（欄位設 pinNext）時另標 `data-pin-lead="2"`，連後面的名稱欄一起固定。
+ *
+ * 表身要自己組的頁面（例如兩個 tbody：群組列一個、虛擬化的列一個）用 `DataTableShell`：
+ * 它畫 <table>、收欄的 colgroup／min-width／data-* 屬性與 TableFitContext，表頭與表身由 children 給。
  */
 export default function DataTable({
   table,
@@ -49,15 +53,8 @@ export default function DataTable({
   /* 同 DataTableCells：rows 陣列只在 data 變時換，Compiler 依它快取的話，只改 meta／columns 時整段列不會重畫 */
   "use no memo";
   const bodyRows = rows ?? table.getRowModel().rows;
-  const content = (
-    <table
-      className={className}
-      style={fit ? { ...style, minWidth: fit.minWidth } : style}
-      data-overflow={fit?.overflow ?? undefined}
-      data-folded={fit?.foldedIds.length ? fit.foldedIds.join(" ") : undefined}
-      {...rest}
-    >
-      {fit ? <FitColgroup table={table} fit={fit} /> : colgroup}
+  return (
+    <DataTableShell table={table} fit={fit} className={className} style={style} colgroup={colgroup} {...rest}>
       {!hideHeader && <DataTableHead table={table} rowClassName={headerRowClassName} />}
       <tbody {...bodyProps}>
         {children}
@@ -71,6 +68,26 @@ export default function DataTable({
           )))}
         {after}
       </tbody>
+    </DataTableShell>
+  );
+}
+
+/** <table> 外框：收欄時畫 colgroup、min-width、data-* 屬性並提供 TableFitContext；沒傳 fit 就是一般的 <table> */
+export function DataTableShell({ table, fit = null, className, style, colgroup = null, children, ...rest }) {
+  "use no memo"; // fit 換了（收起的欄變了）整個外框要重畫
+  const pinLead = fit?.overflow && fit.pinLead > 1 ? fit.pinLead : undefined;
+  const fitStyle = fit && { ...style, minWidth: fit.minWidth, ...(pinLead ? { "--table-pin-offset": `${fit.pinOffset}px` } : null) };
+  const content = (
+    <table
+      className={className}
+      style={fit ? fitStyle : style}
+      data-overflow={fit?.overflow ?? undefined}
+      data-folded={fit?.foldedIds.length ? fit.foldedIds.join(" ") : undefined}
+      data-pin-lead={pinLead}
+      {...rest}
+    >
+      {fit ? <FitColgroup table={table} fit={fit} /> : colgroup}
+      {children}
     </table>
   );
   return fit ? <TableFitContext.Provider value={fit}>{content}</TableFitContext.Provider> : content;

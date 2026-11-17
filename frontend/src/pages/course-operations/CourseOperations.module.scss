@@ -2557,9 +2557,11 @@ button.heatAttentionChip {
   @include table-wrap;
 }
 
+/* 窄版收欄（useTableFit，樣式規範表格規則四）：欄寬與收合順序寫在 CourseTemplateManagementPage 的
+   ENV_FIT_COLUMNS，DataTable 依它畫 colgroup 與 min-width；這裡只留 fixed layout，照欄寬排 */
 .envTable {
   @include table-base;
-  min-width: 880px;
+  table-layout: fixed;
 }
 
 .envTable th {
@@ -2571,18 +2573,26 @@ button.heatAttentionChip {
   padding-block: 12px;
 }
 
+/* 整列點下去開啟編輯頁：游標與 hover 用 table-tr-clickable，
+   hover 底色經 table-row-bg 設在列上，窄版橫捲時固定的名稱欄跟同一列同色 */
 .envTable tbody tr {
   @include table-tr;
-  cursor: pointer;
-}
-
-.envTable tbody tr:hover {
-  background: var(--color-hover);
+  @include table-tr-clickable;
 }
 
 .envTable td strong {
   color: var(--color-text-primary);
   font-weight: $font-weight-500;
+}
+
+/* 環境名稱照常在空白與中文字之間換行；整串沒有空白、比欄寬還長時才在字中折行，不溢出到下一欄 */
+.envName {
+  overflow-wrap: break-word;
+}
+
+/* 收進名稱底下的機器數、資源合計、版本：每一項不從中間折開，只在項目之間換行 */
+.envFoldedItem {
+  white-space: nowrap;
 }
 
 .envTable td small {

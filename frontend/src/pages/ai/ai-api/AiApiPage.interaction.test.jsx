@@ -41,7 +41,8 @@ vi.mock("react-i18next", async (importOriginal) => ({
   ...await importOriginal(),
   useTranslation: () => ({ t: mocks.t }),
 }));
-vi.mock("../../../components/PageHeader/PageHeader", () => ({ default: () => null }));
+/* 頁首只留 children：「申請金鑰」「API 快速開始」在頁首右側 */
+vi.mock("../../../components/PageHeader/PageHeader", () => ({ default: ({ children }) => <div>{children}</div> }));
 vi.mock("../../../components/SegmentedControl/SegmentedControl", () => ({
   default: ({ options = [], value, onChange, ariaLabel }) => (
     <div aria-label={ariaLabel}>
@@ -376,8 +377,8 @@ describe("AI API 申請金鑰", () => {
     await setValue(dialog.querySelector("#ai-purpose"), "畢業專題串接聊天模型做問答");
     await act(async () => dialog.querySelector('[data-guide="ai-submit"]').click());
     expect(mocks.createRequest).toHaveBeenCalledWith({ purpose: "畢業專題串接聊天模型做問答", api_key_name: "專題", duration: "30d" });
-    const recordsTab = [...host.querySelectorAll("button")].find((button) => button.textContent === "AiApiPage.tabRecords");
-    expect(recordsTab.getAttribute("aria-pressed")).toBe("true");
+    const recordsTab = host.querySelector('[role="tab"][data-guide-tab="records"]');
+    expect(recordsTab.getAttribute("aria-selected")).toBe("true");
   });
 });
 

@@ -205,6 +205,28 @@
     right: 0;
     box-shadow: inset 1px 0 0 var(--color-divider), -6px 0 8px -6px color-mix(in srgb, var(--shadow-color) 22%, transparent);
   }
+
+  /* 第一欄是勾選框（data-pin-lead="2"）：後面的名稱欄一起固定，貼在勾選框右邊；
+     分隔線與陰影移到名稱欄右側，勾選框與名稱之間不畫線 */
+  &[data-overflow][data-pin-lead="2"] > * > tr > :nth-child(2) {
+    position: sticky;
+    z-index: 1;
+    left: var(--table-pin-offset, 0px);
+    background-color: var(--color-surface);
+    box-shadow: inset -1px 0 0 var(--color-divider), 6px 0 8px -6px color-mix(in srgb, var(--shadow-color) 22%, transparent);
+  }
+
+  &[data-overflow][data-pin-lead="2"] > thead > tr > :nth-child(2) {
+    background-image: linear-gradient(var(--color-hover), var(--color-hover));
+  }
+
+  &[data-overflow][data-pin-lead="2"] > tbody > tr > :nth-child(2) {
+    background-image: linear-gradient(var(--table-row-bg, transparent), var(--table-row-bg, transparent));
+  }
+
+  &[data-overflow][data-pin-lead="2"] #{$pinned} {
+    box-shadow: none;
+  }
 }
 
 /* 有自己底色的列（hover、群組列、示範列）：底色同時給固定欄用，橫捲時固定欄跟同一列同色 */
