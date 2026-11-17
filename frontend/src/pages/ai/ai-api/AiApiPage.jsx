@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import styles from "./AiApiPage.module.scss";
 import MIcon from "../../../components/MIcon";
+import Disclosure from "../../../components/Disclosure/Disclosure";
 import Modal from "../../../components/Modal/Modal";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
@@ -831,11 +832,7 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
       </section>
 
       {/* 出錯時才需要看，預設收合，不佔主流程的版面 */}
-      <details className={styles.docsErrors}>
-        <summary>
-          {t("AiApiPage.docsLimitsTitle")}
-          <MIcon name="expand_more" size={18} className={styles.docsErrorsChevron} />
-        </summary>
+      <Disclosure variant="inline" className={styles.docsErrors} label={t("AiApiPage.docsLimitsTitle")}>
         <div className={styles.docsErrorList}>
           <div><span className={styles.statusCode}>401</span><span>{t("AiApiPage.docsErr401")}</span></div>
           <div>
@@ -849,7 +846,7 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
           <div><span className={styles.statusCode}>413</span><span>{t("AiApiPage.docsErr413")}</span></div>
           <div><span className={styles.statusCode}>502</span><span>{t("AiApiPage.docsErr502")}</span></div>
         </div>
-      </details>
+      </Disclosure>
 
     </div>
   );

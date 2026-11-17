@@ -207,6 +207,7 @@
   "ClassSetupPage.goToStepBtn": "前往{{step}}",
   "ClassSetupPage.loadFailedTitle": "無法開啟這個班級",
   "ClassSetupPage.draftTitle": "班級草稿",
+  "ClassSetupPage.draftNameEmpty": "還沒填班級名稱",
   "ClassSetupPage.draftStudentsPending": "尚未加入",
   "ClassSetupPage.draftEstimateLabel": "預估機器",
   "ClassSetupPage.draftEstimateValue": "{{count}} 台",

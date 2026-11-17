@@ -7,6 +7,7 @@ import PasswordRules from "../../../components/PasswordRules/PasswordRules";
 import NumberInput from "../../../components/NumberInput/NumberInput";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 import Tabs from "../../../components/Tabs/Tabs";
+import Disclosure from "../../../components/Disclosure/Disclosure";
 import Switch from "../../../components/Switch/Switch";
 import Stepper from "../../../components/Stepper/Stepper";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
@@ -187,6 +188,26 @@ export function FormsSection() {
             <button type="button" className={styles.btnSecondary}>取消</button>
             <Switch checked={enabled} onChange={setEnabled} label="立即生效的開關" />
           </div>
+        </Demo>
+        <Demo label="行內收合（補充資訊）" refs={["components/Disclosure", "variant=\"inline\"", "className → font-size"]} note="只有文字＋向下箭頭、沒有框；字級跟著外框，平常淡色、滑過或展開變主色。執行證據、錯誤詳情、工具紀錄、限制與錯誤代碼在用。">
+          <Disclosure variant="inline" label="執行證據">
+            <p className={styles.hint}>stderr：connection refused（port 3306）</p>
+          </Disclosure>
+        </Demo>
+        <Demo label="收合列（進階設定）" refs={["components/Disclosure", "label", "icon?", "meta?", "bodyClassName"]} wide note="表單底部可以不填的設定收進共用收合列：白底細框、14px／500、右側淡色說明＋箭頭（展開轉半圈），內容接在列下方跟上方欄位對齊。不用瀏覽器原生 ▶ 三角形。建班精靈、首次設定精靈在用。">
+          <Disclosure icon="tune" label="進階設定" meta="選填" bodyClassName={styles.formGrid}>
+            <label className={styles.field}>
+              <span>學期</span>
+              <input defaultValue="115-1" />
+            </label>
+            <label className={styles.field}>
+              <span>提前開機</span>
+              <select defaultValue="10">
+                <option value="0">準時</option>
+                <option value="10">10 分鐘</option>
+              </select>
+            </label>
+          </Disclosure>
         </Demo>
         <Demo label="開關與勾選框" refs={["components/Switch", ".checkRow"]} note="一切換就送出 → Switch；按「儲存」才生效 → 勾選框。表格列裡只放開關本體，不寫「啟用」字樣，用 ariaLabel＋title。">
           <div className={styles.stack}>

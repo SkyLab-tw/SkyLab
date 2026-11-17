@@ -117,11 +117,17 @@
   @include form-control-invalid;
 }
 
+/* 起訖時間：兩格各需約 130px 才放得下「下午 01:10」＋時鐘圖示，半欄放不下時（卡片 640 以下）
+   「每週上課」「上課時間」各佔一整列（見下方 @container card）；格子本身仍可縮，不會撐出欄位 */
+/* 「至」佔的寬度＝欄位間距 16px：整列時第二格剛好對齊上方「結束日期」 */
 .timePair {
   display: grid;
-  grid-template-columns: 1fr 22px 1fr;
+  grid-template-columns: minmax(0, 1fr) $spacing-16 minmax(0, 1fr);
   align-items: center;
-  gap: 4px;
+}
+
+.timePair input {
+  min-width: 0;
 }
 
 .timePair i {
@@ -131,34 +137,15 @@
   text-align: center;
 }
 
-/* 玻璃卡內的區塊一律白底＋細框；淺藍只留給 hover */
+/* 進階設定：共用收合列（components/Disclosure）跨滿兩欄；展開的欄位接在列下方、跟上方欄位同樣間距 */
 .advanced {
   grid-column: 1 / -1;
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-}
-
-.advanced summary {
-  padding: 11px 13px;
-  color: var(--color-text-secondary);
-  font-size: $font-size-12;
-  font-weight: $font-weight-700;
-  cursor: pointer;
-  transition: background $transition-base;
-}
-
-.advanced summary:hover {
-  background: var(--color-hover);
 }
 
 .advancedGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: $spacing-16;
-  border-top: 1px solid var(--color-divider);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-16;
 }
 
 /* ── 第二步：學生名單 ── */
@@ -480,6 +467,10 @@
   .readyIconBusy>span {
     animation: none;
   }
+
+  .cardFooter {
+    transition: none;
+  }
 }
 
 .readiness>div:nth-child(2) {
@@ -686,10 +677,24 @@
   justify-content: space-between;
   gap: $spacing-16;
   padding: 12px $spacing-24;
-  border-top: 1px solid var(--color-divider);
+  /* 平常透明、跟卡片融成一塊；貼住畫面底部蓋著內容時（.cardFooterStuck）才換玻璃底＋分隔線 */
+  border-top: 1px solid transparent;
+  background: transparent;
+  transition: background $transition-base, border-color $transition-base;
+}
+
+.cardFooterStuck {
+  border-top-color: var(--color-divider);
   background: var(--color-surface-glass);
   -webkit-backdrop-filter: var(--glass-backdrop-filter);
   backdrop-filter: var(--glass-backdrop-filter);
+}
+
+/* 卡片最底下的 1px 哨兵（不佔高度）：看不到時表示按鈕列正貼著畫面底部 */
+.footerSentinel {
+  height: 1px;
+  margin-top: -1px;
+  pointer-events: none;
 }
 
 .cardFooterStatic {
@@ -859,10 +864,10 @@
   cursor: default;
 }
 
-/* 目前這一步：淡主色底標出來 */
-.draftList button[aria-current="step"],
-.draftList button[aria-current="step"]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+/* 目前這一步：清單目前項目（8% 淡底＋左側 3px 主色條）；只有淡底會跟 hover 分不清。
+   放在一般 hover 規則後面：兩條權重相同，靠順序讓目前這一步 hover 時是加深的 12% */
+.draftList button[aria-current="step"] {
+  @include item-current;
 }
 
 .draftList button>span:first-child {
@@ -988,6 +993,14 @@
 }
 
 /* ── 卡片變窄時（手機，或寬螢幕分兩欄後的內容欄）── */
+
+/* 卡片 640 以下半欄放不下起訖時間（每格要約 130px）：每週上課、上課時間各佔一整列，時間欄才看得到完整時間。
+   1366 筆電卡片約 647px 仍並排；954 寬（卡片約 610–620px）才換成整列 */
+@container card (max-width: 640px) {
+  .scheduleField {
+    grid-column: 1 / -1;
+  }
+}
 
 @container card (max-width: 700px) {
   .capacityFacts {

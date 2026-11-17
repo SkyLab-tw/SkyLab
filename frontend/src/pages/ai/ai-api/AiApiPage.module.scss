@@ -452,32 +452,11 @@
 }
 
 /* 常見錯誤：預設收合，出錯才點開 */
+/* 限制與錯誤代碼：共用行內收合（Disclosure inline），這裡只管上方分隔線與字級 */
 .docsErrors {
-  min-width: 0;
   padding-top: $spacing-16;
   border-top: 1px solid var(--color-divider);
-
-  summary {
-    display: flex;
-    align-items: center;
-    gap: $spacing-8;
-    color: var(--color-text-secondary);
-    font-size: $font-size-14;
-    font-weight: $font-weight-500;
-    cursor: pointer;
-    list-style: none;
-
-    &::-webkit-details-marker { display: none; }
-    &:hover { color: var(--color-text-primary); }
-    &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 4px; }
-  }
-
-  &[open] .docsErrorsChevron { transform: rotate(180deg); }
-}
-
-.docsErrorsChevron {
-  margin-left: auto;
-  transition: transform $transition-base;
+  font-size: $font-size-14;
 }
 
 /* HTTP 狀態碼：錯誤徽章（12% 淡底、不加框） */

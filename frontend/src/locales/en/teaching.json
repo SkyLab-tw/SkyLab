@@ -213,6 +213,7 @@
   "ClassSetupPage.goToStepBtn": "Go to {{step}}",
   "ClassSetupPage.loadFailedTitle": "Can't open this class",
   "ClassSetupPage.draftTitle": "Class draft",
+  "ClassSetupPage.draftNameEmpty": "No class name yet",
   "ClassSetupPage.draftStudentsPending": "None yet",
   "ClassSetupPage.draftEstimateLabel": "Estimated machines",
   "ClassSetupPage.draftEstimateValue": "{{count}}",

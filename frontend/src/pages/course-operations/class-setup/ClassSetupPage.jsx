@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import MIcon from "../../../components/MIcon";
+import Disclosure from "../../../components/Disclosure/Disclosure";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import Stepper from "../../../components/Stepper/Stepper";
 import EmptyState from "../../../components/EmptyState/EmptyState";
@@ -153,6 +154,19 @@ export default function ClassSetupPage() {
   const emailsRef = useRef(null);
   const fileRef = useRef(null);
   const classCache = useTeachingClassCacheUpdater();
+
+  /* 按鈕列貼在畫面底部、蓋著內容時才鋪玻璃底與分隔線；在卡片底部原位時透明，跟卡片融成一塊。
+     卡片最底下放 1px 哨兵：看得到＝按鈕列在原位；看不到＝按鈕列正貼著畫面底部 */
+  const [footerStuck, setFooterStuck] = useState(false);
+  const footerObserverRef = useRef(null);
+  const footerSentinelRef = useCallback((node) => {
+    footerObserverRef.current?.disconnect();
+    footerObserverRef.current = null;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setFooterStuck(!entry.isIntersecting));
+    observer.observe(node);
+    footerObserverRef.current = observer;
+  }, []);
 
   /* 班級草稿走 TanStack Query：進頁向伺服器拿最新的一份，回來後初始化表單一次；之後畫面上的班級只來自
      本頁寫入的回應，背景資料不會蓋掉打到一半的表單。第一步剛建好班級時網址才補上 classId，
@@ -483,7 +497,7 @@ export default function ClassSetupPage() {
       <MIcon name={draftOpen ? "expand_less" : "expand_more"} size={20} />
     </button>
     <div className={`${styles.draftBody} ${draftOpen ? styles.draftBodyOpen : ""}`}>
-      <div className={styles.draftHeading}><strong>{t("ClassSetupPage.draftTitle")}</strong><small>{item?.name || t("ClassSetupPage.notCreatedYet")}</small></div>
+      <div className={styles.draftHeading}><strong>{t("ClassSetupPage.draftTitle")}</strong><small>{item?.name || form.name.trim() || t("ClassSetupPage.draftNameEmpty")}</small></div>
       <ul className={styles.draftList}>
         {draftRows.map(({ step: number, value }) => {
           const done = doneSteps[number - 1];
@@ -502,7 +516,7 @@ export default function ClassSetupPage() {
   </aside>;
 
   // 每一步都是同一張卡片：標題、內容、底部按鈕列。按鈕列在內容比畫面長時會貼住畫面底部
-  const footer = <footer className={`${styles.cardFooter} ${step === 5 ? styles.cardFooterStatic : ""}`}>
+  const footer = <footer className={`${styles.cardFooter} ${step === 5 ? styles.cardFooterStatic : footerStuck ? styles.cardFooterStuck : ""}`}>
     <button type="button" className={`${styles.btnSecondary} ${styles.footerPrev} ${step === 1 ? styles.keepSpace : ""}`} disabled={busy} onClick={() => switchStep(step - 1)}>{t("ClassSetupPage.prevStepBtn")}</button>
     <div className={styles.footerEnd}>
       {step === 3 && !templateId && <em className={styles.footerHint}><MIcon name="info" size={16} />{templates.length === 0 ? t("ClassSetupPage.needCreateTemplateHint") : t("ClassSetupPage.selectTemplateHint")}</em>}
@@ -538,9 +552,9 @@ export default function ClassSetupPage() {
             <label className={styles.full}><span>{t("ClassSetupPage.fieldLocation")}</span><input value={form.location} onChange={(event) => updateForm("location", event.target.value)} placeholder={t("ClassSetupPage.locationPlaceholder")} /></label>
             <label><span>{t("ClassSetupPage.fieldStartDate")}</span><input type="date" value={form.startDate} onChange={(event) => updateForm("startDate", event.target.value)} /></label>
             <label><span>{t("ClassSetupPage.fieldEndDate")}</span><input type="date" value={form.endDate} onChange={(event) => updateForm("endDate", event.target.value)} /></label>
-            <label><span>{t("ClassSetupPage.fieldWeekday")}</span><select value={form.weekday} onChange={(event) => updateForm("weekday", Number(event.target.value))}>{WEEKDAY_FULL_KEYS.map((labelKey, index) => <option key={labelKey} value={index}>{t(labelKey)}</option>)}</select></label>
-            <label><span>{t("ClassSetupPage.fieldClassTime")}</span><div className={styles.timePair}><input type="time" value={form.startTime} onChange={(event) => updateForm("startTime", event.target.value)} /><i>{t("ClassSetupPage.timeRangeSeparator")}</i><input type="time" value={form.endTime} onChange={(event) => updateForm("endTime", event.target.value)} /></div></label>
-            <details className={styles.advanced} data-guide="class-setup-advanced"><summary>{t("ClassSetupPage.advancedSettings")}</summary><div className={styles.advancedGrid}><label><span>{t("ClassSetupPage.fieldTerm")}</span><input value={form.term} onChange={(event) => updateForm("term", event.target.value)} /></label><label><span>{t("ClassSetupPage.fieldBootLead")}</span><select value={form.bootLeadMinutes} onChange={(event) => updateForm("bootLeadMinutes", Number(event.target.value))}>{BOOT_LEAD_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.bootLeadOnTime") : t("ClassSetupPage.bootLeadMinutesOption", { minutes })}</option>)}</select></label><label><span>{t("ClassSetupPage.fieldShutdownGrace")}</span><select value={form.shutdownGraceMinutes} onChange={(event) => updateForm("shutdownGraceMinutes", Number(event.target.value))}>{SHUTDOWN_GRACE_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.shutdownGraceImmediate") : t("ClassSetupPage.shutdownGraceMinutesOption", { minutes })}</option>)}</select></label></div></details>
+            <label className={styles.scheduleField}><span>{t("ClassSetupPage.fieldWeekday")}</span><select value={form.weekday} onChange={(event) => updateForm("weekday", Number(event.target.value))}>{WEEKDAY_FULL_KEYS.map((labelKey, index) => <option key={labelKey} value={index}>{t(labelKey)}</option>)}</select></label>
+            <label className={styles.scheduleField}><span>{t("ClassSetupPage.fieldClassTime")}</span><div className={styles.timePair}><input type="time" value={form.startTime} onChange={(event) => updateForm("startTime", event.target.value)} /><i>{t("ClassSetupPage.timeRangeSeparator")}</i><input type="time" value={form.endTime} onChange={(event) => updateForm("endTime", event.target.value)} /></div></label>
+            <Disclosure className={styles.advanced} bodyClassName={styles.advancedGrid} data-guide="class-setup-advanced" icon="tune" label={t("ClassSetupPage.advancedSettings")}><label><span>{t("ClassSetupPage.fieldTerm")}</span><input value={form.term} onChange={(event) => updateForm("term", event.target.value)} /></label><label><span>{t("ClassSetupPage.fieldBootLead")}</span><select value={form.bootLeadMinutes} onChange={(event) => updateForm("bootLeadMinutes", Number(event.target.value))}>{BOOT_LEAD_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.bootLeadOnTime") : t("ClassSetupPage.bootLeadMinutesOption", { minutes })}</option>)}</select></label><label><span>{t("ClassSetupPage.fieldShutdownGrace")}</span><select value={form.shutdownGraceMinutes} onChange={(event) => updateForm("shutdownGraceMinutes", Number(event.target.value))}>{SHUTDOWN_GRACE_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.shutdownGraceImmediate") : t("ClassSetupPage.shutdownGraceMinutesOption", { minutes })}</option>)}</select></label></Disclosure>
           </div>
         </>}
 
@@ -662,6 +676,7 @@ export default function ClassSetupPage() {
         </>}
 
         {footer}
+        <div ref={footerSentinelRef} className={styles.footerSentinel} aria-hidden="true" />
       </section>
 
       {step < 5 && draftPanel}

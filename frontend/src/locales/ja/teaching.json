@@ -207,6 +207,7 @@
   "ClassSetupPage.goToStepBtn": "{{step}}へ",
   "ClassSetupPage.loadFailedTitle": "このクラスを開けません",
   "ClassSetupPage.draftTitle": "クラスの下書き",
+  "ClassSetupPage.draftNameEmpty": "クラス名はまだ未入力",
   "ClassSetupPage.draftStudentsPending": "未追加",
   "ClassSetupPage.draftEstimateLabel": "見込み台数",
   "ClassSetupPage.draftEstimateValue": "{{count}} 台",
