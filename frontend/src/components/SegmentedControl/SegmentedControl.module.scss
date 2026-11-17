@@ -3,6 +3,13 @@
 /* 分段切換器：外框膠囊 + 選中段以主色填滿。
    高度固定 36px，跟按鈕（btn-*）、輸入框（form-control）同高，同一列才對得齊；
    各段撐滿內框（36 − 內距 3×2 − 框 1×2 = 28px），文字垂直置中，有沒有徽章都一樣高 */
+/* 寬度跟著內容走：放進直排 flex／grid 容器時，子層會被轉成區塊並拉滿容器寬，軌道後面空出一大截。
+   用 :where 把權重降到 0，頁面 className 要撐滿（width: 100%、flex: 1）照樣蓋得過；要撐滿請優先用 fullWidth。
+   段數多、放不下時 fit-content 等於內容寬，再由頁面的 max-width: 100% + overflow-x: auto 橫向捲動 */
+:where(.segment) {
+  width: fit-content;
+}
+
 .segment {
   box-sizing: border-box;
   display: inline-flex;
