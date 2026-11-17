@@ -61,6 +61,7 @@ from app.services.teaching import (
     class_status_service,
 )
 from app.services.user import roster_csv, user_group_service
+from app.services.vm import pending_capacity
 
 router = APIRouter(prefix="/teaching-classes", tags=["teaching-classes"])
 
@@ -944,6 +945,7 @@ def capacity_preview(
         nodes=nodes,
         students=students,
         check_cluster=True,
+        until=pending_capacity.class_end_at(item),
     )
 
 

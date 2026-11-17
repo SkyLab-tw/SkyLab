@@ -164,6 +164,10 @@ def _fake_spec_proxmox(
         list_all_resources=lambda: [],
     )
     monkeypatch.setattr(spec_change_service, "proxmox_service", fake)
+    # 節點容量另有 tests/services/test_spec_change_node_capacity.py 測；這裡假設放得下
+    monkeypatch.setattr(
+        spec_change_service, "_node_capacity_issues", lambda *_a, **_k: []
+    )
     return fake
 
 

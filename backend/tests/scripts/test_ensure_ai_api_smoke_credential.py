@@ -523,3 +523,27 @@ def test_workflow_cleans_up_even_after_failed_or_cancelled_smoke() -> None:
         "scripts.ensure_ai_api_smoke_credential --cleanup"
     )
     assert not cleanup_step.get("continue-on-error", False)
+
+
+def test_workflow_ai_model_smoke_is_opt_in_and_bounded() -> None:
+    """AI 模型不是主系統：預設不跑，跑的時候也有上限，卡住的模型拖不垮部署。"""
+    workflow_path = (
+        Path(__file__).resolve().parents[3] / ".github/workflows/deploy-pve-test.yml"
+    )
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    # PyYAML 把沒加引號的 on 讀成 True
+    triggers = workflow.get("on", workflow.get(True))
+    toggle = triggers["workflow_dispatch"]["inputs"]["ai_model_smoke"]
+    assert toggle["type"] == "boolean"
+    assert toggle["default"] is False
+
+    steps = workflow["jobs"]["deploy"]["steps"]
+    smoke_step = next(step for step in steps if step.get("id") == "ai_api_smoke")
+    assert smoke_step["if"] == "${{ inputs.ai_model_smoke }}"
+    assert 0 < smoke_step["timeout-minutes"] <= 10
+    assert int(smoke_step["env"]["AI_API_SMOKE_TIMEOUT"]) <= 60
+
+    # 主系統的健康檢查不等 LiteLLM，每次 curl 都有上限
+    health_step = next(step for step in steps if step.get("name") == "Smoke test")
+    assert "4000" not in health_step["run"]
+    assert "--max-time" in health_step["run"]

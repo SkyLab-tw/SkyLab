@@ -133,7 +133,18 @@ For the darker hover state of destructive actions use `--color-danger-dark` (`#b
 
 #### The standard way to write a status badge
 
-The pill shape and text come from `@include badge-base;` (inline-flex, pill radius, 12px / 500, no wrapping); add the padding and one of these colour pairs:
+New code always uses the shared `components/StatusBadge` component; do not copy the tone classes into page SCSS again:
+
+```jsx
+<StatusBadge tone="success" icon="check_circle">Passed</StatusBadge>
+```
+
+- `tone`: `success` / `danger` / `info` / `pending` / `muted`, plus `primary` (for non-status marks in the primary colour, such as "Teacher replied").
+- `icon` is optional and sits before the text; leave it out when a status icon with the same meaning is already next to it (such as the tick at the start of a row, or the icon in a checkpoint header).
+- `className` is for placement only (grid column, alignment); do not override colours with it.
+- The same status must look the same on every page: the teacher side of the AI tutor check (tutor review) and the student side (week page, course page) share one set of tones and icons, e.g. "Waiting for teacher" is `pending` + `person_search` on both sides.
+
+Older pages that have not moved to the component yet still use the hand-written form below (the pill shape and text come from `@include badge-base;`: inline-flex, pill radius, 12px / 500, no wrapping; add the padding and one of these colour pairs); they will be migrated in batches:
 
 ```scss
 .badge_success { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
@@ -235,6 +246,7 @@ $z-ai-assistant: 2000   $z-screen-dialog: 2100   // see z-index layers
 @include glass-surface($shadow: var(--shadow-sm));    // different shadow
 @include glass-surface($shadow: none);                // no box-shadow emitted
 @include glass-surface(8px, 1.2);                     // fixed filter parameters (ignores style switching; special cases only)
+@include popover-glass;                               // popups from the sidebar: glass-surface + shadow-lg, heavier on liquid / dark liquid
 ```
 
 The backdrop-filter of a glass surface always goes through `var(--glass-backdrop-filter)`
@@ -341,6 +353,12 @@ The standard form:
 ```
 
 - A clickable card's hover only gets a light tint (`background: var(--color-hover)`) or a shadow / lift, with a `transition` for fade-in and fade-out; **do not change the border colour** — a blue border is reserved for the "selected / current" state (such as an active tab or the current step of a flow)
+- "Selected / current" comes in two tiers; do not mix them:
+  - **Navigation** (sidebar, class tabs, `SegmentedControl`): solid primary with white text. One per level, short labels
+  - **Current item of a content list** (the row in a master–detail list whose details are shown on the right, such as the week list in AI Check): `@include item-current;` — an 8% primary tint plus a 3px primary bar on the left, **no border**. The tint alone is indistinguishable from the hover tint, so the bar is the marker; it is deliberately one step lighter than navigation so it does not compete with the page's primary button. Covers the AI Check week list, the request review list and the environment picked when setting up a class; when the row itself is a white card pass `item-current(var(--color-surface))`
+- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons
+- Option buttons that carry a swatch, a description or their own border (appearance settings, template visibility): the selected one uses `@include option-selected;` — primary border, 8% tint, primary text. These are options, not the current item of a list, so a border is fine
+- Expanded is not selected: an expanded card only gets a deeper shadow (`var(--shadow-md)`) and keeps its border colour; an info row that is the only item and cannot be chosen gets no selected style
 - Do not build the tint with a `linear-gradient` layer: gradients cannot transition, so the hover colour would jump instantly
 - Content blocks inside a glass card (info fields, note boxes, `pre` blocks for code / logs / keys, list rows, stat cells) always use `background: var(--color-surface)` (white) plus `1px solid var(--color-border)`; do not fill them with primary-tinted light blues such as `--color-hover` or `--color-bg-base`. Those follow the primary colour, so when the user changes the background colour they blur into the glass that lets the background through. Light blue is reserved for hover / selected states, buttons, badges and callout boxes
 - A warning notice (in a dialog or card, saying what will happen when you press the button — the machine reboots, unsaved work is lost) uses `@include warn-notice;`: white background + `1px solid var(--color-border)`, **red only on the `warning` icon**, with the text in the normal colour. Orange is reserved for pending/awaiting-review and is never used for warnings; don't add a red tint or a red border either, so the notice doesn't outshout the primary button next to it. Markup: `<p><MIcon name="warning" size={16} /><span>text</span></p>`
@@ -377,6 +395,7 @@ const presence = useDialogPresence(show);
 - Height: a `Modal` card is at most `90vh` tall; the screen dialogs (VNC / terminal console, classroom watch) fix their own height at `88vh`
 - Fullscreen: the dialog that can go fullscreen styles the `:fullscreen` pseudo-class with `max-width: 100%; height: 100%; border-radius: 0` (see `ConsoleDialog.module.scss`)
 - Backdrop: `var(--color-overlay)` with `backdrop-filter: blur(4px)` at `z-index: 300`, portalled to `document.body`: when an ancestor has `backdrop-filter` / `transform`, `position: fixed` gets trapped inside that layer and cannot cover the whole screen. While the AI assistant panel is open the backdrop leaves the panel's width free (`dialog-overlay-avoid-ai`) and centres the dialog in the remaining space
+- The AI assistant sits beside the page at ≥1440 and overlays it below 1440. A page with its own chat column (such as the check assistant on the AI tutor check page) calls the layout context's `setAssistantOverlay(true)` while mounted and resets it on unmount: the assistant then opens as an overlay instead of squeezing the page or putting two chat inputs side by side
 - Card shadow: the compact card uses the default `glass-surface` shadow; the `closeButton` layout uses `var(--shadow-lg)` so it stands out more against the backdrop
 - Destructive confirmations pass `role="alertdialog"` (`useConfirm` does this)
 
@@ -419,7 +438,7 @@ Buttons always use the button mixin family (six variants) from `_mixins.scss`; *
 - Page-specific differences (width, margin, grid placement) go after the `@include`; if you want something shorter or smaller, first ask whether it is really needed
 - Existing "modifier class" families on some pages (such as `.actionBtn.actionBtnDanger` in table rows) keep the base + modifier form,
   but a danger modifier **must show red text before hover**, and its hover must also include `:not(:disabled)`
-- Danger items inside dropdown menus (PowerMenu, the ⋯ menu in page headers) are menu styles and are not among these six variants
+- Danger items inside dropdown menus (PowerMenu, the ⋮ ActionMenu in page headers) are menu styles and are not among these six variants
 
 #### Chat panels (AI assistant, checklist assistant)
 
@@ -583,8 +602,13 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 ### Dropdown menus
 
 - Menus that float over lists are portalled to `document.body` with `position: fixed` and positioned by `hooks/useAnchoredMenu`: it follows the anchor button on scroll and resize, opens downward or upward depending on the space left, closes when the anchor scrolls out of view, and closes on an outside click or Esc. Used by `PowerMenu`, the port suggestions in `ConnectionDialog`, and menus on the AI API and templates pages
-- Give the menu an opaque `var(--color-surface)` background, not `glass-surface`: list rows underneath would show through
+- Give the menu an opaque `var(--color-surface)` background, not `glass-surface`: list rows underneath would show through. The one exception is popups that extend out of the sidebar (below): they use `popover-glass`, the same glass as the sidebar, so they change with the interface style (solid on white / black, see-through on glass / liquid)
 - The close animation uses `useDialogPresence(open, 130)` + a CSS `transition`, not `onAnimationEnd`
+- Keyboard handling for these menus (focus on open, arrow keys, Esc / Tab returning focus to the trigger) is shared through `hooks/useMenuKeyboard`; `ActionMenu`, `ListboxPopover` and `PowerMenu` all use it, so new menus should too instead of writing their own key handlers
+- To pick one item from a list where each item needs a second line (status, date), use `components/ListboxPopover`, e.g. the week switcher on the narrow AI tutor check layout. The trigger carries `aria-haspopup="listbox"` and `aria-expanded`, and the arrow keys open it. On open, focus lands on the selected item, scrolled to the middle; arrow keys / Home / End move, Enter picks, and Esc or Tab closes and returns focus to the trigger
+- For long scrollable lists, pass `maxHeight` to `useAnchoredMenu`: when there is not enough room below, the list shrinks to the space left instead of being pushed up over its trigger
+- Popups from the bottom of the sidebar (language, account, background tasks) pass `placement="side"`: they open beside the sidebar's outer edge with their bottom aligned to the trigger, in the same place whether the sidebar is expanded or collapsed. The language menu is a `ListboxPopover`, the account menu an `ActionMenu` with `header` (avatar, name), and the background-tasks panel uses `useAnchoredMenu` directly. All three pass `glass` (or include `popover-glass`) to keep the sidebar's glass
+- "More actions" menus use `components/ActionMenu`; the trigger is always the vertical ⋮ (`more_vert`) with `aria-haspopup="menu"` and `aria-expanded`. On open, focus lands on the first enabled item; arrow keys wrap, Home / End jump, and Esc or Tab closes and returns focus to the trigger. Esc is marked as handled, so other Esc listeners on the page do not fire too. Put destructive items last with `separatorBefore` and mark them `danger` instead of forcing the color with `!important`. Non-interactive context above the items (the account menu's avatar and name) goes in `header`, which gets a divider below it
 
 ### Stepper
 

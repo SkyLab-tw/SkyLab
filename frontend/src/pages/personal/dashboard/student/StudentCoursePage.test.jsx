@@ -141,6 +141,30 @@ it("checks a week off in place without reloading the course", async () => {
   expect(host.querySelector('[data-guide="home-tasks"] input[type="checkbox"]').checked).toBe(true);
 });
 
+it("marks only the items that wait for the teacher, not every AI-checkable item", async () => {
+  courses.listPaths.mockResolvedValue([{ id: "path-1", title: "Linux course" }]);
+  courses.getAiAssignments.mockResolvedValue([{
+    id: "assignment-1", title: "Server setup", teaching_class_week_id: null,
+    items: [
+      { id: "a", title: "Install nginx", detectable: "auto" },
+      { id: "b", title: "Harden SSH", detectable: "auto" },
+      { id: "c", title: "Explain the firewall rules", detectable: "manual" },
+    ],
+    completion: { completed: false },
+  }]);
+  courses.getWeeklyTasks.mockResolvedValue([]);
+  await render("/courses/path-1");
+
+  const toggle = [...host.querySelectorAll("button")].find((button) => button.getAttribute("aria-expanded") === "false");
+  await act(async () => toggle.click());
+  const items = [...host.querySelectorAll('[class*="aiRequirementItem"]')];
+  expect(items).toHaveLength(3);
+  // AI 能直接檢查是預設，不掛徽章；只有要等老師確認的那一項標出來
+  expect(items.map((item) => item.querySelector('[class*="aiCheckBadge"]')?.textContent ?? null)).toEqual([
+    null, null, "how_to_regStudentCoursePage.detectableManual",
+  ]);
+});
+
 it("shows the guide demo course without calling the course APIs", async () => {
   await render("/courses/demo");
   expect(courses.listPaths).not.toHaveBeenCalled();

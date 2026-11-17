@@ -6,11 +6,12 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { notifyManager } from "@tanstack/react-query";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import AiJudgePanel, { JUDGE_COLUMN_WIDTHS, readStoredColumnWidths } from "./AiJudgePanel";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import AiJudgePanel, { JUDGE_COLUMN_WIDTHS, JUDGE_SIDE_BY_SIDE_MIN_WIDTH, readStoredColumnWidths } from "./AiJudgePanel";
 import { AiJudgeService } from "../../../services/aiJudge";
 import { ConfirmProvider } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { UnsavedChangesProvider } from "../../../contexts/UnsavedChangesContext";
+import { LayoutContext } from "../../../layout/layoutContext";
 import { createTestQueryClient, withQueryClient } from "../../../queries/testing";
 import i18n from "../../../i18n";
 
@@ -43,7 +44,7 @@ function CurrentLocation() {
   return <output data-test-location="">{search}</output>;
 }
 
-async function mountPanel({ initialEntry = "/?week=week-2", weeks = WEEKS } = {}) {
+async function mountPanel({ initialEntry = "/?week=week-2", weeks = WEEKS, setAssistantOverlay = () => {} } = {}) {
   Element.prototype.scrollIntoView = vi.fn();
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -57,11 +58,13 @@ async function mountPanel({ initialEntry = "/?week=week-2", weeks = WEEKS } = {}
       root.render(withQueryClient(
         <MemoryRouter initialEntries={[initialEntry]}>
           <CurrentLocation />
-          <ConfirmProvider>
-            <UnsavedChangesProvider>
-              <AiJudgePanel classId="class-1" members={[]} weeks={nextWeeks} />
-            </UnsavedChangesProvider>
-          </ConfirmProvider>
+          <LayoutContext.Provider value={{ setAssistantOverlay, registerSurface: () => {} }}>
+            <ConfirmProvider>
+              <UnsavedChangesProvider>
+                <AiJudgePanel classId="class-1" members={[]} weeks={nextWeeks} />
+              </UnsavedChangesProvider>
+            </ConfirmProvider>
+          </LayoutContext.Provider>
         </MemoryRouter>,
         queryClient,
       ));
@@ -149,10 +152,52 @@ test("側邊欄依序列出每一週，標出哪幾週已建立檢查", async ()
   expect(rows[0].textContent).toContain(tr("weekHasCheck"));
   expect(rows[1].textContent).toContain(tr("weekNoTopic"));
   expect(rows[1].textContent).toContain(tr("weekNoCheck"));
-  // 沒有檢查的週次沒有「⋯」選單
+  // 沒有檢查的週次沒有「⋮」選單
   expect(rows[1].querySelector('[aria-haspopup="menu"]')).toBeNull();
   // 網址指定第 2 週，而第 2 週還沒有檢查：顯示建立按鈕，不會自動建立
   expect(container.textContent).toContain(tr("emptyWeekTitle", { week: 2 }));
+});
+
+test("週次的「⋮」用共用動作選單：焦點落第一項，刪除放最後並隔開，Esc 把焦點還給「⋮」", async () => {
+  vi.spyOn(AiJudgeService, "listSessions").mockResolvedValue([
+    { id: "session-1", title: "Linux 權限", status: "active", teaching_class_week_id: "week-1" },
+  ]);
+  vi.spyOn(AiJudgeService, "listFiles").mockResolvedValue([]);
+  vi.spyOn(AiJudgeService, "listSessionMessages").mockResolvedValue([]);
+
+  const { container } = await mountPanel();
+  const trigger = container.querySelector('[data-guide="ai-judge-sessions"] [aria-haspopup="menu"]');
+  await act(async () => { trigger.click(); });
+
+  const menu = document.getElementById(trigger.getAttribute("aria-controls"));
+  const items = [...menu.querySelectorAll('[role="menuitem"]')];
+  expect(items.map((item) => item.textContent)).toEqual([
+    expect.stringContaining(tr("moveWeekBtn")),
+    expect.stringContaining(tr("copyToWeekBtn")),
+    expect.stringContaining(tr("opDelete")),
+  ]);
+  expect(items[2].previousElementSibling.getAttribute("role")).toBe("separator");
+  expect(document.activeElement).toBe(items[0]);
+
+  await act(async () => {
+    document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  });
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(document.activeElement).toBe(trigger);
+});
+
+test("這頁有自己的檢查助理：掛上時請 AI 助手改用覆蓋層，離開時還原", async () => {
+  vi.spyOn(AiJudgeService, "listSessions").mockResolvedValue([]);
+  vi.spyOn(AiJudgeService, "listFiles").mockResolvedValue([]);
+  vi.spyOn(AiJudgeService, "listSessionMessages").mockResolvedValue([]);
+  const setAssistantOverlay = vi.fn();
+
+  await mountPanel({ setAssistantOverlay });
+  expect(setAssistantOverlay).toHaveBeenLastCalledWith(true);
+
+  await cleanup();
+  cleanup = null;
+  expect(setAssistantOverlay).toHaveBeenLastCalledWith(false);
 });
 
 test("按「建立這週的檢查」才建立，之後直接進入那週的任務設定", async () => {
@@ -234,4 +279,64 @@ test("在導師核查換週次時停在導師核查，不會跳回任務設定",
   expect(container.querySelector('[data-guide="ai-judge-review"]')).toBeTruthy();
   expect(selectedWeek(container)?.textContent).toContain(tr("weekRowTitle", { week: 1 }));
   expect(locationParams(container).get("week")).toBe("week-1");
+});
+
+describe("工作區寬不到並排門檻（窄版）", () => {
+  beforeEach(() => {
+    // happy-dom 沒有版面：把所有元素量成 900 寬，面板就會判定成窄版
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 900, bottom: 60, width: JUDGE_SIDE_BY_SIDE_MIN_WIDTH - 200, height: 60, toJSON() {},
+    });
+  });
+
+  const switcher = (container) => container.querySelector('[data-guide="ai-judge-sessions"] [aria-haspopup="listbox"]');
+  const stepButton = (container, key) => container.querySelector(`[data-guide="ai-judge-sessions"] [aria-label="${tr(key)}"]`);
+
+  test("不列整串週次，只放目前這週；左右箭頭換相鄰的週，到頭尾就停用", async () => {
+    vi.spyOn(AiJudgeService, "listSessions").mockResolvedValue([
+      { id: "session-2", title: "第 2 週檢查", status: "active", teaching_class_week_id: "week-2" },
+    ]);
+    vi.spyOn(AiJudgeService, "listFiles").mockResolvedValue([]);
+    vi.spyOn(AiJudgeService, "listSessionMessages").mockResolvedValue([]);
+
+    const { container } = await mountPanel({ initialEntry: "/?week=week-2", weeks: THREE_WEEKS });
+    expect(container.querySelector('[data-guide="ai-judge-sessions"] [role="list"]')).toBeNull();
+    expect(switcher(container).textContent).toContain(tr("weekRowTitle", { week: 2 }));
+    expect(switcher(container).textContent).toContain(tr("weekHasCheck"));
+    // 這週有檢查：⋮ 跟清單列同一顆
+    expect(container.querySelector('[data-guide="ai-judge-sessions"] [aria-haspopup="menu"]')).toBeTruthy();
+
+    await act(async () => { stepButton(container, "nextWeek").click(); });
+    expect(locationParams(container).get("week")).toBe("week-3");
+    expect(switcher(container).textContent).toContain(tr("weekRowTitle", { week: 3 }));
+    expect(stepButton(container, "nextWeek").disabled).toBe(true);
+    expect(container.querySelector('[data-guide="ai-judge-sessions"] [aria-haspopup="menu"]')).toBeNull();
+
+    await act(async () => { stepButton(container, "prevWeek").click(); });
+    await act(async () => { stepButton(container, "prevWeek").click(); });
+    expect(locationParams(container).get("week")).toBe("week-1");
+    expect(stepButton(container, "prevWeek").disabled).toBe(true);
+  });
+
+  test("點目前這週開換週清單，選另一週就切過去、清單收起", async () => {
+    vi.spyOn(AiJudgeService, "listSessions").mockResolvedValue([]);
+    const { container } = await mountPanel({ initialEntry: "/?week=week-1", weeks: THREE_WEEKS });
+
+    await act(async () => { switcher(container).click(); });
+    expect(switcher(container).getAttribute("aria-expanded")).toBe("true");
+    const listbox = document.querySelector('[role="listbox"]');
+    expect(listbox.getAttribute("aria-label")).toBe(tr("weekSwitcherAria"));
+    const options = [...listbox.querySelectorAll('[role="option"]')];
+    expect(options).toHaveLength(3);
+    expect(options[0].getAttribute("aria-selected")).toBe("true");
+    expect(options[2].textContent).toContain("網站部署");
+
+    await act(async () => {
+      options[2].click();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    expect(locationParams(container).get("week")).toBe("week-3");
+    expect(switcher(container).getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+  });
 });

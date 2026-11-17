@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
+import ActionMenu from "../../../components/ActionMenu/ActionMenu";
+import ListboxPopover from "../../../components/ListboxPopover/ListboxPopover";
 import MIcon from "../../../components/MIcon";
 import PasswordInput from "../../../components/PasswordInput/PasswordInput";
 import PasswordRules from "../../../components/PasswordRules/PasswordRules";
@@ -8,6 +10,8 @@ import Switch from "../../../components/Switch/Switch";
 import Stepper from "../../../components/Stepper/Stepper";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
 import MachineKindBadge from "../../../components/MachineKindBadge/MachineKindBadge";
+import StatusBadge from "../../../components/StatusBadge/StatusBadge";
+import useDialogPresence from "../../../hooks/useDialogPresence";
 import { useToast } from "../../../hooks/useToast";
 import { Demo, RuleList, Section } from "../DevSection";
 import styles from "../DevStylePage.module.scss";
@@ -270,6 +274,131 @@ export function SegmentSection() {
   );
 }
 
+const LISTBOX_WEEKS = [
+  { value: "w1", label: "第 1 週 環境導覽與 SSH 連線", description: "10/21 · 已建立檢查" },
+  { value: "w2", label: "第 2 週 Nginx 安裝與虛擬主機", description: "10/28 · 尚未建立檢查" },
+  { value: "w3", label: "第 3 週 MariaDB 帳號與資料庫", description: "11/04 · 尚未建立檢查" },
+  { value: "w4", label: "第 4 週 PHP-FPM 與網站部署", description: "11/11 · 已建立檢查" },
+  { value: "w5", label: "第 5 週 留言板：PHP 連線資料庫", description: "11/18 · 尚未建立檢查" },
+  { value: "w6", label: "第 6 週 HTTPS 與憑證", description: "11/25 · 未發布", disabled: true },
+  { value: "w7", label: "第 7 週 防火牆與連線規則", description: "12/02 · 尚未建立檢查" },
+  { value: "w8", label: "第 8 週 期中實作檢測", description: "12/09 · 尚未建立檢查" },
+];
+
+export function ListboxSection() {
+  const toast = useToast();
+  const anchorRef = useRef(null);
+  const listId = useId();
+  const [value, setValue] = useState("w4");
+  const [open, setOpen] = useState(false);
+  const presence = useDialogPresence(open, 130);
+  const current = LISTBOX_WEEKS.find((option) => option.value === value);
+  return (
+    <Section
+      id="listbox"
+      title="單選清單 ListboxPopover"
+      refs={["components/ListboxPopover/ListboxPopover.jsx", "options: [{ value, label, description?, disabled? }]", "hooks/useAnchoredMenu（maxHeight）"]}
+      intro="從一串項目挑一個、每項要帶第二行說明（狀態、日期）時用；原生 select 畫不出第二行。開啟時焦點在目前選中那項並捲到中間，上下鍵／Home／End 移動、Enter 選取，Esc 或 Tab 關閉並把焦點交回觸發鈕。下方放不下時清單縮到剩下的空間，不往上推蓋住觸發鈕。"
+    >
+      <div className={styles.demoGrid}>
+        <Demo
+          label="換週（AI 導師檢查窄版）"
+          refs={['aria-haspopup="listbox"', "aria-expanded", "useDialogPresence(open, 130)"]}
+          note="觸發鈕上下鍵直接展開，跟原生下拉一樣。第 6 週示範停用的選項，鍵盤會跳過它。"
+        >
+          <div className={styles.row}>
+            <button
+              type="button"
+              ref={anchorRef}
+              className={styles.btnSecondary}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              aria-controls={open ? listId : undefined}
+              onClick={() => setOpen((next) => !next)}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                event.preventDefault();
+                setOpen(true);
+              }}
+            >
+              {current?.label}
+              <MIcon name="expand_more" size={18} />
+            </button>
+          </div>
+          {presence.open && (
+            <ListboxPopover
+              id={listId}
+              anchorRef={anchorRef}
+              ariaLabel="選擇週次"
+              options={LISTBOX_WEEKS}
+              value={value}
+              onSelect={(next) => { setValue(next); toast.info(`示範：切到${LISTBOX_WEEKS.find((option) => option.value === next)?.label}`); }}
+              onClose={() => setOpen(false)}
+              closing={presence.closing}
+            />
+          )}
+        </Demo>
+      </div>
+    </Section>
+  );
+}
+
+export function ActionMenuSection() {
+  const toast = useToast();
+  const anchorRef = useRef(null);
+  const menuId = useId();
+  const [open, setOpen] = useState(false);
+  const presence = useDialogPresence(open, 130);
+  const say = (text) => () => toast.info(`示範：${text}`);
+  return (
+    <Section
+      id="actionmenu"
+      title="動作選單 ActionMenu"
+      refs={["components/ActionMenu/ActionMenu.jsx", "items: [{ key, label, icon?, onSelect, danger?, disabled?, title?, separatorBefore? }]", "hooks/useAnchoredMenu"]}
+      intro="「⋮」按下去的動作選單（例如班級頁首的延長、封存）。更多操作一律用直的 ⋮（more_vert）。開啟時焦點在第一個可用的選項，上下鍵頭尾相接、Home／End，Enter 執行；Esc 或 Tab 關閉並把焦點交回按鈕，Esc 會標成已處理，同頁的批量列不會跟著清除勾選。危險項放最後、前面加分隔線。"
+    >
+      <div className={styles.demoGrid}>
+        <Demo
+          label="班級頁首的更多操作"
+          refs={['aria-haspopup="menu"', "aria-expanded", "useDialogPresence(open, 130)"]}
+          note="觸發鈕用次要鈕做成 36px 正方形，跟旁邊的「返回」鈕同一款。第一項示範停用，鍵盤會跳過它。"
+        >
+          <div className={styles.row}>
+            <button
+              type="button"
+              ref={anchorRef}
+              className={styles.btnSecondary}
+              style={{ width: 36, padding: 0 }}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              aria-controls={open ? menuId : undefined}
+              aria-label="更多班級操作"
+              title="更多班級操作"
+              onClick={() => setOpen((next) => !next)}
+            >
+              <MIcon name="more_vert" size={19} />
+            </button>
+          </div>
+          {presence.open && (
+            <ActionMenu
+              id={menuId}
+              anchorRef={anchorRef}
+              ariaLabel="更多班級操作"
+              closing={presence.closing}
+              onClose={() => setOpen(false)}
+              items={[
+                { key: "schedule", icon: "edit_calendar", label: "編輯班級與課表", onSelect: say("編輯班級與課表"), disabled: true, title: "送出建機後不能改" },
+                { key: "extend", icon: "event_repeat", label: "延長課程日期", onSelect: say("延長課程日期") },
+                { key: "archive", icon: "archive", label: "封存並回收", onSelect: say("封存並回收（實際會先跳確認框）"), danger: true, separatorBefore: true },
+              ]}
+            />
+          )}
+        </Demo>
+      </div>
+    </Section>
+  );
+}
+
 export function StepperSection() {
   const [active, setActive] = useState("env");
   return (
@@ -308,11 +437,12 @@ export function StepperSection() {
 }
 
 const STATUS_BADGES = [
-  ["badge_success", "運行中", "--color-success"],
-  ["badge_info", "進行中", "--color-info"],
-  ["badge_pending", "待審核", "--color-pending"],
-  ["badge_danger", "失敗", "--color-danger"],
-  ["badge_muted", "已停止", "--color-status-neutral"],
+  ["success", "運行中", "--color-success", "check_circle"],
+  ["info", "進行中", "--color-info", "sync"],
+  ["pending", "待審核", "--color-pending", "person_search"],
+  ["danger", "失敗", "--color-danger", "error"],
+  ["muted", "已停止", "--color-status-neutral", "hourglass_empty"],
+  ["primary", "老師有回覆", "--color-primary", "forum"],
 ];
 
 export function BadgesSection() {
@@ -320,15 +450,22 @@ export function BadgesSection() {
     <Section
       id="badges"
       title="徽章 Badges"
-      refs={["@include badge-base", ".badge_success / _info / _pending / _danger / _muted", "components/MachineKindBadge/MachineKindBadge.jsx"]}
+      refs={["components/StatusBadge/StatusBadge.jsx", "@include badge-base", "components/MachineKindBadge/MachineKindBadge.jsx"]}
       intro="徽章一律「狀態色 12% 淡底＋狀態色文字」，不加外框；疊在會透出底圖的畫布上時淡底改混 var(--color-surface)。機器來源徽章只用兩群色：我的（info）／別人的（kind-shared），類別交給圖示＋文字。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="狀態徽章五款" refs={["color-mix(in srgb, var(--color-*) 12%, transparent)"]}>
-          <div className={styles.row}>
-            {STATUS_BADGES.map(([cls, label, token]) => (
-              <span key={cls} className={`${styles.badge} ${styles[cls]}`} title={token}>{label}</span>
-            ))}
+        <Demo label="狀態徽章 StatusBadge" refs={["tone", "icon（選填）", "className 只放位置"]} note="狀態色五款＋primary（非狀態的主色標記）；旁邊已有同義圖示時不帶 icon。">
+          <div className={styles.stack}>
+            <div className={styles.row}>
+              {STATUS_BADGES.map(([tone, label, token]) => (
+                <StatusBadge key={tone} tone={tone} title={token}>{label}</StatusBadge>
+              ))}
+            </div>
+            <div className={styles.row}>
+              {STATUS_BADGES.map(([tone, label, token, icon]) => (
+                <StatusBadge key={tone} tone={tone} icon={icon} title={token}>{label}</StatusBadge>
+              ))}
+            </div>
           </div>
         </Demo>
         <Demo label="機器來源 MachineKindBadge" refs={["kind", "classRelation", "ownerName", "readOnly"]} note="有擁有者名一律歸「別人的」紫群；淡底 8%。">

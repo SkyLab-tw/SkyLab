@@ -423,7 +423,7 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
       {actionLoading && <MIcon name="hourglass_empty" size={16} spin />}
       {canControl && <div className={styles.menuWrap}>
         {menu.open && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onClose={() => setMenuOpen(false)} anchorRef={menuBtnRef} closing={menu.closing} />}
-        <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("ResourceRow.moreActions")} aria-label={t("ResourceRow.moreActions")} data-guide="resource-more-actions"><MIcon name="more_vert" size={18} /></button>
+        <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("ResourceRow.moreActions")} aria-label={t("ResourceRow.moreActions")} data-guide="resource-more-actions" aria-haspopup="menu" aria-expanded={menuOpen}><MIcon name="more_vert" size={18} /></button>
       </div>}
     </div></td>
     </tr>
@@ -527,7 +527,7 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
             anchorRef={menuBtnRef}
             closing={menu.closing}
           />}
-          <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("EnvironmentGroupRows.groupPowerTitle")} aria-label={t("EnvironmentGroupRows.groupPowerTitle")}><MIcon name="more_vert" size={18} /></button>
+          <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menu.open ? styles.menuBtnActive : ""}`} onClick={() => setMenuOpen((value) => !value)} title={t("EnvironmentGroupRows.groupPowerTitle")} aria-label={t("EnvironmentGroupRows.groupPowerTitle")} aria-haspopup="menu" aria-expanded={menuOpen}><MIcon name="more_vert" size={18} /></button>
         </div>}
       </div></td>
     </tr>
@@ -625,7 +625,7 @@ function ResourceActionsCell({ rowState }) {
     {actionLoading && <MIcon name="hourglass_empty" size={16} spin />}
     <div className={styles.menuWrap}>
       {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={onControl} onDeleteClick={onDeleteClick} onConvertTemplate={onConvertTemplate} onClose={onCloseMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
-      <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={onToggleMenu} title={t("ResourceRow.moreActions")} aria-label={t("ResourceRow.moreActions")} data-guide="resource-more-actions"><MIcon name="more_vert" size={18} /></button>
+      <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={onToggleMenu} title={t("ResourceRow.moreActions")} aria-label={t("ResourceRow.moreActions")} data-guide="resource-more-actions" aria-haspopup="menu" aria-expanded={menuOpen}><MIcon name="more_vert" size={18} /></button>
     </div>
   </div> : isFailedPlaceholder ? <div className={styles.rowActions}>
     {/* 動作欄只有 160px，兩顆文字按鈕會擠出欄外：收進與一般列同位置的 ⋮ 選單 */}
@@ -646,7 +646,7 @@ function ResourceActionsCell({ rowState }) {
         anchorRef={menuBtnRef}
         closing={menuClosing}
       />}
-      <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} disabled={failedAction !== null} onClick={onToggleMenu} title={t("ResourceRow.moreActions")} aria-label={t("ResourceRow.moreActions")}><MIcon name="more_vert" size={18} /></button>
+      <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} disabled={failedAction !== null} onClick={onToggleMenu} title={t("ResourceRow.moreActions")} aria-label={t("ResourceRow.moreActions")} aria-haspopup="menu" aria-expanded={menuOpen}><MIcon name="more_vert" size={18} /></button>
     </div>
   </div> : <span className={styles.deletedNote}>{STATUS_MAP[resource.status]?.labelKey ? t(STATUS_MAP[resource.status].labelKey) : resource.status}</span>;
 }

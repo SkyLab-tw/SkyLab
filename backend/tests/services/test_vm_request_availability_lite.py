@@ -104,6 +104,10 @@ def test_capacity_state_key_tracks_allocatable_changes() -> None:
 
 def test_lite_calendar_reuses_fit_results_across_slots(monkeypatch) -> None:
     """3 天、沒有預約：真正跑 fit 的次數最多等於不同的小時需求係數數量（24）。"""
+    # 這組測試沒有 DB：其他帳本的待建量另有 test_pending_capacity 測
+    monkeypatch.setattr(
+        svc.pending_capacity, "request_external_load", lambda _s, **_k: []
+    )
     monkeypatch.setattr(svc.placement_support, "load_cluster_state", lambda: ([], []))
     monkeypatch.setattr(
         svc.placement_support, "build_live_node_capacities", lambda **kwargs: [_capacity()]

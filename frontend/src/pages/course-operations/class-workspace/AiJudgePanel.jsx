@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
@@ -10,14 +9,19 @@ import { baseFeatures } from "../../../components/DataTable/features";
 import LoadingState, { LoadingSpinner } from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import ErrorState from "../../../components/ErrorState/ErrorState";
+import ActionMenu from "../../../components/ActionMenu/ActionMenu";
+import ListboxPopover from "../../../components/ListboxPopover/ListboxPopover";
 import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
 import OctoAvatar from "../../../components/OctoPet/OctoAvatar";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import StatusBadge from "../../../components/StatusBadge/StatusBadge";
 import { useToast } from "../../../hooks/useToast";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useUnsavedChanges, useUnsavedChangesGuard } from "../../../contexts/UnsavedChangesContext";
+import { LayoutContext } from "../../../layout/layoutContext";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import useElementWidth from "../../../hooks/useElementWidth";
 import useFileDrop from "../../../hooks/useFileDrop";
 import { useQueryErrorEffect, useQueryView } from "../../../hooks/useQueryLoadState";
 import {
@@ -146,11 +150,14 @@ export function ScriptGenerationNotice({
       data-workflow-status={workflowStatus}
     >
       <p className={styles.noticeProgressTitle}>
-        {isCreatingScript ? (
-          <Spinner size={16} />
-        ) : (
-          <MIcon name={isError ? "error_outline" : isSuccess ? "check_circle" : "autorenew"} size={16} />
-        )}
+        {/* 狀態色只在圖示：進行中藍、完成綠、失敗紅（提示框本身白底灰框） */}
+        <span className={styles.noticeIcon}>
+          {isCreatingScript ? (
+            <Spinner size={16} />
+          ) : (
+            <MIcon name={isError ? "error_outline" : isSuccess ? "check_circle" : "autorenew"} size={16} />
+          )}
+        </span>
         <strong>{title}</strong>
       </p>
       <p>{message}</p>
@@ -239,33 +246,46 @@ function getDetectableInfo(detectable) {
   return DETECTABLE_INFO[detectable] ?? DETECTABLE_INFO.manual;
 }
 
-/** 把單一 check step 的 parameters 轉成老師可讀的唯讀 chip 資料。 */
-function stepParameterChips(step) {
+/* 檢查步驟「做什麼」的白話說法；collector.type 是給系統看的代號，不直接露給老師 */
+const STEP_ACTIONS = {
+  command: { get label() { return jt("stepRunCommand"); }, icon: "terminal" },
+  file_text: { get label() { return jt("stepReadFile"); }, icon: "description" },
+  file_stat: { get label() { return jt("stepCheckFile"); }, icon: "folder" },
+  localhost_http: { get label() { return jt("stepOpenUrl"); }, icon: "language" },
+  peer_ping: { get label() { return jt("stepPeerPing"); }, icon: "hub" },
+};
+
+/**
+ * 單一檢查步驟轉成老師看得懂的一段：做什麼、對象（整行指令／路徑／網址）、補充說明（讀幾行、怎樣算通過、時限）。
+ * 沒有 collector 的舊格式步驟沿用範本名稱＋指令名稱。
+ */
+export function describeCheckStep(step) {
   const collector = step?.collector ?? null;
   const parameters = collector ?? step?.parameters ?? {};
-  const chips = [];
-  const argv = Array.isArray(parameters.argv)
-    ? parameters.argv.filter((part) => typeof part === "string" && part.trim())
-    : [];
-  if (argv.length > 0) {
-    chips.push({ key: "argv", label: jt("chipCommand"), mono: true, parts: argv });
+  const action = STEP_ACTIONS[collector?.type] ?? null;
+  const argv = Array.isArray(parameters.argv) ? formatCommandArguments(parameters.argv) : "";
+  const target = argv
+    || [parameters.path, parameters.url].find((value) => typeof value === "string" && value.trim())?.trim()
+    || "";
+  const notes = [];
+  if (collector?.type === "file_text" && Number.isInteger(parameters.lines)) {
+    if (parameters.read_mode === "head") notes.push(jt("stepReadHead", { count: parameters.lines }));
+    if (parameters.read_mode === "tail") notes.push(jt("stepReadTail", { count: parameters.lines }));
   }
-  if (typeof parameters.path === "string" && parameters.path.trim()) {
-    chips.push({ key: "path", label: jt("chipPath"), mono: true, parts: [parameters.path.trim()] });
+  const assertion = getAssertionSummary(step?.assertion);
+  if (assertion) notes.push(jt("stepPass", { value: assertion }));
+  if (Number.isInteger(parameters.timeout_seconds) && parameters.timeout_seconds >= 1) {
+    notes.push(jt("stepTimeout", { count: parameters.timeout_seconds }));
   }
-  if (typeof parameters.url === "string" && parameters.url.trim()) {
-    chips.push({ key: "url", label: "URL", mono: true, parts: [parameters.url.trim()] });
-  }
-  if (collector?.type === "file_text") {
-    const mode = parameters.read_mode ?? "full";
-    const lineText = Number.isInteger(parameters.lines) ? jt("chipReadLines", { count: parameters.lines }) : "";
-    chips.push({ key: "read_mode", label: jt("chipRead"), mono: false, parts: [`${mode}${lineText}`] });
-  }
-  if (Number.isInteger(parameters.timeout_seconds)
-    && parameters.timeout_seconds >= 1) {
-    chips.push({ key: "timeout_seconds", label: jt("chipTimeout"), mono: false, parts: [jt("chipSeconds", { count: parameters.timeout_seconds })] });
-  }
-  return chips;
+  const legacyLabel = [getTemplateLabel(step?.template_key), step?.command_label ?? step?.command_key]
+    .filter(Boolean)
+    .join(" / ");
+  return {
+    icon: action?.icon ?? "rule",
+    label: action?.label ?? (legacyLabel || collector?.type || ""),
+    target,
+    notes,
+  };
 }
 
 const TARGET_TYPE_INFO = {
@@ -392,9 +412,10 @@ function getExecutionNodeSummary(item, machineNodes = []) {
     ?? (Number.isFinite(sortOrder) ? `P${sortOrder + 1}` : null);
   const name = String(node.name ?? node.node_name ?? "").trim();
   const label = [name || jt("nodeUnnamed"), displayLabel ? jt("nodeDisplayLabel", { label: displayLabel }) : ""].join("");
+  // 角色是老師在環境裡取的名字、類型是 VM／LXC，兩個本身就看得懂，不再加「角色：」「類型：」前綴
   const detail = [
-    node.role ? jt("nodeRole", { value: node.role }) : "",
-    node.resource_type ? jt("nodeType", { value: String(node.resource_type).toUpperCase() }) : "",
+    String(node.role ?? "").trim(),
+    node.resource_type ? String(node.resource_type).toUpperCase() : "",
     node.template_name ? jt("nodeImage", { value: node.template_name }) : "",
   ].filter(Boolean).join(" · ");
   return { label, detail };
@@ -482,33 +503,6 @@ export function getRubricDisplayName(file, fallback = jt("defaultRubricName")) {
     .replace(RUBRIC_FILE_EXTENSION, "")
     .trim();
   return title || fallback;
-}
-
-const SESSION_MENU_WIDTH = 220;
-const SESSION_MENU_HEIGHT = 280;
-const SESSION_MENU_MARGIN = 12;
-
-/**
- * 將 session 的更多功能選單定位在觸發按鈕附近，同時限制在視窗可見範圍內。
- * 使用 fixed/portal 顯示時，這個位置不會受 session sidebar 的 overflow 影響。
- */
-export function getSessionMenuPosition(anchorRect, options = {}) {
-  const viewportWidth = options.width ?? (typeof window !== "undefined" ? window.innerWidth : 1024);
-  const viewportHeight = options.height ?? (typeof window !== "undefined" ? window.innerHeight : 768);
-  const menuWidth = options.menuWidth ?? SESSION_MENU_WIDTH;
-  const menuHeight = options.menuHeight ?? SESSION_MENU_HEIGHT;
-  const margin = options.margin ?? SESSION_MENU_MARGIN;
-  const maxLeft = Math.max(margin, viewportWidth - menuWidth - margin);
-  const preferredLeft = anchorRect.right - menuWidth;
-  const left = Math.min(Math.max(margin, preferredLeft), maxLeft);
-  const belowTop = anchorRect.bottom + margin;
-  const aboveTop = anchorRect.top - menuHeight - margin;
-  const fitsBelow = belowTop + menuHeight <= viewportHeight - margin;
-  const fitsAbove = aboveTop >= margin;
-  const preferredTop = fitsBelow ? belowTop : fitsAbove ? aboveTop : belowTop;
-  const maxTop = Math.max(margin, viewportHeight - menuHeight - margin);
-  const top = Math.min(Math.max(margin, preferredTop), maxTop);
-  return { top: Math.round(top), left: Math.round(left) };
 }
 
 /** 選到的週次還沒有檢查：一週只會有一份，按下去才建立（重複按也只會有一份）。 */
@@ -881,11 +875,11 @@ function RubricHeader({ index }) {
   return useRubricHeaders()[index];
 }
 
+/* 表格版：展開鈕在前、序號緊貼著標題；卡片版由樣式把兩者拆開，序號在左上、展開鈕跟刪除鈕一組在右上 */
 function RubricIndexCell({ index, expanded, detailId, onToggle }) {
   const { t } = useTranslation("teaching");
   return (
     <div className={styles.rubricIndex}>
-      <span className={styles.rubricNumber}>{index + 1}</span>
       <button
         type="button"
         className={styles.detailToggle}
@@ -897,6 +891,7 @@ function RubricIndexCell({ index, expanded, detailId, onToggle }) {
       >
         <MIcon name={expanded ? "expand_less" : "expand_more"} size={17} aria-hidden="true" />
       </button>
+      <span className={styles.rubricNumber}>{index + 1}</span>
     </div>
   );
 }
@@ -1001,11 +996,13 @@ const rubricColumns = rubricColumnHelper.columns([
   rubricColumnHelper.accessor("detectable", {
     header: () => <RubricHeader index={3} />,
     cell: ({ row, rowState }) => (
-      <DetectabilityBadge
-        detectable={row.original.detectable}
-        judgementMode={row.original.judgement_mode}
-        needsReview={rowState.needsReview}
-      />
+      <div className={styles.rubricCellLine}>
+        <DetectabilityBadge
+          detectable={row.original.detectable}
+          judgementMode={row.original.judgement_mode}
+          needsReview={rowState.needsReview}
+        />
+      </div>
     ),
     meta: { thProps: RUBRIC_TH_PROPS, tdClassName: styles.rubricDetectabilityCell },
   }),
@@ -1043,9 +1040,17 @@ function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsR
     needsReview,
   };
 
+  /* 整列可點來展開／收合（滑鼠的捷徑；鍵盤與報讀器走展開鈕）。
+     標題欄是編輯區、按鈕各有自己的動作，正在反白選字（例如複製指令）時也不切換 */
+  function handleRowClick(event) {
+    if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select, label")) return;
+    if (window.getSelection?.()?.toString()) return;
+    setExpanded((current) => !current);
+  }
+
   return (
     <>
-      <tr className={`${styles.rubricTableRow} ${expanded ? styles.rubricTableRowExpanded : ""}`}>
+      <tr className={`${styles.rubricTableRow} ${expanded ? styles.rubricTableRowExpanded : ""}`} onClick={handleRowClick}>
         <DataTableCells row={row} rowState={rowState} />
       </tr>
       {expanded && (
@@ -1061,78 +1066,60 @@ function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsR
               {!hasDetails ? (
                 <p className={styles.rubricDetailEmpty}>{t("AiJudgePanel.detailEmpty")}</p>
               ) : (
-                <div className={styles.detectGrid}>
+                /* 左欄名稱、右欄內容的對照清單：缺什麼 → 在哪台機器 → 怎麼檢查 → 誰判定 → 腳本查不到時 */
+                <dl className={styles.detailFacts}>
                   {item.detectable === "partial" && (
-                    <div className={`${styles.detectItem} ${styles.detectItemWide}`}>
-                      <span>{t("AiJudgePanel.detectablePartial")}</span>
-                      <p>{missingInformation.length
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detectablePartial")}</dt>
+                      <dd>{missingInformation.length
                         ? joinList(missingInformation)
-                        : t("AiJudgePanel.detailMissingFallback")}</p>
+                        : t("AiJudgePanel.detailMissingFallback")}</dd>
                     </div>
                   )}
-                  {item.fallback && (
-                    <div className={styles.detectItem}>
-                      <span>{t("AiJudgePanel.detailFallback")}</span>
-                      <p>{item.fallback}</p>
+                  {checkSteps.length > 0 && executionNode && (
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailMachine")}</dt>
+                      <dd>
+                        {executionNode.label}
+                        {executionNode.detail && <small>{executionNode.detail}</small>}
+                      </dd>
                     </div>
                   )}
                   {checkSteps.length > 0 && (
-                    <div className={`${styles.detectItem} ${styles.detectItemWide}`}>
-                      <span>{t("AiJudgePanel.detailSteps")}</span>
-                      <div className={styles.executionContract} aria-label={t("AiJudgePanel.contractTitle")}>
-                        <span className={styles.executionContractTitle}>
-                          <MIcon name="rule" size={14} aria-hidden="true" />
-                          {t("AiJudgePanel.contractTitle")}
-                        </span>
-                        {executionNode && (
-                          <span className={styles.executionContractItem}>
-                            <span>{t("AiJudgePanel.contractNode")}</span>
-                            <strong>{executionNode.label}</strong>
-                            {executionNode.detail && <small>{executionNode.detail}</small>}
-                          </span>
-                        )}
-                        <span className={styles.executionContractItem}>
-                          <span>{t("AiJudgePanel.contractJudgement")}</span>
-                          <strong>{item.judgement_mode === "teacher" ? t("AiJudgePanel.judgeTeacher") : t("AiJudgePanel.judgeSystem")}</strong>
-                        </span>
-                      </div>
-                      <div className={styles.stepPlanList}>
-                        {checkSteps.map((step, stepIndex) => (
-                          <div
-                            key={`${step.template_key}-${step.command_key}-${stepIndex}`}
-                            className={styles.stepPlanRow}
-                          >
-                            <span className={styles.chip}>
-                              {step.collector
-                                ? t("AiJudgePanel.managedCollector", { type: step.collector.type })
-                                : <>
-                                  {getTemplateLabel(step.template_key)} /{" "}
-                                  {step.command_label ?? step.command_key}
-                                  <code>{step.command_key}</code>
-                                </>}
-                            </span>
-                            {stepParameterChips(step).map((chip) => (
-                              <span key={chip.key} className={styles.chip}>
-                                <span className={styles.chipLabel}>{chip.label}</span>
-                                {chip.mono
-                                  ? chip.parts.map((part, partIndex) => (
-                                    <code key={partIndex}>{part}</code>
-                                  ))
-                                  : <span className={styles.chipText}>{chip.parts.join(" ")}</span>}
-                              </span>
-                            ))}
-                            {getAssertionSummary(step.assertion) && (
-                              <span className={styles.chip}>
-                                <span className={styles.chipLabel}>{t("AiJudgePanel.passCondition")}</span>
-                                <span className={styles.chipText}>{getAssertionSummary(step.assertion)}</span>
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailSteps")}</dt>
+                      <dd>
+                        <ol className={checkSteps.length > 1 ? styles.stepListNumbered : styles.stepList}>
+                          {checkSteps.map((step, stepIndex) => {
+                            const described = describeCheckStep(step);
+                            return (
+                              <li key={`${step.template_key}-${step.command_key}-${stepIndex}`} className={styles.stepItem}>
+                                <span className={styles.stepAction}>
+                                  <MIcon name={described.icon} size={16} aria-hidden="true" />
+                                  {described.label}
+                                </span>
+                                {described.target && <code className={styles.stepTarget}>{described.target}</code>}
+                                {described.notes.length > 0 && <span className={styles.stepNotes}>{described.notes.join(" · ")}</span>}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </dd>
                     </div>
                   )}
-                </div>
+                  {checkSteps.length > 0 && (
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailJudgement")}</dt>
+                      <dd>{item.judgement_mode === "teacher" ? t("AiJudgePanel.judgeTeacher") : t("AiJudgePanel.judgeSystem")}</dd>
+                    </div>
+                  )}
+                  {item.fallback && (
+                    <div className={styles.detailFact}>
+                      <dt>{t("AiJudgePanel.detailFallback")}</dt>
+                      <dd>{item.fallback}</dd>
+                    </div>
+                  )}
+                </dl>
               )}
             </div>
           </td>
@@ -1574,6 +1561,12 @@ export function SaveAndCreateAction({
 const JUDGE_MAIN_MIN_WIDTH = 480;
 const RESIZE_KEY_STEP = 16;
 
+/**
+ * 工作區寬到這裡，週次清單才排在左邊一欄；更窄時清單會疊在工作區上面、把它推出首屏，
+ * 所以改成只放目前這週＋換週清單。需與 AiJudgePanel.module.scss 的 @container judge-layout (min-width: 1100px) 一致。
+ */
+export const JUDGE_SIDE_BY_SIDE_MIN_WIDTH = 1100;
+
 export const JUDGE_COLUMN_WIDTHS = {
   week: { cssVar: "--judge-week-w", storageKey: "aiJudge.weekColumnWidth", min: 180, max: 360 },
   chat: { cssVar: "--judge-chat-w", storageKey: "aiJudge.chatColumnWidth", min: 300, max: 600 },
@@ -1777,8 +1770,9 @@ function RubricSourceRail({ classId, file, onClose, embedded = false }) {
           {onClose && <button type="button" className={styles.iconBtn} aria-label={t("AiJudgePanel.closeSourcesAria")} title={t("AiJudgePanel.closeBtn")} onClick={onClose}><MIcon name="close" size={18} /></button>}
         </div>
       </div>
-      <div className={`${styles.sourceRow} ${styles.sourceRowSelected}`}>
-        <div className={styles.sourceSelect} aria-current="true">
+      {/* 來源只有這一份檢查表，沒有東西可選：一般資訊列，不掛選中樣式 */}
+      <div className={styles.sourceRow}>
+        <div className={styles.sourceSelect}>
           <span className={styles.sourceIndicator} aria-hidden="true"><MIcon name="description" size={17} /></span>
           <span className={styles.sourceText}>
             <b>{getRubricDisplayName(file, t("AiJudgePanel.unnamedRubric"))}</b>
@@ -2580,6 +2574,7 @@ export function RubricsTab({
           data-autosave-status="unsaved"
         >
           <p>
+            <MIcon name="error_outline" size={16} className={`${styles.noticeIcon} ${styles.noticeInlineIcon}`} />
             <strong>{t("AiJudgePanel.unsavedTitle")}</strong>{" "}
             {t("AiJudgePanel.unsavedMessage", {
               reason: autosaveStatus.error?.message ?? t("AiJudgePanel.updateRubricFailed"),
@@ -2615,11 +2610,13 @@ export function RubricsTab({
           {!filesLoaded && !analysis ? (
             <LoadingState text={t("AiJudgePanel.loadingRubric")} />
           ) : items.length === 0 && !pendingProposal ? (
+            /* 完整說明在助理欄，這裡只留一行；按鈕只在助理欄掉到檢查表下方時出現（見 .noItemsEmpty） */
             <EmptyState
+              className={styles.noItemsEmpty}
               icon="playlist_add"
               title={t("AiJudgePanel.noItemsTitle")}
               description={t("AiJudgePanel.noItemsDesc")}
-              action={<button type="button" className={styles.btnSecondary} onClick={() => chatColRef.current?.querySelector("textarea")?.focus()}><MIcon name="fact_check" size={16} />{t("AiJudgePanel.askAssistantBtn")}</button>}
+              action={<button type="button" className={`${styles.btnSecondary} ${styles.askAssistantStacked}`} onClick={() => chatColRef.current?.querySelector("textarea")?.focus()}><MIcon name="fact_check" size={16} />{t("AiJudgePanel.askAssistantBtn")}</button>}
             />
           ) : (
             <>
@@ -2714,17 +2711,18 @@ function newRunBatchId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/* 圖示跟學生週次頁同一組（檢查中＝sync、等待＝schedule…），兩端同一個狀態長一樣 */
 const RUN_STATUS = {
-  completed: { get label() { return jt("runCompleted"); }, className: styles.badge_success },
-  running: { get label() { return jt("runRunning"); }, className: styles.badge_info },
-  failed: { get label() { return jt("runFailed"); }, className: styles.badge_danger },
-  cancelled: { get label() { return jt("runCancelled"); }, className: styles.badge_muted },
-  pending: { get label() { return jt("runPending"); }, className: styles.badge_pending },
+  completed: { get label() { return jt("runCompleted"); }, tone: "success", icon: "check_circle" },
+  running: { get label() { return jt("runRunning"); }, tone: "info", icon: "sync" },
+  failed: { get label() { return jt("runFailed"); }, tone: "danger", icon: "error" },
+  cancelled: { get label() { return jt("runCancelled"); }, tone: "muted", icon: "cancel" },
+  pending: { get label() { return jt("runPending"); }, tone: "pending", icon: "schedule" },
 };
 
-function StatusBadge({ map, status }) {
-  const info = map[status] ?? { label: status ?? "—", className: styles.badge_muted };
-  return <span className={`${styles.badge} ${info.className}`}>{info.label}</span>;
+function RunStatusBadge({ status }) {
+  const info = RUN_STATUS[status] ?? { label: status ?? "—", tone: "muted" };
+  return <StatusBadge tone={info.tone} icon={info.icon}>{info.label}</StatusBadge>;
 }
 
 const CHECK_STATUS_META = {
@@ -2797,7 +2795,7 @@ function ReturnCodeBadge({ returncode }) {
   const ok = returncode === 0;
   return (
     <span className={`${styles.cmdBadge} ${ok ? styles.cmdBadgeOk : styles.cmdBadgeError}`}>
-      {t("AiJudgePanel.exitCode", { code: returncode })}{ok ? " ✓" : " ✗"}
+      {t("AiJudgePanel.exitCode", { code: returncode })}
     </span>
   );
 }
@@ -3020,12 +3018,12 @@ export function isReviewDraftDirty(draft, saved) {
   return keys.some((key) => draftDecisions[key] !== savedDecisions[key]);
 }
 
-function reviewBadgeClass(kind) {
-  if (kind === "pending") return styles.badge_pending;
-  if (kind === "failed") return styles.badge_danger;
-  if (kind === "reviewed") return styles.badge_success;
-  return styles.badge_muted;
-}
+/* 單台機器標題列的審查摘要；旁邊沒有其他狀態圖示，所以徽章自己帶圖示 */
+const REVIEW_SUMMARY_BADGE = {
+  pending: { tone: "pending", icon: "person_search" },
+  failed: { tone: "danger", icon: "report" },
+  reviewed: { tone: "success", icon: "how_to_reg" },
+};
 
 /* 一個檢查項一列：狀態圖示、名稱＋摘要、需要老師判定時右邊是通過／未通過。
    原始輸出收在「查看原始證據」裡；待判定且還沒判的整列淡橘底，一眼找得到 */
@@ -3075,11 +3073,11 @@ export function checkpointBadge(item, decisions = {}) {
   return { kind: "muted", label: checkStatusMeta(item?.status).label };
 }
 
-const CHECKPOINT_BADGE_CLASS = {
-  pending: styles.badge_pending,
-  fail: styles.badge_danger,
-  pass: styles.badge_success,
-  muted: styles.badge_muted,
+const CHECKPOINT_BADGE_TONE = {
+  pending: "pending",
+  fail: "danger",
+  pass: "success",
+  muted: "muted",
 };
 
 /* 一個檢查點一組：標題列可收合，全部通過的預設收起來，老師只需要看未通過與待判定的 */
@@ -3105,7 +3103,7 @@ function ReviewCheckpointGroup({ item, decisions, onDecide, executionFailed = fa
           <strong>{item?.title ?? item?.rubric_item_id ?? t("AiJudgePanel.thCheckpoint")}</strong>
           {peerText && <small>{peerText}</small>}
         </span>
-        <span className={`${styles.badge} ${CHECKPOINT_BADGE_CLASS[badge.kind]}`}>{badge.label}</span>
+        <StatusBadge tone={CHECKPOINT_BADGE_TONE[badge.kind]} className={styles.checkpointBadge}>{badge.label}</StatusBadge>
         <span className={styles.reviewCheckGroupChevron}><MIcon name="expand_more" size={18} /></span>
       </summary>
       <div className={styles.reviewCheckGroupBody}>
@@ -3594,7 +3592,9 @@ function MachineReviewDetail({
       <div className={styles.reviewMachineHead}>
         <strong>{nodeLabel ?? `VMID ${row.vmid ?? "—"}`}</strong>
         {row.vmid ? <small>{`VMID ${row.vmid}`}</small> : null}
-        <span className={`${styles.badge} ${reviewBadgeClass(summary.kind)}`}>{summary.label}</span>
+        <StatusBadge tone={REVIEW_SUMMARY_BADGE[summary.kind]?.tone ?? "muted"} icon={REVIEW_SUMMARY_BADGE[summary.kind]?.icon}>
+          {summary.label}
+        </StatusBadge>
       </div>
       {/* 關機、狀態不明有自己的說明（下方），不要再疊一段「請檢查 Python、timeout」的主機環境提示 */}
       {!executionBlocker && <ExecutionFailure target={target} />}
@@ -3656,25 +3656,32 @@ export function checkOutcome(machines) {
   return { kind: "none", count: 0 };
 }
 
-const OUTCOME_BADGE_CLASS = {
-  error: styles.badge_danger,
-  pass: styles.badge_success,
-  fail: styles.badge_danger,
-  pending: styles.badge_pending,
-  none: styles.badge_muted,
+/**
+ * 老師已經在這位學生最新一次結果上存了核查（勾了判定或寫了評語）。
+ * 重新檢查會建立新的一批，核查列改顯示新結果、這些核查不會跟過去，所以執行前要提醒；
+ * 給學生的週回覆另外存，不受影響。
+ */
+export function studentHasSavedReview(student) {
+  return (Array.isArray(student?.machines) ? student.machines : []).some((row) => {
+    if (!row?.target) return false;
+    const review = targetTeacherReview(row.target);
+    return Object.keys(review.decisions).length > 0 || review.feedback.trim() !== "";
+  });
+}
+
+/* 學生條右側的結果徽章：圖示跟學生週次頁同一組（通過＝check_circle、待老師確認＝person_search…），
+   老師和學生看到的同一個狀態長一樣 */
+const OUTCOME_BADGE = {
+  error: { tone: "danger", icon: "report" },
+  pass: { tone: "success", icon: "check_circle" },
+  fail: { tone: "danger", icon: "error" },
+  pending: { tone: "pending", icon: "person_search" },
+  none: { tone: "muted", icon: "hourglass_empty" },
 };
 
 const REPLY_MAX_LENGTH = 4000;
 // 快到上限才顯示字數，平常不佔位置
 const REPLY_COUNTER_FROM = 3600;
-
-const OUTCOME_CHIP_CLASS = {
-  error: styles.machineChipFail,
-  pass: styles.machineChipPass,
-  fail: styles.machineChipFail,
-  pending: styles.machineChipPending,
-  none: "",
-};
 
 /** PVE 回報的狀態收成三種：開著、關著、不知道（查不到或還在建機）。 */
 export function machinePowerState(vmStatus) {
@@ -3706,11 +3713,13 @@ export function studentMachineChips(student, members = [], machineNodes = []) {
     const label = batchMachineDisplayName(nodeKey, machineNodes, fallbackLabel)
       ?? nodeKey
       ?? (vmid != null ? `VMID ${vmid}` : "—");
+    const outcome = checkOutcome(rows);
     return {
       key: vmid != null ? `vm-${vmid}` : `node-${nodeKey ?? fallbackLabel}`,
       label: blocked ? `${getTargetReviewSummary(blocked.target).label} · ${label}` : label,
       vmid: vmid ?? null,
-      outcome: checkOutcome(rows).kind,
+      outcome: outcome.kind,
+      outcomeCount: outcome.count,
       power: machinePowerState(vmStatus),
     };
   };
@@ -3953,6 +3962,12 @@ export function TeacherReviewTab({
     () => studentRows.filter((student) => student.report?.ready && student.userId).map((student) => student.userId),
     [studentRows],
   );
+  // 已經核查過的學生：重新檢查會換成新結果、原本的核查不再顯示，執行前要提醒
+  const reviewedUserIds = useMemo(
+    () => new Set(studentRows.filter((student) => student.userId && studentHasSavedReview(student))
+      .map((student) => String(student.userId))),
+    [studentRows],
+  );
 
   const dirtyCount = useMemo(() => machineRows.filter((row) => (
     Boolean(row.target) && isReviewDraftDirty(drafts[row.key], targetTeacherReview(row.target))
@@ -4127,9 +4142,23 @@ export function TeacherReviewTab({
     await startBatch();
   }
 
-  /* 只檢查指定學生（這位學生／已回報完成的人）：用最新核准的那組腳本，其他人的結果不動 */
+  /* 只檢查指定學生（這位學生／已回報完成的人）：用最新核准的那組腳本，其他人的結果不動。
+     平常直接執行；只有會換掉老師已存的核查時才先確認（整班的「一次執行」在對話框裡提醒） */
   async function runForStudents(userIds) {
-    if (userIds.length) await startBatch(userIds);
+    if (!userIds.length) return;
+    const replacing = userIds.filter((userId) => reviewedUserIds.has(String(userId))).length;
+    if (replacing > 0) {
+      const ok = await confirm({
+        title: t("AiJudgePanel.rerunReviewedTitle"),
+        message: userIds.length === 1
+          ? t("AiJudgePanel.rerunReviewedOne")
+          : t("AiJudgePanel.rerunReviewedMany", { count: replacing }),
+        confirmText: t("AiJudgePanel.rerunReviewedConfirm"),
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await startBatch(userIds);
   }
 
   async function startBatch(userIds = null, retry = null) {
@@ -4203,6 +4232,12 @@ export function TeacherReviewTab({
         }
       >
         <p className={styles.dialogNote}>{t("AiJudgePanel.activeScriptSet", { version: activeSet?.source_analysis_revision ?? "—", count: children.length })}</p>
+        {reviewedUserIds.size > 0 && (
+          <p className={styles.dialogNote}>
+            <MIcon name="warning" size={16} className={`${styles.noticeInlineIcon} ${styles.dialogWarnIcon}`} />
+            {t("AiJudgePanel.rerunReviewedMany", { count: reviewedUserIds.size })}
+          </p>
+        )}
 
         <div className={styles.vmidBox}>
           <span className={styles.fieldLabel}>{t("AiJudgePanel.runScope", { count: children.length })}</span>
@@ -4259,7 +4294,7 @@ export function TeacherReviewTab({
                     disabled={creatingBatch || batchRunning || !weekPublished}
                     title={weekPublished ? undefined : t("AiJudgePanel.reviewWeekDraftNotice")}
                   >
-                    {creatingBatch ? <Spinner size={15} /> : <MIcon name="bolt" size={16} />}
+                    {creatingBatch ? <Spinner size={15} /> : <MIcon name="playlist_play" size={16} />}
                     {t("AiJudgePanel.runAllTitle")}
                   </button>
                 )}
@@ -4285,11 +4320,12 @@ export function TeacherReviewTab({
 
   return (
     <div className={styles.tabBody} data-guide="ai-judge-review">
-      <div className={`${styles.card} ${styles.reviewOverview}`}>
+      {/* 總覽直接排在分頁裡，不再包一張玻璃卡（工作區本身已是玻璃面板）；
+          分頁列已經寫「導師核查」，這裡不重複標題，只留動作鈕 */}
+      <div className={styles.reviewOverview}>
         {publicationNotice}
         {recoveryNotice}
         <div className={styles.reviewOverviewHead}>
-          <h4 className={styles.cardTitle}><MIcon name="rate_review" size={19} />{t("AiJudgePanel.tabReview")}</h4>
           <div className={styles.sectionActions}>
             {activeBatch && batchRunning && (
               <span className={styles.mutedText}>
@@ -4318,7 +4354,7 @@ export function TeacherReviewTab({
                   ? t("AiJudgePanel.runNoApprovedTitle")
                   : t("AiJudgePanel.runAllHint")}
             >
-              {creatingBatch ? <Spinner size={15} /> : <MIcon name="bolt" size={16} />}
+              {creatingBatch ? <Spinner size={15} /> : <MIcon name="playlist_play" size={16} />}
               {t("AiJudgePanel.runAllBtn")}
             </button>
           </div>
@@ -4347,8 +4383,9 @@ export function TeacherReviewTab({
               <span className={styles.reviewStackPending} style={{ width: `${percentOf(summary.pending)}%` }} />
             </div>
             <span className={styles.reviewStatValue}>
-              <em className={styles.reviewStatPass}>{t("AiJudgePanel.metricPassCount", { count: summary.pass })}</em>
-              <em className={styles.reviewStatFail}>{t("AiJudgePanel.metricFailCount", { count: summary.fail })}</em>
+              {/* 數量是 0 時不上狀態色：還沒檢查就出現紅字會讓人以為有問題 */}
+              <em className={summary.pass > 0 ? styles.reviewStatPass : styles.reviewStatZero}>{t("AiJudgePanel.metricPassCount", { count: summary.pass })}</em>
+              <em className={summary.fail > 0 ? styles.reviewStatFail : styles.reviewStatZero}>{t("AiJudgePanel.metricFailCount", { count: summary.fail })}</em>
               {summary.error > 0 && <em className={styles.reviewStatFail}>{t("AiJudgePanel.metricErrorCount", { count: summary.error })}</em>}
               {summary.pending > 0 && <em className={styles.reviewStatPending}>{t("AiJudgePanel.metricPendingCount", { count: summary.pending })}</em>}
               <small>{t("AiJudgePanel.metricCheckedOf", { checked: checkedCount, total: summary.total })}</small>
@@ -4393,8 +4430,8 @@ export function TeacherReviewTab({
           <div className={styles.runOnceProgress} aria-live="polite">
             {(activeBatch.nodes ?? []).map((node) => (
               <div className={styles.runOnceProgressLine} key={node.run_id}>
-                <span>{batchMachineDisplayName(node.target_node_key, machineNodes, node.display_label) ?? "—"}</span>
-                <StatusBadge map={RUN_STATUS} status={node.status} />
+                <span className={styles.runOnceMachine}>{batchMachineDisplayName(node.target_node_key, machineNodes, node.display_label) ?? "—"}</span>
+                <RunStatusBadge status={node.status} />
                 {node.progress_json?.stage === "preparing" && <small>{t("AiJudgePanel.batchPreparing")}</small>}
                 <small>{t("AiJudgePanel.nodeProgress", { done: node.progress_json?.done ?? 0, total: node.progress_json?.total ?? 0 })}</small>
               </div>
@@ -4445,52 +4482,60 @@ export function TeacherReviewTab({
                 aria-expanded={isOpen}
               >
                 <span className={styles.reviewStudentIdentity}>
+                  {/* 20px 狀態圖示（不做成像勾選框的大圓圈）：完成＝實心勾、做到一半＝進行中、未回報＝小空心點；
+                      一律中性灰，整列只有右側的檢查結果帶狀態色。n/m 的數字在姓名旁的徽章裡 */}
                   <span
                     className={`${styles.reportTick} ${styles[`reportTick_${reportKind}`] ?? ""}`}
                     title={reportLabel}
                     aria-label={reportLabel}
                     role="img"
                   >
-                    {reportKind === "ready" && <MIcon name="check" size={18} />}
-                    {reportKind === "partial" && <small>{`${student.report.done}/${student.report.total}`}</small>}
+                    {reportKind === "ready" && <MIcon name="check_circle" size={20} filled />}
+                    {reportKind === "partial" && <MIcon name="timelapse" size={20} />}
                   </span>
+                  {/* 固定兩行：姓名＋回報＋已回覆／email＋機器，每列一樣高 */}
                   <span className={styles.reviewStudentMain}>
                     <span className={styles.reviewStudentName}>
                       <strong>{user.full_name ?? t("AiJudgePanel.unnamedStudent")}</strong>
-                      <em className={styles[`reportText_${reportKind}`]}>{reportLabel}</em>
+                      <StatusBadge>{reportLabel}</StatusBadge>
                       {student.reply?.text && (
-                        <em className={styles.replyMark}><MIcon name="forum" size={13} />{t("AiJudgePanel.replied")}</em>
+                        <StatusBadge tone="primary" icon="forum">{t("AiJudgePanel.replied")}</StatusBadge>
                       )}
                     </span>
-                    {user.email && <small>{user.email}</small>}
-                    <span className={styles.machineChips} aria-label={t("AiJudgePanel.studentMachinesAria")}>
-                      {chips.length === 0 ? (
-                        <em className={styles.machineChipEmpty}>{t("AiJudgePanel.studentNoMachine")}</em>
-                      ) : chips.map((machine) => (
-                        <em
-                          key={machine.key}
-                          className={`${styles.machineChip} ${OUTCOME_CHIP_CLASS[machine.outcome]}`}
-                          title={[
-                            machine.label,
-                            machine.vmid != null ? `VMID ${machine.vmid}` : null,
-                            t(`AiJudgePanel.machinePower_${machine.power}`),
-                          ].filter(Boolean).join(" · ")}
-                        >
-                          <span
-                            className={`${styles.powerDot} ${POWER_DOT_CLASS[machine.power]}`}
-                            role="img"
-                            aria-label={t(`AiJudgePanel.machinePower_${machine.power}`)}
-                          />
-                          {machine.label}
-                        </em>
-                      ))}
+                    <span className={styles.reviewStudentMeta}>
+                      {user.email && <small>{user.email}</small>}
+                      <span className={styles.machineChips} aria-label={t("AiJudgePanel.studentMachinesAria")}>
+                        {chips.length === 0 ? (
+                          <em className={styles.machineChipEmpty}>{t("AiJudgePanel.studentNoMachine")}</em>
+                        ) : chips.map((machine) => (
+                          <em
+                            key={machine.key}
+                            className={styles.machineChip}
+                            title={[
+                              machine.label,
+                              machine.vmid != null ? `VMID ${machine.vmid}` : null,
+                              t(`AiJudgePanel.machinePower_${machine.power}`),
+                              machine.outcome !== "none"
+                                ? t(`AiJudgePanel.outcome_${machine.outcome}`, { count: machine.outcomeCount })
+                                : null,
+                            ].filter(Boolean).join(" · ")}
+                          >
+                            <span
+                              className={`${styles.powerDot} ${POWER_DOT_CLASS[machine.power]}`}
+                              role="img"
+                              aria-label={t(`AiJudgePanel.machinePower_${machine.power}`)}
+                            />
+                            <span className={styles.machineChipLabel}>{machine.label}</span>
+                          </em>
+                        ))}
+                      </span>
                     </span>
                   </span>
                 </span>
                 <span className={styles.reviewStudentBadges}>
-                  <span className={`${styles.badge} ${OUTCOME_BADGE_CLASS[outcome.kind]}`}>
+                  <StatusBadge tone={OUTCOME_BADGE[outcome.kind].tone} icon={OUTCOME_BADGE[outcome.kind].icon}>
                     {t(`AiJudgePanel.outcome_${outcome.kind}`, { count: outcome.count })}
-                  </span>
+                  </StatusBadge>
                 </span>
                 <MIcon name={isOpen ? "expand_less" : "expand_more"} size={20} />
               </button>
@@ -4555,7 +4600,10 @@ export function TeacherReviewTab({
                             }
                           }}
                         />
-                        {value.length > REPLY_COUNTER_FROM && <small className={styles.replyCount}>{value.length} / {REPLY_MAX_LENGTH}</small>}
+                        <span className={styles.replyFoot}>
+                          <small>{t("AiJudgePanel.replyHint")}</small>
+                          {value.length > REPLY_COUNTER_FROM && <small className={styles.replyCount}>{value.length} / {REPLY_MAX_LENGTH}</small>}
+                        </span>
                       </label>
                     );
                   })()}
@@ -4600,6 +4648,12 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   const { confirmLeave } = useUnsavedChanges();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  /* 這頁右側有自己的檢查助理：AI 助手改用覆蓋層開啟，不並排擠窄版面（筆電寬會把檢查助理擠到下方） */
+  const { setAssistantOverlay } = useContext(LayoutContext);
+  useEffect(() => {
+    setAssistantOverlay(true);
+    return () => setAssistantOverlay(false);
+  }, [setAssistantOverlay]);
   const requestedWeekId = searchParams.get("week");
   // 只在選預設週次時參考網址；寫回網址不該觸發重新選擇
   const requestedWeekIdRef = useRef(requestedWeekId);
@@ -4618,9 +4672,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   const [activeWeekId, setActiveWeekId] = useState(null);
   const [creatingWeekId, setCreatingWeekId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
-  const [sessionMenuPosition, setSessionMenuPosition] = useState(null);
-  // 選單離場動畫：關閉時保留最後的目標與位置 130ms
-  const sessionMenuPos = useDialogPresence(sessionMenuPosition, 130);
+  // 週次 ⋮ 選單的觸發鈕：清單每一列各有一顆，按下去時記住是哪一顆
+  const sessionMenuAnchorRef = useRef(null);
   const [busySessionIds, setBusySessionIds] = useState(() => new Set());
   // 移到／複製到其他週：{ mode: "move" | "copy", item }
   const [weekPicker, setWeekPicker] = useState(null);
@@ -4628,10 +4681,16 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   // 只在第一次掛上時讀；之後拖拉直接改 DOM 上的 CSS 變數，不經過 React
   const [initialColumnWidths] = useState(readStoredColumnWidths);
   const classIdRef = useRef(classId);
-  const closeSessionMenu = useCallback(() => {
-    setOpenMenuId(null);
-    setSessionMenuPosition(null);
-  }, []);
+  const closeSessionMenu = useCallback(() => setOpenMenuId(null), []);
+  // 窄版（週次不能排在左邊一欄時）只放目前這週＋換週清單
+  const panelRef = useRef(null);
+  const panelWidth = useElementWidth(panelRef);
+  const compactWeeks = panelWidth !== null && panelWidth < JUDGE_SIDE_BY_SIDE_MIN_WIDTH;
+  const [weekSwitcherOpen, setWeekSwitcherOpen] = useState(false);
+  const weekSwitcher = useDialogPresence(weekSwitcherOpen && compactWeeks, 130);
+  const weekSwitcherAnchorRef = useRef(null);
+  const weekSwitcherListId = useId();
+  const closeWeekSwitcher = useCallback(() => setWeekSwitcherOpen(false), []);
 
   const sortedWeeks = useMemo(
     () => [...weeks].sort((a, b) => (a.week_number ?? 0) - (b.week_number ?? 0)),
@@ -4656,6 +4715,7 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
     () => sessions.find((item) => item.id === openMenuId) ?? null,
     [openMenuId, sessions],
   );
+  // 選單離場動畫：關閉時保留最後的目標 130ms
   const sessionMenuItemKeep = useDialogPresence(openSessionMenuItem, 130);
   const tabsIdPrefix = useId();
 
@@ -4701,7 +4761,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
     setWeekPicker(null);
     setActiveWeekId(null);
     closeSessionMenu();
-  }, [classId, closeSessionMenu]);
+    closeWeekSwitcher();
+  }, [classId, closeSessionMenu, closeWeekSwitcher]);
 
   // 預設選週次：網址指定的有效週次 > 第一週；目前選的週次不見了才重選
   useEffect(() => {
@@ -4714,7 +4775,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
 
   useEffect(() => {
     closeSessionMenu();
-  }, [activeWeekId, closeSessionMenu]);
+    closeWeekSwitcher();
+  }, [activeWeekId, closeSessionMenu, closeWeekSwitcher]);
 
   // 選中的週次寫進網址（?week=），重新整理或分享連結都會回到同一週；用 replace 不塞歷史紀錄
   useEffect(() => {
@@ -4727,56 +4789,6 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
       return next;
     }, { replace: true });
   }, [activeWeekId, loading, requestedWeekId, setSearchParams]);
-
-  useEffect(() => {
-    if (!openMenuId) return undefined;
-    const menuId = `check-menu-${openMenuId}`;
-    function updateMenuPosition() {
-      const trigger = document.querySelector(`[aria-controls="${menuId}"]`);
-      if (!(trigger instanceof HTMLElement)) return;
-      setSessionMenuPosition(getSessionMenuPosition(trigger.getBoundingClientRect()));
-    }
-    updateMenuPosition();
-    const focusTimer = window.setTimeout(() => {
-      document.getElementById(menuId)?.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
-    }, 0);
-    function closeMenuOnOutsideClick(event) {
-      const target = event.target;
-      if (target instanceof Element && (target.closest(`#${menuId}`) || target.closest(`[aria-controls="${menuId}"]`))) return;
-      closeSessionMenu();
-    }
-    function navigateMenu(event) {
-      if (event.key === "Escape") {
-        closeSessionMenu();
-        return;
-      }
-      if (!event.key || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
-      const menu = document.getElementById(menuId);
-      const items = menu ? [...menu.querySelectorAll('[role="menuitem"]:not(:disabled)')] : [];
-      const currentIndex = items.indexOf(document.activeElement);
-      if (!items.length) return;
-      event.preventDefault();
-      const nextIndex = event.key === "ArrowDown"
-        ? (currentIndex + 1) % items.length
-        : (currentIndex - 1 + items.length) % items.length;
-      items[nextIndex].focus();
-    }
-    document.addEventListener("mousedown", closeMenuOnOutsideClick);
-    document.addEventListener("keydown", navigateMenu);
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("mousedown", closeMenuOnOutsideClick);
-      document.removeEventListener("keydown", navigateMenu);
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && active.closest(`#${menuId}`)) {
-        document.querySelector(`[aria-controls="${menuId}"]`)?.focus();
-      }
-    };
-  }, [closeSessionMenu, openMenuId]);
 
   function updateSessionInList(updated) {
     if (classIdRef.current !== classId) return;
@@ -4893,80 +4905,147 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
       closeSessionMenu();
       return;
     }
-    setSessionMenuPosition(getSessionMenuPosition(event.currentTarget.getBoundingClientRect()));
+    sessionMenuAnchorRef.current = event.currentTarget;
     setOpenMenuId(sessionId);
   }
 
-  function renderSessionMenu(item) {
-    const menuPos = sessionMenuPos.item;
-    if (!item || !menuPos) return null;
+  function sessionMenuItems(item) {
     const busy = busySessionIds.has(item.id);
     const noFreeWeek = freeWeeks.length === 0;
+    const noFreeWeekHint = noFreeWeek ? t("AiJudgePanel.noFreeWeeksHint") : undefined;
+    return [
+      { key: "move", label: t("AiJudgePanel.moveWeekBtn"), icon: "calendar_month", disabled: busy || noFreeWeek, title: noFreeWeekHint, onSelect: () => openWeekPicker("move", item) },
+      { key: "copy", label: t("AiJudgePanel.copyToWeekBtn"), icon: "content_copy", disabled: busy || noFreeWeek, title: noFreeWeekHint, onSelect: () => openWeekPicker("copy", item) },
+      { key: "delete", label: t("AiJudgePanel.opDelete"), icon: "delete", danger: true, separatorBefore: true, disabled: busy, onSelect: () => deleteSession(item) },
+    ];
+  }
+
+  /* 週次的兩行字：清單列、窄版的目前週次、換週清單的選項共用，三處長得一樣 */
+  function weekTopic(week) {
+    return String(week.title ?? "").trim() || t("AiJudgePanel.weekNoTopic");
+  }
+
+  function renderWeekTitle(week) {
+    const hasTopic = Boolean(String(week.title ?? "").trim());
     return (
-      <div
-        id={`check-menu-${item.id}`}
-        className={`${styles.sessionMenu} ${sessionMenuPos.closing ? styles.sessionMenuOut : ""}`}
-        role="menu"
-        aria-label={t("AiJudgePanel.moreActionsAria", { title: item.title })}
-        style={{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }}
-      >
-        <button type="button" role="menuitem" disabled={busy || noFreeWeek} title={noFreeWeek ? t("AiJudgePanel.noFreeWeeksHint") : undefined} onClick={() => openWeekPicker("move", item)}><MIcon name="calendar_month" size={16} />{t("AiJudgePanel.moveWeekBtn")}</button>
-        <button type="button" role="menuitem" disabled={busy || noFreeWeek} title={noFreeWeek ? t("AiJudgePanel.noFreeWeeksHint") : undefined} onClick={() => openWeekPicker("copy", item)}><MIcon name="content_copy" size={16} />{t("AiJudgePanel.copyToWeekBtn")}</button>
-        <span className={styles.menuSeparator} />
-        <button type="button" role="menuitem" className={styles.menuDanger} disabled={busy} onClick={() => deleteSession(item)}><MIcon name="delete" size={16} />{t("AiJudgePanel.opDelete")}</button>
+      <>
+        {t("AiJudgePanel.weekRowTitle", { week: week.week_number })}
+        <span className={hasTopic ? styles.weekRowTopic : styles.weekRowTopicEmpty}>{weekTopic(week)}</span>
+      </>
+    );
+  }
+
+  function weekDate(week) {
+    return String(week.session_date ?? "").slice(5, 10).replace("-", "/");
+  }
+
+  function renderWeekStatus(week) {
+    const hasCheck = sessionByWeek.has(String(week.id));
+    const date = weekDate(week);
+    return (
+      <>
+        <span className={hasCheck ? styles.weekDotReady : styles.weekDot} aria-hidden="true" />
+        {date && `${date} · `}{hasCheck ? t("AiJudgePanel.weekHasCheck") : t("AiJudgePanel.weekNoCheck")}
+        {!isWeekPublished(week) && ` · ${t("AiJudgePanel.weekDraft")}`}
+      </>
+    );
+  }
+
+  function renderWeekMenuButton(item) {
+    return (
+      <button type="button" className={styles.menuBtn} aria-label={t("AiJudgePanel.moreActionsAria", { title: item.title })} title={t("AiJudgePanel.moreActions")} aria-haspopup="menu" aria-expanded={openMenuId === item.id} aria-controls={`check-menu-${item.id}`} disabled={busySessionIds.has(item.id)} onClick={(event) => toggleSessionMenu(event, item.id)}><MIcon name="more_vert" size={18} /></button>
+    );
+  }
+
+  function renderWeekList() {
+    return (
+      <div className={styles.sessionList} role="list">
+        {sortedWeeks.map((week) => {
+          const item = sessionByWeek.get(String(week.id)) ?? null;
+          const selected = String(week.id) === String(activeWeekId);
+          return (
+            <div key={week.id} className={`${styles.sessionRow} ${selected ? styles.sessionRowActive : ""}`} role="listitem">
+              <button type="button" className={selected ? styles.sessionItemActive : styles.sessionItem} aria-current={selected ? "true" : undefined} onClick={() => selectWeek(week.id)}>
+                <SessionTitle title={weekTopic(week)}>{renderWeekTitle(week)}</SessionTitle>
+                <small className={styles.sessionWeekLabel}>{renderWeekStatus(week)}</small>
+              </button>
+              {item && <div className={styles.sessionRowActions}>{renderWeekMenuButton(item)}</div>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  /* 窄版：‹ 目前這週 ▾ › 連成一組翻頁控制，跟分頁放在同一條標頭列；點週次開換週清單。
+     ⋮ 只有建了檢查的週才有，沒有時留同寬的空位，按箭頭翻週時箭頭不會跟著位移 */
+  function renderWeekSwitcher() {
+    if (!activeWeek) return null;
+    const index = sortedWeeks.indexOf(activeWeek);
+    const previousWeek = index > 0 ? sortedWeeks[index - 1] : null;
+    const nextWeek = index < sortedWeeks.length - 1 ? sortedWeeks[index + 1] : null;
+    const date = weekDate(activeWeek);
+    return (
+      <div className={styles.weekSwitcher}>
+        <div className={styles.weekPager}>
+          <button type="button" className={styles.weekStepBtn} aria-label={t("AiJudgePanel.prevWeek")} title={t("AiJudgePanel.prevWeek")} disabled={!previousWeek} onClick={() => selectWeek(previousWeek.id)}>
+            <MIcon name="chevron_left" size={20} />
+          </button>
+          <button
+            type="button"
+            ref={weekSwitcherAnchorRef}
+            className={styles.weekPickerBtn}
+            aria-haspopup="listbox"
+            aria-expanded={weekSwitcherOpen}
+            aria-controls={weekSwitcherOpen ? weekSwitcherListId : undefined}
+            title={t("AiJudgePanel.switchWeek")}
+            onClick={() => setWeekSwitcherOpen((open) => !open)}
+            onKeyDown={(event) => {
+              // 跟原生下拉一樣：上下鍵直接展開
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+              event.preventDefault();
+              setWeekSwitcherOpen(true);
+            }}
+          >
+            <span className={activeSession ? styles.weekDotReady : styles.weekDot} aria-hidden="true" />
+            <span className={styles.weekPickerTitle}>{renderWeekTitle(activeWeek)}</span>
+            {date && <span className={styles.weekPickerDate}>{date}</span>}
+            {!isWeekPublished(activeWeek) && <span className={styles.weekDraftBadge}>{t("AiJudgePanel.weekDraft")}</span>}
+            <span className={styles.srOnly}>{activeSession ? t("AiJudgePanel.weekHasCheck") : t("AiJudgePanel.weekNoCheck")}</span>
+            <MIcon name="expand_more" size={20} className={weekSwitcherOpen ? styles.weekPickerChevronOpen : styles.weekPickerChevron} />
+          </button>
+          <button type="button" className={styles.weekStepBtn} aria-label={t("AiJudgePanel.nextWeek")} title={t("AiJudgePanel.nextWeek")} disabled={!nextWeek} onClick={() => selectWeek(nextWeek.id)}>
+            <MIcon name="chevron_right" size={20} />
+          </button>
+        </div>
+        {activeSession ? renderWeekMenuButton(activeSession) : <span className={styles.weekMenuSlot} aria-hidden="true" />}
       </div>
     );
   }
 
   const sessionSidebarInner = (
     <>
-      {/* 分頁放在週次清單上方的標頭列：跟表格欄位標頭、助理標頭同一條 */}
-      <div className={styles.sidebarHead}>
+      {/* 分頁放在週次清單上方的標頭列：跟表格欄位標頭、助理標頭同一條。
+          窄版沒有週次清單，換週控制也收進這一條，左邊換週、右邊分頁 */}
+      <div className={compactWeeks ? `${styles.sidebarHead} ${styles.sidebarHeadCompact}` : styles.sidebarHead}>
+        {compactWeeks && !loading && renderWeekSwitcher()}
         <SegmentedControl
           ariaLabel={t("AiJudgePanel.tabsAria")}
           className={styles.sidebarTabs}
           compact
-          fullWidth
+          fullWidth={!compactWeeks}
           options={TEACHER_JUDGE_TABS.map((tab) => ({ value: tab.key, label: tab.label, icon: tab.icon, buttonProps: tab.buttonProps }))}
           value={activeTab}
           onChange={selectTab}
         />
       </div>
-      <div className={styles.sidebarBody}>
-        {loading ? (
-          <div className={styles.sidebarLoading} role="status" aria-label={t("AiJudgePanel.loading")}><LoadingSpinner size={44} /></div>
-        ) : sortedWeeks.length === 0 ? null : (
-          <div className={styles.sessionList} role="list">
-            {sortedWeeks.map((week) => {
-              const item = sessionByWeek.get(String(week.id)) ?? null;
-              const selected = String(week.id) === String(activeWeekId);
-              const busy = item ? busySessionIds.has(item.id) : false;
-              const topic = String(week.title ?? "").trim();
-              const date = String(week.session_date ?? "").slice(5, 10).replace("-", "/");
-              return (
-                <div key={week.id} className={`${styles.sessionRow} ${selected ? styles.sessionRowActive : ""}`} role="listitem">
-                  <button type="button" className={selected ? styles.sessionItemActive : styles.sessionItem} aria-current={selected ? "true" : undefined} onClick={() => selectWeek(week.id)}>
-                    <SessionTitle title={topic || t("AiJudgePanel.weekNoTopic")}>
-                      {t("AiJudgePanel.weekRowTitle", { week: week.week_number })}
-                      <span className={topic ? styles.weekRowTopic : styles.weekRowTopicEmpty}>{topic || t("AiJudgePanel.weekNoTopic")}</span>
-                    </SessionTitle>
-                    <small className={styles.sessionWeekLabel}>
-                      <span className={item ? styles.weekDotReady : styles.weekDot} aria-hidden="true" />
-                      {date && `${date} · `}{item ? t("AiJudgePanel.weekHasCheck") : t("AiJudgePanel.weekNoCheck")}
-                      {!isWeekPublished(week) && ` · ${t("AiJudgePanel.weekDraft")}`}
-                    </small>
-                  </button>
-                  {item && (
-                    <div className={styles.sessionRowActions}>
-                      <button type="button" className={styles.menuBtn} aria-label={t("AiJudgePanel.moreActionsAria", { title: item.title })} title={t("AiJudgePanel.moreActions")} aria-haspopup="menu" aria-expanded={openMenuId === item.id} aria-controls={`check-menu-${item.id}`} disabled={busy} onClick={(event) => toggleSessionMenu(event, item.id)}><MIcon name="more_vert" size={18} /></button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {!compactWeeks && (
+        <div className={styles.sidebarBody}>
+          {loading ? (
+            <div className={styles.sidebarLoading} role="status" aria-label={t("AiJudgePanel.loading")}><LoadingSpinner size={44} /></div>
+          ) : sortedWeeks.length === 0 ? null : renderWeekList()}
+        </div>
+      )}
     </>
   );
 
@@ -4991,7 +5070,7 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
   const pickerIsCopy = weekPicker?.mode === "copy";
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} ref={panelRef}>
       {/* 週次清單、分頁列、分頁內容是同一塊面板，欄位之間只用分隔線區隔 */}
       <section
         className={styles.checkWorkspaceTwo}
@@ -5066,7 +5145,29 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
         </div>
       </section>
 
-      {typeof document !== "undefined" && sessionMenuItemKeep.open && sessionMenuPos.item && createPortal(renderSessionMenu(sessionMenuItemKeep.item), document.body)}
+      {sessionMenuItemKeep.open && (
+        <ActionMenu
+          id={`check-menu-${sessionMenuItemKeep.item.id}`}
+          anchorRef={sessionMenuAnchorRef}
+          ariaLabel={t("AiJudgePanel.moreActionsAria", { title: sessionMenuItemKeep.item.title })}
+          items={sessionMenuItems(sessionMenuItemKeep.item)}
+          onClose={closeSessionMenu}
+          closing={sessionMenuItemKeep.closing}
+        />
+      )}
+
+      {weekSwitcher.open && (
+        <ListboxPopover
+          id={weekSwitcherListId}
+          anchorRef={weekSwitcherAnchorRef}
+          ariaLabel={t("AiJudgePanel.weekSwitcherAria")}
+          options={sortedWeeks.map((week) => ({ value: String(week.id), label: renderWeekTitle(week), description: renderWeekStatus(week) }))}
+          value={activeWeekId}
+          onSelect={selectWeek}
+          onClose={closeWeekSwitcher}
+          closing={weekSwitcher.closing}
+        />
+      )}
 
       {pickerItem && (
         <Modal

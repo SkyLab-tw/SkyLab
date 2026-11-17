@@ -73,3 +73,18 @@ test("a reminder click navigates once leaving is confirmed", async () => {
   await clickReminder();
   expect(path()).toBe("/my-requests");
 });
+
+test("面板打開時焦點移進面板，按 Esc 關閉並把焦點還給按鈕", async () => {
+  const button = document.querySelector('button[aria-label="JobsButton.backgroundJobs"]');
+  await act(async () => { button.click(); });
+
+  const panel = document.querySelector('[role="dialog"]');
+  expect(panel).not.toBeNull();
+  expect(document.activeElement).toBe(panel);
+
+  await act(async () => {
+    panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  expect(button.getAttribute("aria-expanded")).toBe("false");
+  expect(document.activeElement).toBe(button);
+});

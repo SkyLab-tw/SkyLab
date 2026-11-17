@@ -30,6 +30,7 @@ export default function DashboardLayout() {
   useBodyScrollLock(mobileOpen);
   const [compactFooter, setCompactFooter] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantOverlay, setAssistantOverlay] = useState(false);
   const [requestForm, setRequestForm] = useState(null);
   const [requestSubmission, reportRequestSubmission] = useState(null);
   const registerRequestForm = useCallback((api) => setRequestForm(api ?? null), []);
@@ -45,6 +46,7 @@ export default function DashboardLayout() {
   const layoutValue = useMemo(
     () => ({
       setCompactFooter,
+      setAssistantOverlay,
       registerRequestForm,
       requestForm,
       requestSubmission,
@@ -121,6 +123,7 @@ export default function DashboardLayout() {
             <AiFloatingChat
               open={assistantOpen}
               onOpenChange={setAssistantOpen}
+              forceOverlay={assistantOverlay}
             />
           </div>
           <SessionWarningDialog

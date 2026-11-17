@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { computePosition, isAnchorOffscreen } from "../components/PowerMenu/position";
+import { computeFittedPosition, computePosition, computeSidePosition, isAnchorOffscreen } from "./anchoredMenuPosition";
 import useOutsideClick from "./useOutsideClick";
 
 /**
  * portal 到 body、position: fixed 的錨定選單共用邏輯：
  * 依錨點定位、捲動／縮放時重算、錨點捲出視窗就關閉、外點與 Esc 關閉。
  * 回傳 { ref, pos }：ref 掛在選單元素上，pos 為 null 時表示還沒量到高度、先保持隱形。
- * width 對應 computePosition 的選單寬度（不傳就用 position.js 的預設值）；
+ * width 對應 computePosition 的選單寬度（不傳就用 anchoredMenuPosition.js 的預設值）；
  * align 為 "left" 時選單左緣對齊錨點（輸入框的建議選單），預設右緣對齊（按鈕選單）。
+ * maxHeight 給可捲動的長清單：放不下時把清單縮到剩下的空間，不往上推蓋住錨點；pos.maxHeight 要寫回選單的 style。
+ * placement 為 "side" 時給側欄底部的選單（語言、帳號、背景任務）：貼著錨點所在的 <aside> 外緣往右彈出、底緣對齊錨點。
  */
-export default function useAnchoredMenu({ anchorRef, onClose, width, align = "right" }) {
+export default function useAnchoredMenu({ anchorRef, onClose, width, align = "right", maxHeight, placement = "below" }) {
   const ref = useRef(null);
   const [pos, setPos] = useState(null);
 
@@ -30,8 +32,22 @@ export default function useAnchoredMenu({ anchorRef, onClose, width, align = "ri
       onCloseRef.current();
       return;
     }
-    setPos(computePosition(rect, menu.offsetHeight, viewport, width, align));
-  }, [anchorRef, width, align]);
+    // scrollHeight 是內容完整的高度，不受上一次縮小的 max-height 影響，捲動重算時方向才不會亂跳；再補上框線
+    const height = maxHeight
+      ? Math.min(menu.scrollHeight + menu.offsetHeight - menu.clientHeight, maxHeight)
+      : menu.offsetHeight;
+    let next;
+    if (placement === "side") {
+      const edgeRight = (anchor.closest("aside") ?? anchor).getBoundingClientRect().right;
+      next = computeSidePosition(rect, edgeRight, height, viewport, width, Boolean(maxHeight));
+    } else {
+      next = maxHeight
+        ? computeFittedPosition(rect, height, viewport, width, align)
+        : computePosition(rect, height, viewport, width, align);
+    }
+    // 位置沒變就不重繪：選單尺寸的監聽才不會因為自己的重繪又被觸發
+    setPos((prev) => (prev && Object.keys(next).every((key) => prev[key] === next[key]) ? prev : next));
+  }, [anchorRef, width, align, maxHeight, placement]);
 
   // 要先量到選單實際高度才知道往上或往下翻，定位完成前保持隱形
   useLayoutEffect(() => { reposition(); }, [reposition]);
@@ -45,6 +61,15 @@ export default function useAnchoredMenu({ anchorRef, onClose, width, align = "ri
       window.removeEventListener("scroll", reposition, opts);
       window.removeEventListener("resize", reposition);
     };
+  }, [reposition]);
+
+  // 選單內容換了（切分頁、清單載入完）高度會變：往上長的選單要重算，底緣才會一直對齊錨點
+  useEffect(() => {
+    const menu = ref.current;
+    if (!menu || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(reposition);
+    observer.observe(menu);
+    return () => observer.disconnect();
   }, [reposition]);
 
   useOutsideClick(ref, anchorRef, onClose, { escape: true });

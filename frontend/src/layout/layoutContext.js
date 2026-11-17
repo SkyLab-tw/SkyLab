@@ -8,6 +8,9 @@ import { createContext } from "react";
  */
 export const LayoutContext = createContext({
   setCompactFooter: () => {},
+  /* 頁面自己有對話欄（AI 導師檢查的檢查助理）時設成 true：AI 助手改用覆蓋層開啟，
+     不跟頁面並排擠窄版面，也不會出現兩個對話框並排、不知道該問哪一個 */
+  setAssistantOverlay: () => {},
   /* 申請表單掛載時把自己註冊進來，AI 助手才能就地把欄位填好，
      並且拿得到表單當下的真實候選（該時段的 GPU、時段選項、作業系統清單）。 */
   registerRequestForm: () => {},
