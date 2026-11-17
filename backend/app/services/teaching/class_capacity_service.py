@@ -4,6 +4,7 @@ import json
 import logging
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sqlmodel import Session, select
@@ -32,6 +33,9 @@ MIB = 1024**2
 # 存進預留快照的逐節點需求欄位；預覽另外附上的可用量不存
 _PLAN_DEMAND_KEYS = ("cpu_cores", "memory_bytes", "disk_bytes", "machines")
 logger = logging.getLogger(__name__)
+
+# (節點名, 課程機器) → 這台節點上有沒有儲存區放得下；放得下時已扣掉空間
+StoragePlacer = Callable[[str, TeachingClassMachineNode], bool]
 
 
 def _gib(value: float) -> str:
@@ -473,6 +477,7 @@ def allocate_class_placements(
     connection_id: int | None,
     eligibility: dict[uuid.UUID, set[str]],
     capacities: dict[str, object],
+    fits_storage: StoragePlacer | None = None,
 ) -> dict[uuid.UUID, dict[uuid.UUID, str]]:
     """叢集內把學生分散到不同節點。
 
@@ -483,6 +488,12 @@ def allocate_class_placements(
     節點，自訂 LXC 則是所有看得到該 vztmpl 的節點）。逐位學生放置，每次挑
     「放上去之後占用比例最低」的節點，讓同型機器平均攤在該叢集的各台
     server 上。
+
+    ``fits_storage``：節點上有沒有儲存區放得下這台機器（放得下就順便扣掉
+    空間）。給了就照 CPU／RAM 的排序往下找第一個放得下的節點 —— 最閒的
+    節點不一定有地方放：範本 clone 到其他節點只能用共享儲存，共享儲存滿了
+    時，只有範本節點還能用本機儲存。全部放不下時仍給最閒的節點，由後續的
+    儲存區檢查回報不足。
 
     回傳 {machine_node_id: {student_id: 節點名}}。
     """
@@ -530,7 +541,14 @@ def allocate_class_placements(
 
         per_student: dict[uuid.UUID, str] = {}
         for student_id in student_ids:
-            chosen = min(candidates, key=_projected)
+            # sorted 是穩定排序：占用比例相同時照節點名，與先前的 min 一致
+            ranked = sorted(candidates, key=_projected)
+            chosen = ranked[0]
+            if fits_storage is not None:
+                chosen = next(
+                    (name for name in ranked if fits_storage(name, machine_node)),
+                    chosen,
+                )
             per_student[student_id] = chosen
             taken[chosen]["cpu"] += cpu_need
             taken[chosen]["mem"] += mem_need
@@ -713,12 +731,24 @@ def _evaluate_cluster_capacity(
         eligibility=eligibility,
         capacities=capacities,
     )
+    # 選點與最後的儲存區檢查用同一組節點建儲存池，兩邊對共享儲存的認知一致
+    storage_nodes = sorted(
+        {
+            name
+            for names in eligibility.values()
+            for name in names
+            if get_connection_id_for_node(name) == connection_id
+        }
+    )
     placements = allocate_class_placements(
         nodes=nodes,
         student_ids=student_ids,
         connection_id=connection_id,
         eligibility=eligibility,
         capacities=capacities,
+        fits_storage=_storage_placer(
+            session, node_names=storage_nodes, pending_machines=pending_machines
+        ),
     )
     if not placements:
         return {}, {}, [t("class_capacity.no_node_in_cluster", name=nodes[0].name)]
@@ -766,6 +796,7 @@ def _evaluate_cluster_capacity(
             nodes=nodes,
             placements=placements,
             pending_machines=pending_machines,
+            storage_nodes=storage_nodes,
         )
     )
     return dict(demand), placements, issues
@@ -800,6 +831,7 @@ def _storage_pool_issues(
     nodes: list[TeachingClassMachineNode],
     placements: dict[uuid.UUID, dict[uuid.UUID, str]],
     pending_machines: list[pending_capacity.PendingMachine] | None = None,
+    storage_nodes: list[str] | None = None,
 ) -> list[str]:
     """依實際儲存區檢查磁碟：整班逐台試放，一台機器不能跨池。
 
@@ -807,21 +839,57 @@ def _storage_pool_issues(
     拿來判斷磁碟夠不夠。這裡照 placement 的真實規則逐台挑儲存區；其他班級
     已預留、以及已核准還沒建出來的機器先放進去，避免兩邊都通過、開課才撞上
     空間不足。
+
+    ``storage_nodes``：建儲存池時另外納入的節點（選點時用的候選節點），讓
+    這裡和選點看到的共享儲存是同一份；落點本身一定會納入。
     """
     target_names = sorted(
         {name for machine in placements.values() for name in machine.values()}
     )
     if not target_names:
         return []
+    place = _storage_placer(
+        session,
+        node_names=sorted(set(target_names) | set(storage_nodes or [])),
+        pending_machines=pending_machines,
+    )
+    if place is None:
+        return []
+    for machine_node in nodes:
+        for target_node in placements[machine_node.id].values():
+            if not place(target_node, machine_node):
+                # 第一個放不下的就足以擋下整班，不必把剩下的學生也列出來
+                return [
+                    t(
+                        "class_capacity.storage_insufficient",
+                        node=target_node,
+                        required=int(machine_node.disk_gb),
+                    )
+                ]
+    return []
+
+
+def _storage_placer(
+    session: Session,
+    *,
+    node_names: list[str],
+    pending_machines: list[pending_capacity.PendingMachine] | None = None,
+) -> StoragePlacer | None:
+    """照 placement 的真實規則逐台挑儲存區、扣空間的試放器。
+
+    其他班級已預留、以及已核准還沒建出來的機器先放進去。共享儲存在各節點
+    是同一個池物件，放在哪個節點都扣同一份。沒有任何受管儲存紀錄時回 None
+    （無從判斷，不擋）。
+    """
     pending_machines = pending_machines or []
     pools_by_node, has_managed_storage = placement_support.build_storage_pool_state(
         session=session,
         node_names=sorted(
-            set(target_names) | {machine.node for machine in pending_machines}
+            set(node_names) | {machine.node for machine in pending_machines}
         ),
     )
     if not has_managed_storage:
-        return []
+        return None
 
     _cpu_ratio, disk_ratio = placement_service.get_overcommit_ratios(session)
     tuning = placement_service.get_placement_tuning(session=session)
@@ -853,18 +921,7 @@ def _storage_pool_issues(
         disk_overcommit_ratio=disk_ratio,
         tuning=tuning,
     )
-    for machine_node in nodes:
-        for target_node in placements[machine_node.id].values():
-            if not _place(target_node, machine_node):
-                # 第一個放不下的就足以擋下整班，不必把剩下的學生也列出來
-                return [
-                    t(
-                        "class_capacity.storage_insufficient",
-                        node=target_node,
-                        required=int(machine_node.disk_gb),
-                    )
-                ]
-    return []
+    return _place
 
 
 def _storage_resource_type(machine_node: TeachingClassMachineNode) -> ResourceType:
