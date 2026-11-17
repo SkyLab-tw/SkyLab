@@ -617,8 +617,8 @@ async def test_complete_manual_system_info_candidate_reselects_generic_capabilit
 
     assert len(calls) == 3
     capability_error = json.loads(calls[1]["messages"][-1]["content"])
-    assert "已提供 system.run_command" in capability_error["error"]
-    assert "只有確實無法取得任何證據" in capability_error["error"]
+    assert "缺少可執行的 check_steps" in capability_error["error"]
+    assert "manual" not in capability_error["error"]
     assert "整理成提案" in reply
     assert proposal is not None
     assert proposal[0]["detectable"] == "auto"
@@ -699,7 +699,7 @@ async def test_invalid_step_then_manual_uses_distinct_capability_repair(
     step_error = json.loads(calls[1]["messages"][-1]["content"])
     assert step_error["reason_code"] == "check_plan_contract_invalid"
     capability_error = json.loads(calls[2]["messages"][-1]["content"])
-    assert "已提供 system.run_command" in capability_error["error"]
+    assert "缺少可執行的 check_steps" in capability_error["error"]
     assert "整理成提案" in reply
     assert proposal is not None
     assert proposal[0]["check_steps"][0]["collector"]["type"] == "command"

@@ -39,6 +39,8 @@ def stopped_record(**overrides: Any) -> dict[str, Any]:
         "staged_count": 0,
         "created_count": 0,
         "proposal": [],
+        "model_requests": 2,
+        "tool_budget_exhausted": False,
     }
     record.update(overrides)
     return record
@@ -80,7 +82,7 @@ def test_select_unknown_case_exits(runner) -> None:
 
 def test_each_missing_gap_has_its_own_tag(runner) -> None:
     tags = {tag for case in runner.CASES for tag in case.tags}
-    assert {"missing-path", "missing-machine", "missing-condition", "summary"} <= tags
+    assert {"missing-path", "machine", "missing-condition", "summary"} <= tags
 
 
 # ------------------------------------------------------------------ 判定
@@ -129,10 +131,131 @@ def test_condition_check_accepts_question_or_teacher_review(runner) -> None:
     assert runner.check_condition({**teacher, "staged_count": 2})
 
 
-def test_machine_case_uses_indistinguishable_machines(runner) -> None:
+def test_condition_view_requires_single_teacher_proposal_without_question(runner) -> None:
+    ok = stopped_record(
+        case_id="P1-condition-view",
+        proposal_status="ready",
+        staged_count=1,
+        proposal=[{"title": "Python 版本", "judgement_mode": "teacher"}],
+    )
+    assert runner.check_teacher_view(ok) == []
+    ai = {**ok, "proposal": [{"title": "Python 版本", "judgement_mode": "ai"}]}
+    assert any("teacher" in f for f in runner.check_teacher_view(ai))
+    asked = stopped_record(case_id="P1-condition-view")
+    assert len(runner.check_teacher_view(asked)) == 2
+
+
+def test_condition_value_requires_ai_text_contains_expected(runner) -> None:
+    ok = stopped_record(
+        case_id="P1-condition-value",
+        proposal_status="ready",
+        staged_count=1,
+        proposal=[
+            {
+                "title": "Python 版本",
+                "judgement_mode": "ai",
+                "assertions": [{"type": "text_contains", "expected": "Python 3.12"}],
+            }
+        ],
+    )
+    assert runner.check_condition_value(ok) == []
+    teacher = {**ok, "proposal": [{**ok["proposal"][0], "judgement_mode": "teacher"}]}
+    assert any("ai" in f for f in runner.check_condition_value(teacher))
+    equals = {
+        **ok,
+        "proposal": [
+            {**ok["proposal"][0], "assertions": [{"type": "text_equals", "expected": "3.12"}]}
+        ],
+    }
+    assert any("text_contains" in f for f in runner.check_condition_value(equals))
+    assert runner.check_condition_value(stopped_record())
+
+
+def test_condition_cases_share_missing_condition_tag(runner) -> None:
+    selected = {c.case_id for c in runner.select_cases([], ["missing-condition"])}
+    assert selected == {"P1-condition", "P1-condition-view", "P1-condition-value"}
+
+
+@pytest.mark.parametrize(
+    ("override", "fragment"),
+    [
+        ({"model_requests": 4}, "超過 3 次"),
+        ({"model_requests": None}, "缺少模型請求次數"),
+        ({"tool_budget_exhausted": True}, "輪數用盡"),
+    ],
+)
+def test_runtime_criteria_fail_the_round(runner, override, fragment) -> None:
+    case = runner.CASES_BY_ID["P1-path"]
+    rounds = [stopped_record(round=i) for i in (1, 2)] + [stopped_record(round=3, **override)]
+    verdict, notes = runner.evaluate_rounds(case, rounds)
+    assert verdict == "NEEDS_REVIEW"
+    assert any(note.startswith("第 3 輪") and fragment in note for note in notes), notes
+
+
+def test_attach_rounds_skip_chat_request_limit(runner) -> None:
+    case = runner.CASES_BY_ID["P1-attach"]
+    assert runner.runtime_failures(case, {"model_requests": 12}) == []
+    assert runner.runtime_failures(case, {"tool_budget_exhausted": True})
+
+
+@pytest.mark.asyncio
+async def test_run_round_counts_model_requests_and_budget_log(runner) -> None:
+    import logging
+    from types import SimpleNamespace
+
+    async def model_call(*_args, **_kwargs):
+        return {}, {}
+
+    async def chat_with_rubric(*_args, **_kwargs):
+        for _ in range(4):
+            await service._call_vllm_message({})
+        logging.getLogger("app.ai.teacher_judge.service").warning(
+            "Teacher Judge tool round budget (6) exhausted with staged=0"
+        )
+        return SimpleNamespace(
+            reply="請提供路徑",
+            proposal_status="needs_information",
+            tool_calls=[],
+            conversation_focus=None,
+            proposal=None,
+            metrics={},
+        )
+
+    service = SimpleNamespace(_call_vllm_message=model_call, chat_with_rubric=chat_with_rubric)
+    record = await runner.run_round(runner.CASES_BY_ID["P1-path"], 1, service)
+
+    assert record.get("error") is None
+    assert record["model_requests"] == 4
+    assert record["tool_budget_exhausted"] is True
+    assert service._call_vllm_message is model_call
+    assert runner.runtime_failures(runner.CASES_BY_ID["P1-path"], record)
+
+
+def test_machine_case_uses_label_only_machines(runner) -> None:
     case = runner.CASES_BY_ID["P1-machine"]
-    assert len(case.machines) == 2
-    assert {m["role"] for m in case.machines} == {"server"}
+    assert [m["name"] for m in case.machines] == ["P1", "P2", "P3"]
+    assert not any("web" in json.dumps(m) for m in case.machines)
+
+
+def test_machine_mapping_check_requires_each_item_on_named_machine(runner) -> None:
+    ok = {
+        "created_count": 3,
+        "proposal": [
+            {"title": "P1 nginx 服務", "target_node_key": "node-1"},
+            {"title": "P2 8080 監聽", "target_node_key": "node-2"},
+            {"title": "P3 hostname", "target_node_key": "node-3"},
+        ],
+    }
+    assert runner.check_machine_mapping(ok) == []
+    swapped = {
+        **ok,
+        "proposal": [
+            {**ok["proposal"][0], "target_node_key": "node-2"},
+            *ok["proposal"][1:],
+        ],
+    }
+    assert any("應分到 node-1" in f for f in runner.check_machine_mapping(swapped))
+    assert runner.check_machine_mapping({**ok, "created_count": 2})
 
 
 def test_multi_check_requires_count_header_and_title_mapping(runner) -> None:
@@ -257,6 +380,8 @@ def test_live_run_writes_latest_report_without_secrets(runner, monkeypatch, tmp_
             "created_count": 0,
             "updated_count": 0,
             "proposal_count": 0,
+            "model_requests": 2,
+            "tool_budget_exhausted": False,
             "elapsed_seconds": 0.1,
             "server_log": [],
         }

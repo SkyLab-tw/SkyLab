@@ -45,14 +45,16 @@ from app.ai.teacher_judge.machine_context import (
 )
 from app.ai.teacher_judge.prompt import (
     ATTACHMENT_EXTRACTION_SYSTEM_TEMPLATE,
-    CANONICAL_CHECK_STEP_CONTRACT_INSTRUCTION,
+    CHAT_ALLOWED_TOOLS_SECTION,
+    CHAT_ATTACHMENT_DATA_INSTRUCTION,
+    CHAT_CHECK_STEP_CONTRACT_INSTRUCTION,
+    CHAT_NO_TOOLS_SECTION,
+    CHAT_PROPOSAL_SYSTEM_TEMPLATE,
     CHAT_SYSTEM_TEMPLATE,
+    CHAT_TEMPLATE_COMMANDS_TEMPLATE,
     DIRECT_RUBRIC_UPDATE_INSTRUCTION,
     FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION,
     MACHINE_CONTEXT_ONLY_TEMPLATE,
-    SESSION_NO_RUBRIC_INSTRUCTION,
-    SESSION_REQUIREMENT_PROPOSAL_INSTRUCTION,
-    SITUATION_NORMAL,
     SITUATION_REFINE,
     SUMMARY_SYSTEM_PROMPT,
     TEMPLATE_COMMAND_CONTEXT_TEMPLATE,
@@ -396,11 +398,76 @@ _PROPOSAL_TOOLS: list[dict[str, Any]] = [
 ]
 
 
+_PROPOSAL_TOOL_NAMES = frozenset(
+    tool["function"]["name"] for tool in _PROPOSAL_TOOLS
+)
+
+# Chat proposals only accept complete (auto) items, so the model never sees the
+# partial/manual vocabulary; the server fills detectability itself. Edit keeps
+# missing_information only so resolved gaps of a stored item can be cleared.
+_CHAT_HIDDEN_FILL_FIELDS = {
+    _CREATE_CHECKLIST_ITEM_TOOL_NAME: ("detectable", "missing_information", "fallback"),
+    _EDIT_CHECKLIST_ITEM_TOOL_NAME: ("detectable", "fallback"),
+}
+_CHAT_EDIT_MISSING_INFORMATION_DESCRIPTION = (
+    "既有項目尚未補齊的缺口；老師已補齊的缺口要移除，全部補齊時填 []。不得新增缺口。"
+)
+_CHAT_TOOL_DESCRIPTIONS = {
+    _CREATE_CHECKLIST_ITEM_TOOL_NAME: (
+        "為一條資訊完整的新檢查需求建立新增提案，老師確認套用後才寫入檢查表。"
+        "只在機器、檢查對象與判定方式都確定時呼叫；缺任何一項時不要呼叫，改在回覆詢問老師。"
+        "檔案路徑與 target_node_key 只能取自老師訊息、附件或對話，不得自行代入預設位置或自選機器。"
+        "同標題已存在時會被拒絕，請改用 edit_checklist_item。"
+    ),
+    _EDIT_CHECKLIST_ITEM_TOOL_NAME: (
+        "對既有檢查項目送出修改提案，老師確認套用後才寫入檢查表。"
+        "必須先呼叫 get_checklist_item 讀取完整內容；只在修改後資訊完整時呼叫，只填要變更的欄位。"
+    ),
+}
+_UNKNOWN_TOOL_ERROR = (
+    "工具「{name}」不存在。可用工具只有 list_checklist、get_checklist_item、"
+    "create_checklist_item、edit_checklist_item；最終回覆請直接在 content 輸出 JSON，不要呼叫工具。"
+)
+_AWAITING_TEACHER_ERROR = (
+    "此項目需要老師補充資訊；本輪不要再呼叫工具，請在 reply 詢問老師，"
+    "proposal_status 設為 needs_information。"
+)
+_CHAT_JUDGEMENT_MODE_DESCRIPTION = (
+    "ai=依 assertion 自動判定；teacher=只收集結果給老師查看，不放 assertion"
+)
+_CHAT_DETECTION_METHOD_DESCRIPTION = "一句話說明系統如何取證"
+
+
 def _build_proposal_tools(
     machine_entries: list[dict[str, Any]] | None = None,
+    *,
+    chat: bool = False,
 ) -> list[dict[str, Any]]:
     """Build request-scoped node enums without mutating shared tool schemas."""
     tools = copy.deepcopy(_PROPOSAL_TOOLS)
+    if chat:
+        for tool in tools:
+            function = tool["function"]
+            description = _CHAT_TOOL_DESCRIPTIONS.get(function["name"])
+            if description is None:
+                continue
+            function["description"] = description
+            properties = function["parameters"]["properties"]
+            for field_name in _CHAT_HIDDEN_FILL_FIELDS[function["name"]]:
+                properties.pop(field_name, None)
+            properties["judgement_mode"] = {
+                **properties["judgement_mode"],
+                "description": _CHAT_JUDGEMENT_MODE_DESCRIPTION,
+            }
+            properties["detection_method"] = {
+                **properties["detection_method"],
+                "description": _CHAT_DETECTION_METHOD_DESCRIPTION,
+            }
+            if "missing_information" in properties:
+                properties["missing_information"] = {
+                    **properties["missing_information"],
+                    "description": _CHAT_EDIT_MISSING_INFORMATION_DESCRIPTION,
+                }
     if machine_entries is None:
         return tools
     node_keys = [
@@ -918,22 +985,6 @@ def _duplicate_title_owner(
     return None
 
 
-def _allowed_command_text(
-    template_commands: list[TeacherJudgeTemplateCommand] | None,
-) -> str:
-    return (
-        "、".join(
-            sorted(
-                {
-                    f"{command.template_key}/{command.command_key}"
-                    for command in template_commands or []
-                }
-            )
-        )
-        or "（目前沒有可用 command）"
-    )
-
-
 _PARAMETER_GAP_FIELD_HINTS: dict[str, str] = {
     "要檢查的檔案、服務或記錄範圍": "argv（單一非空的命令字串 list）",
     "實際 Python 命令與參數": "argv（python.run_entrypoint 的完整命令 list）",
@@ -967,23 +1018,19 @@ def _proposal_candidate_rejection(
         # Refine (full-table polish) may stage non-auto candidates; the polish
         # itself is the fix for downgraded detectability.
         return None
+    # Below here only chat/attachment proposals (ready_only) are checked; the
+    # messages never mention partial/manual because chat tools no longer expose them.
     if _invalid_auto_item_titles([normalized], [raw]):
         return (
-            f"「{normalized.title}」雖標為 auto，但 check_steps 沒有通過驗證；"
-            f"環境已確認可優先使用的 template_key/command_key 為："
-            f"{_allowed_command_text(template_commands)}。"
-            "這份清單不是提案限制；若要使用其他唯讀診斷工具，請改用"
-            " command collector，提供單一非空 argv list，並補齊必要執行參數。"
+            f"「{normalized.title}」的 check_steps 沒有通過驗證；"
+            "請改用 typed collector（command 需單一非空 argv），補齊必要參數後重新呼叫。"
         )
     if capability_declared and _manual_candidates_needing_capability_review(
         [normalized], [raw], template_commands
     ):
         return (
-            f"「{normalized.title}」被標成 manual 且沒有列出缺口，"
-            "但目前平台已提供 system.run_command，可規劃單一安全唯讀 argv。"
-            "若可由唯讀查詢取得證據，請改為 auto 並提供 argv，預設以 judgement_mode=ai 為目標；"
-            "只有老師已明確表示想自己檢查時才使用 judgement_mode=teacher；"
-            "只有確實無法取得任何證據時，才維持 manual 並在 missing_information 說明原因。"
+            f"「{normalized.title}」缺少可執行的 check_steps；"
+            "請補上完整的 check_steps 後重新呼叫。"
         )
     if normalized.detectable != "auto":
         missing = list(normalized.missing_information)
@@ -1002,9 +1049,8 @@ def _proposal_candidate_rejection(
         missing_text = "、".join(missing) or "缺少可自動取證的完整檢查步驟"
         return (
             f"「{normalized.title}」目前無法形成可套用的提案：{missing_text}。"
-            "若上下文已有絕對路徑，請據此修正步驟後重試；"
-            "否則不要猜測路徑或建立提案，請改在 reply 中說明缺少的內容並詢問老師，"
-            "並將 proposal_status 設為 needs_information。"
+            "不要猜測，本輪不要再為此項呼叫工具，請在 reply 詢問老師，"
+            "proposal_status 設為 needs_information。"
         )
     return None
 
@@ -2103,9 +2149,15 @@ def _dispatch_checklist_tool(
             entry["item"].id for entry in staged_ops
         }
         item_id = _mint_proposal_item_id(existing_ids)
+        # Chat tools hide detectability: a chat create is a complete (auto)
+        # request, and normalization still downgrades it when steps have gaps.
+        chat_defaults = (
+            {"detectable": "auto"} if ready_only and not finalizer else {}
+        )
         try:
             raw_item = _canonicalize_proposal_machine_fields(
-                {**arguments, "id": item_id, "title": title}, machine_entries
+                {**chat_defaults, **arguments, "id": item_id, "title": title},
+                machine_entries,
             )
         except ValueError as exc:
             return {"error": str(exc)}
@@ -2208,6 +2260,10 @@ def _dispatch_checklist_tool(
                 "item_id": item_id,
                 "note": "沒有提供任何變更欄位，未建立修改提案。",
             }
+        if ready_only and not finalizer:
+            # Chat edits target a complete item; recorded gaps are kept unless
+            # the model clears them, so normalization still downgrades it.
+            patch = {"detectable": "auto", **patch}
         try:
             raw_candidate = _canonicalize_proposal_machine_fields(
                 {**current_raw, **patch}, machine_entries
@@ -2358,11 +2414,14 @@ async def _run_proposal_tool_loop(
     rejected_ops: list[tuple[TeacherJudgeRubricItem, dict[str, Any], str]] = []
     tool_outcomes: list[dict[str, Any]] = []
 
+    # Chat (and attachment-item) proposals; refine/Finalizer keep their loop.
+    chat_mode = ready_only and not finalizer
     base_request = dict(payload_data)
     base_request.pop("messages", None)
     if rubric_available:
         base_request["tools"] = _build_proposal_tools(
             machine_entries,
+            chat=chat_mode,
         )
         base_request["tool_choice"] = (
             {"type": "function", "function": {"name": _LIST_CHECKLIST_TOOL_NAME}}
@@ -2401,6 +2460,12 @@ async def _run_proposal_tool_loop(
     pending_errors: dict[str, dict[str, Any]] = {}
     terminal_errors: set[str] = set()
     error_reply_reminders: set[str] = set()
+    # Chat only: items that already asked for teacher input, and hallucinated
+    # tool names. Repeating either ends the tool phase instead of looping.
+    awaiting_teacher: dict[str, str] = {}
+    unknown_tool_calls = 0
+    stop_tools = False
+    tools_exhausted = False
     for _ in range(max_rounds):
         remaining_tokens = main_completion_budget - int(
             metrics.get("completion_tokens") or 0
@@ -2578,6 +2643,38 @@ async def _run_proposal_tool_loop(
             parsed_arguments = _tool_arguments(function.get("arguments"))
             arguments = parsed_arguments or {}
             attempt_key = f"{tool_name}:{arguments.get('id') or _normalized_title_key(arguments.get('title'))}"
+            chat_block = None
+            if chat_mode and tool_name not in _PROPOSAL_TOOL_NAMES:
+                unknown_tool_calls += 1
+                logger.warning(
+                    "Teacher Judge ignored unknown tool call: %s",
+                    tool_name or "(missing name)",
+                )
+                chat_block = {
+                    "error": _UNKNOWN_TOOL_ERROR.format(name=tool_name),
+                    "reason_code": "unknown_tool",
+                    "retryable": False,
+                }
+            elif chat_mode and awaiting_teacher.get(attempt_key) == json.dumps(
+                arguments, ensure_ascii=False, sort_keys=True
+            ):
+                stop_tools = True
+                chat_block = {
+                    "error": _AWAITING_TEACHER_ERROR,
+                    "reason_code": "teacher_input_required",
+                    "retryable": False,
+                }
+            if chat_block is not None:
+                # Not a proposal outcome: keep it out of tool_outcomes/pending
+                # errors so the teacher never sees a fake per-item failure.
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": str(tool_call["id"]),
+                        "content": json.dumps(chat_block, ensure_ascii=False),
+                    },
+                )
+                continue
             if attempt_key in terminal_errors or parsed_arguments is None:
                 result = {
                     "error": "此項目的有限重試已結束。"
@@ -2662,6 +2759,14 @@ async def _run_proposal_tool_loop(
                 if result.get("teacher_input_required"):
                     # Asking the teacher is the next step, not an AI retry.
                     pending_errors.pop(attempt_key)
+                    if chat_mode:
+                        # A changed retry may still fix the item; a second gap
+                        # for the same item means only the teacher can.
+                        if attempt_key in awaiting_teacher:
+                            stop_tools = True
+                        awaiting_teacher[attempt_key] = json.dumps(
+                            arguments, ensure_ascii=False, sort_keys=True
+                        )
                 if not retryable and not result.get("teacher_input_required"):
                     terminal_errors.add(attempt_key)
                 logger.warning(
@@ -2719,9 +2824,19 @@ async def _run_proposal_tool_loop(
             not error.get("retryable") for error in pending_errors.values()
         ):
             break
+        if chat_mode and (stop_tools or unknown_tool_calls >= 2):
+            stop_tools = True
+            logger.warning(
+                "Teacher Judge chat tool phase stopped: repeated_teacher_input=%s "
+                "unknown_tool_calls=%d staged=%d rejected=%d",
+                bool(awaiting_teacher),
+                unknown_tool_calls,
+                len(staged_ops),
+                len(rejected_ops),
+            )
+            break
     else:
-        # Round budget exhausted while the model kept calling tools; force one
-        # plain reply round without tools so the teacher always gets an answer.
+        tools_exhausted = True
         logger.warning(
             "Teacher Judge tool round budget (%s) exhausted with staged=%d "
             "rejected=%d failed=%d",
@@ -2730,6 +2845,9 @@ async def _run_proposal_tool_loop(
             len(rejected_ops),
             len(pending_errors),
         )
+    if tools_exhausted or stop_tools:
+        # The model kept calling tools; force one plain reply round without
+        # tools so the teacher always gets an answer.
         reply_payload = {
             **base_request,
             "messages": [
@@ -2828,6 +2946,44 @@ async def summarize_conversation(
     return content.strip(), metrics
 
 
+def _chat_proposal_system_prompt(
+    *,
+    rubric_available: bool,
+    template_key: str,
+    environment_keys: list[str] | None,
+    template_commands: list[TeacherJudgeTemplateCommand] | None,
+    machine_context: str,
+    attachment_context: str,
+) -> str:
+    """Render the chat-proposal system prompt (chat and attachment items only)."""
+    command_block = (
+        "\n"
+        + CHAT_TEMPLATE_COMMANDS_TEMPLATE.replace(
+            "{template_commands}",
+            format_template_commands_for_prompt(template_commands),
+        )
+        if template_commands
+        else ""
+    )
+    replacements = {
+        "{tool_section}": (
+            CHAT_ALLOWED_TOOLS_SECTION if rubric_available else CHAT_NO_TOOLS_SECTION
+        ),
+        "{template_key}": template_key,
+        "{environment_keys}": ", ".join(environment_keys or [template_key]),
+        "\n{template_commands}": command_block,
+        "{machine_context}": machine_context,
+        "{check_step_contract}": CHAT_CHECK_STEP_CONTRACT_INSTRUCTION.replace(
+            "{peer_ip_token}", PEER_IP_TOKEN
+        ),
+        "{attachment_context}": attachment_context,
+    }
+    prompt = CHAT_PROPOSAL_SYSTEM_TEMPLATE
+    for placeholder, value in replacements.items():
+        prompt = prompt.replace(placeholder, value)
+    return prompt
+
+
 async def chat_with_rubric(
     messages: list[TeacherJudgeRubricChatMessage],
     rubric_context: str,
@@ -2853,7 +3009,6 @@ async def chat_with_rubric(
     if not settings.VLLM_MODEL_NAME:
         raise HTTPException(status_code=503, detail=t("service.model_not_configured"))
 
-    situation = SITUATION_REFINE if is_refine else SITUATION_NORMAL
     has_attachments = bool(
         attachment_context and attachment_context != "（本次訊息沒有附件）"
     )
@@ -2862,51 +3017,59 @@ async def chat_with_rubric(
         if has_attachments
         else "（本次訊息沒有附件）"
     )
-    proposal_mode_instruction = (
-        DIRECT_RUBRIC_UPDATE_INSTRUCTION
-        if is_refine
-        else SESSION_REQUIREMENT_PROPOSAL_INSTRUCTION
-        if rubric_available
-        else SESSION_NO_RUBRIC_INSTRUCTION
+    resolved_machine_context = (
+        machine_context or "（目前未提供班級機器拓撲；不要猜測 target_node_key。）"
     )
-    context_template = (
-        TEMPLATE_COMMAND_CONTEXT_TEMPLATE
-        if template_commands
-        else MACHINE_CONTEXT_ONLY_TEMPLATE
-    )
-    system_prompt = (
-        CHAT_SYSTEM_TEMPLATE.replace(
-            "{attachment_context}",
-            prompt_attachment_context,
+    if is_refine:
+        context_template = (
+            TEMPLATE_COMMAND_CONTEXT_TEMPLATE
+            if template_commands
+            else MACHINE_CONTEXT_ONLY_TEMPLATE
         )
-        .replace("{situation_instruction}", situation)
-        .replace(
-            "{proposal_mode_instruction}",
-            proposal_mode_instruction,
-        )
-        .replace(
-            "{template_command_context}",
-            context_template.format(
-                template_key=template_key,
-                environment_keys=", ".join(environment_keys or [template_key]),
-                machine_context=machine_context
-                or "（目前未提供班級機器拓撲；不要猜測 target_node_key。）",
-                template_commands=format_template_commands_for_prompt(
-                    template_commands or []
+        system_prompt = (
+            CHAT_SYSTEM_TEMPLATE.replace(
+                "{attachment_context}",
+                prompt_attachment_context,
+            )
+            .replace("{situation_instruction}", SITUATION_REFINE)
+            .replace(
+                "{proposal_mode_instruction}",
+                DIRECT_RUBRIC_UPDATE_INSTRUCTION,
+            )
+            .replace(
+                "{template_command_context}",
+                context_template.format(
+                    template_key=template_key,
+                    environment_keys=", ".join(environment_keys or [template_key]),
+                    machine_context=resolved_machine_context,
+                    template_commands=format_template_commands_for_prompt(
+                        template_commands or []
+                    ),
                 ),
-            ),
+            )
         )
-    )
-    system_prompt += "\n\n" + (
-        FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION
-        if is_refine
-        else CANONICAL_CHECK_STEP_CONTRACT_INSTRUCTION
-    )
+        system_prompt += "\n\n" + FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION
+    else:
+        system_prompt = _chat_proposal_system_prompt(
+            rubric_available=rubric_available,
+            template_key=template_key,
+            environment_keys=environment_keys,
+            template_commands=template_commands,
+            machine_context=resolved_machine_context,
+            attachment_context=prompt_attachment_context,
+        )
 
     formatted = [{"role": "system", "content": system_prompt}]
     for msg in messages:
         formatted.append({"role": msg.role, "content": msg.content})
-    if has_attachments:
+    if has_attachments and not is_refine:
+        formatted.append(
+            {
+                "role": "user",
+                "content": f"{CHAT_ATTACHMENT_DATA_INSTRUCTION}\n{attachment_context}",
+            }
+        )
+    elif has_attachments:
         # Put the extracted document in a dedicated user data turn. Smaller chat
         # models otherwise tend to treat a long system-context attachment as
         # descriptive metadata and ask the teacher to paste it again.
@@ -3019,7 +3182,12 @@ async def chat_with_rubric(
                 detail="本次未取得有效的檢查說明，無法確認是否需要修改；請重新核對檢查表。",
             )
         else:
-            reply_text = _proposal_unavailable_reply([], [], template_commands)
+            latest_rejections = _dedupe_rejected_ops_keep_latest(rejected_ops)
+            reply_text = _proposal_unavailable_reply(
+                [entry[0] for entry in latest_rejections],
+                [entry[1] for entry in latest_rejections],
+                template_commands,
+            )
 
     # Tools are the only proposal channel: a ready or prose creation claim
     # without any server-side staged/rejected outcome is false by definition,
@@ -3169,6 +3337,18 @@ async def chat_with_rubric(
                 for key, error in list(unresolved_errors.items())[:8]
             ],
         }
+
+    if (
+        not is_refine
+        and not staged_ops
+        and not unresolved_errors
+        and not action_adherence_blocked
+        and proposal_status not in {"needs_information", "unsupported"}
+        and any(item.missing_information for item, _raw, _reason in rejected_ops)
+    ):
+        # Only missing-information rejections remain, so this turn is waiting
+        # for the teacher even when the model omitted or misstated the status.
+        proposal_status = "needs_information"
 
     if not is_refine:
         # Counts and attention items are server facts; compose them last so the

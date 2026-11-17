@@ -48,6 +48,10 @@ ROUND_TIMEOUT_SECONDS = 420
 # 公開 AI API 有 Campus RPM 限流：輪與輪之間停頓；被 429 擋下時等一個限流視窗再重試該輪一次。
 ROUND_PAUSE_SECONDS = 20
 RATE_LIMIT_WAIT_SECONDS = 65
+# 正式通過標準：一般對話每輪最多 3 次模型請求（初次＋修正一次＋無工具最終回覆），
+# 且伺服器端記錄不得出現工具輪數用盡。
+MAX_CHAT_MODEL_REQUESTS = 3
+TOOL_BUDGET_LOG_MARKER = "tool round budget"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -67,18 +71,27 @@ SINGLE_MACHINE = [
         "os": "ubuntu",
     }
 ]
-# 兩台角色、名稱都無法分辨的機器：需求沒指定時，AI 不能從上下文推斷要查哪一台。
-TWIN_MACHINES = [
-    *SINGLE_MACHINE,
+# 三台只以 P 標籤區分的機器（名稱不帶 web 等角色字樣）：需求逐條指明 P1／P2／P3，
+# 檢查 AI 能否把每條需求分到正確的機器。
+THREE_MACHINES = [
     {
-        "display_label": "P2",
-        "node_key": "web2",
-        "name": "web-02",
+        "display_label": label,
+        "node_key": f"node-{index}",
+        "name": label,
         "role": "server",
         "resource_type": "vm",
         "os": "ubuntu",
-    },
+    }
+    for index, label in enumerate(("P1", "P2", "P3"), start=1)
 ]
+MACHINE_MESSAGE = (
+    "請幫我建立這 3 項檢查：\n"
+    "1. P1 的 nginx 服務狀態是 active\n"
+    "2. P2 的 8080 連接埠有在監聽\n"
+    "3. P3 的 /etc/hostname 檔案內容是 node3"
+)
+# 各需求的標題關鍵字與應分到的 node_key。
+MACHINE_EXPECTED = ((("nginx",), "node-1"), (("8080",), "node-2"), (("hostname",), "node-3"))
 
 FIVE_REQUIREMENTS = (
     "請幫我建立這 5 項檢查，資訊都已經給齊了：\n"
@@ -156,6 +169,79 @@ def check_condition(record: dict[str, Any]) -> list[str]:
             f"實際 {proposal[0].get('judgement_mode')!r}）"
         ]
     return stopped
+
+
+def check_teacher_view(record: dict[str, Any]) -> list[str]:
+    """老師只想看結果：直接建立 1 項交給老師核查的提案，不追問。"""
+    failures: list[str] = []
+    proposal = record.get("proposal") or []
+    if record.get("staged_count") != 1 or len(proposal) != 1:
+        failures.append(f"應建立 1 項提案，實際 staged={record.get('staged_count')}")
+    elif proposal[0].get("judgement_mode") != "teacher":
+        failures.append(
+            f"judgement_mode 應為 teacher，實際 {proposal[0].get('judgement_mode')!r}"
+        )
+    if record.get("proposal_status") == "needs_information":
+        failures.append("不該追問（proposal_status=needs_information）")
+    return failures
+
+
+def check_condition_value(record: dict[str, Any]) -> list[str]:
+    """老師給了預期值：建立 1 項 ai 提案，assertion 以 text_contains 比對 3.12。"""
+    proposal = record.get("proposal") or []
+    if record.get("staged_count") != 1 or len(proposal) != 1:
+        return [f"應建立 1 項提案，實際 staged={record.get('staged_count')}"]
+    failures: list[str] = []
+    item = proposal[0]
+    if item.get("judgement_mode") != "ai":
+        failures.append(f"judgement_mode 應為 ai，實際 {item.get('judgement_mode')!r}")
+    if not any(
+        isinstance(assertion, dict)
+        and assertion.get("type") == "text_contains"
+        and "3.12" in str(assertion.get("expected") or "")
+        for assertion in item.get("assertions") or []
+    ):
+        failures.append(f"沒有 text_contains 3.12 的 assertion，實際 {item.get('assertions')}")
+    return failures
+
+
+def runtime_failures(case: Case, record: dict[str, Any]) -> list[str]:
+    """所有 case 共用的正式標準：模型請求次數與工具輪數用盡。"""
+    failures: list[str] = []
+    if case.kind == "chat":
+        requests = record.get("model_requests")
+        if requests is None:
+            failures.append("缺少模型請求次數記錄")
+        elif requests > MAX_CHAT_MODEL_REQUESTS:
+            failures.append(f"模型請求 {requests} 次，超過 {MAX_CHAT_MODEL_REQUESTS} 次")
+    if record.get("tool_budget_exhausted"):
+        failures.append("伺服器端記錄出現工具輪數用盡")
+    return failures
+
+
+def round_failures(case: Case, record: dict[str, Any]) -> list[str]:
+    return [*case.check(record), *runtime_failures(case, record)]
+
+
+def check_machine_mapping(record: dict[str, Any]) -> list[str]:
+    """三條需求各建 1 項提案，且 target_node_key 分到老師指明的機器。"""
+    failures: list[str] = []
+    proposal = record.get("proposal") or []
+    if record.get("created_count") != 3:
+        failures.append(f"新增提案應為 3，實際 {record.get('created_count')}")
+    for keywords, node_key in MACHINE_EXPECTED:
+        matched = [
+            item
+            for item in proposal
+            if any(keyword in str(item.get("title") or "").lower() for keyword in keywords)
+        ]
+        if len(matched) != 1:
+            failures.append(f"需求 {list(keywords)} 應對應 1 項提案，實際 {len(matched)}")
+        elif matched[0].get("target_node_key") != node_key:
+            failures.append(
+                f"需求 {list(keywords)} 應分到 {node_key}，實際 {matched[0].get('target_node_key')!r}"
+            )
+    return failures
 
 
 def _header_count(record: dict[str, Any]) -> int | None:
@@ -250,19 +336,20 @@ CASES: tuple[Case, ...] = (
         "追問行為（prompt、location_rejections）",
         "chat",
         SINGLE_MACHINE,
-        "檢查 nginx 設定有 listen 8080",
-        "AI 停下，追問路徑",
-        check_stopped("路徑"),
+        "我想看main.log",
+        "AI 停下，追問 main.log 的路徑",
+        check_stopped("路徑", "位置"),
     ),
     Case(
         "P1-machine",
-        ("missing-machine",),
-        "追問行為（prompt、機器驗證）",
+        ("machine",),
+        "多機器分類（prompt、target_node_key）",
         "chat",
-        TWIN_MACHINES,
-        "檢查 nginx 服務有在執行",
-        "AI 停下，追問哪一台機器",
-        check_stopped("機器", "哪一台", "哪台"),
+        THREE_MACHINES,
+        MACHINE_MESSAGE,
+        "新增 3 項，P1／P2／P3 各自分到 node-1／node-2／node-3",
+        check_machine_mapping,
+        summary=_created_summary,
     ),
     Case(
         "P1-condition",
@@ -273,6 +360,26 @@ CASES: tuple[Case, ...] = (
         "檢查 Python 版本是否正確",
         "AI 停下詢問預期版本，或建立 1 項交給老師核查的提案",
         check_condition,
+    ),
+    Case(
+        "P1-condition-view",
+        ("missing-condition",),
+        "寬鬆判定：只想看結果 → teacher，不追問",
+        "chat",
+        SINGLE_MACHINE,
+        "我想看學生的 Python 版本",
+        "建立 1 項 judgement_mode=teacher 提案，不追問",
+        check_teacher_view,
+    ),
+    Case(
+        "P1-condition-value",
+        ("missing-condition",),
+        "寬鬆判定：「是不是 X」→ ai＋text_contains",
+        "chat",
+        SINGLE_MACHINE,
+        "我想看學生的 Python 版本是不是 3.12",
+        "建立 1 項 ai 提案，assertion text_contains 3.12",
+        check_condition_value,
     ),
     Case(
         "P1-mixed-path",
@@ -336,7 +443,7 @@ def evaluate_rounds(case: Case, records: list[dict[str, Any]]) -> tuple[str, lis
         if record.get("error"):
             notes.append(f"第 {record['round']} 輪例外：{record['error']}")
             continue
-        notes.extend(f"第 {record['round']} 輪：{item}" for item in case.check(record))
+        notes.extend(f"第 {record['round']} 輪：{item}" for item in round_failures(case, record))
     return ("PASS" if not notes else "NEEDS_REVIEW"), notes
 
 
@@ -367,6 +474,11 @@ def _public_proposal(proposal: list[dict[str, Any]] | None) -> list[dict[str, An
             "judgement_mode": item.get("judgement_mode"),
             "detectable": item.get("detectable"),
             "target_node_key": item.get("target_node_key"),
+            "assertions": [
+                step.get("assertion")
+                for step in item.get("check_steps") or []
+                if isinstance(step, dict)
+            ],
         }
         for item in proposal or []
     ]
@@ -377,6 +489,15 @@ async def run_round(case: Case, round_no: int, service: Any) -> dict[str, Any]:
     from app.ai.teacher_judge.schemas import TeacherJudgeRubricChatMessage
 
     capture = _LogCapture()
+    original_call = service._call_vllm_message
+    model_requests = 0
+
+    async def counted_call(*args: Any, **kwargs: Any) -> Any:
+        nonlocal model_requests
+        model_requests += 1
+        return await original_call(*args, **kwargs)
+
+    service._call_vllm_message = counted_call
     teacher_logger = logging.getLogger("app.ai")
     previous_level = teacher_logger.level
     teacher_logger.setLevel(logging.INFO)
@@ -456,8 +577,13 @@ async def run_round(case: Case, round_no: int, service: Any) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - 實打要記錄任何失敗，不中斷其他 case
         record["error"] = f"{type(exc).__name__}: {exc}"[:500]
     finally:
+        service._call_vllm_message = original_call
         teacher_logger.removeHandler(capture)
         teacher_logger.setLevel(previous_level)
+    record["model_requests"] = model_requests
+    record["tool_budget_exhausted"] = any(
+        TOOL_BUDGET_LOG_MARKER in line for line in capture.lines
+    )
     record["elapsed_seconds"] = round(time.perf_counter() - started, 2)
     record["rate_limited"] = any("429" in line for line in capture.lines)
     record["server_log"] = capture.lines[-30:]
@@ -532,7 +658,7 @@ def render_log(report: dict[str, Any]) -> str:
     ]
     for record in report["results"]:
         case = CASES_BY_ID[record["case_id"]]
-        failures = [] if record.get("error") else case.check(record)
+        failures = [] if record.get("error") else round_failures(case, record)
         lines += [
             "=" * 78,
             f"[{record['case_id']}] 第 {record['round']} 輪  {record['elapsed_seconds']}s  "
@@ -546,7 +672,8 @@ def render_log(report: dict[str, Any]) -> str:
         lines += [
             f"proposal_status={record.get('proposal_status')} "
             f"新增={record.get('created_count')} 修改={record.get('updated_count')} "
-            f"提案數={record.get('proposal_count')}",
+            f"提案數={record.get('proposal_count')} 模型請求={record.get('model_requests')} "
+            f"輪數用盡={record.get('tool_budget_exhausted')}",
             "--- 回覆全文 ---",
             str(record.get("reply") or ""),
             "--- 提案 ---",
