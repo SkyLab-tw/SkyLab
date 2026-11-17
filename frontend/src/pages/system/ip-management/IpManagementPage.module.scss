@@ -141,18 +141,12 @@
   }
 }
 
+/* 窄版收欄（useTableFit，樣式規範表格規則四）：欄寬與收合順序寫在 IpManagementPage 的
+   ALLOCATION_FIT_COLUMNS，DataTable 依它畫 colgroup 與 min-width；這裡只留 fixed layout，照欄寬排 */
 .table {
   @include table-base;
   table-layout: fixed;
-  min-width: 800px;
 }
-
-/* 欄寬集中宣告，搭配 JSX 的 <colgroup>；備註欄不給寬度，吃剩下的空間。
-   備註放最後一欄：多數備註很短，剩餘寬度落在列尾，不會在兩欄資料中間留一大段空白 */
-.colIp          { width: 200px; }
-.colPurpose     { width: 200px; } /* 徽章不換行：英文最長的「Quick practice reserved」要約 195px */
-.colVmid        { width: 80px; }
-.colAllocatedAt { width: 180px; }
 
 /* 分配時間「日期 時間」不拆成兩行 */
 .tdNowrap {
@@ -192,11 +186,34 @@
   flex-shrink: 0;
 }
 
+/* 文字容器 min-width: 0，欄寬固定時 IP 與底下的小字行才截得住 */
+.nameText {
+  min-width: 0;
+}
+
+/* IP 不從中間折開：單行，放不下才截斷（title 看全文） */
 .namePrimary {
+  @include text-truncate;
   font-size: $font-size-14;
   font-weight: $font-weight-500;
   color: var(--color-text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* IP 底下的小字行：窄版收起的 VMID、備註，單行截斷（title 看全文） */
+.nameSub {
+  @include text-truncate;
+  margin-top: 2px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
+}
+
+/* 窄版收起的分配時間改畫在用途徽章底下 */
+.foldedLine {
+  @include text-truncate;
+  margin-top: 4px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
 }
 
 .code {

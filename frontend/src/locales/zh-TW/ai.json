@@ -235,7 +235,7 @@
   "AiApiKeysPage.detailActivity": "活動",
   "AiApiKeysPage.detailPurpose": "申請用途",
   "AiApiKeysPage.detailNeverUsed": "尚未使用",
-  "AiApiKeysPage.paginationInfo": "第 {{page}} / {{totalPages}} 頁，共 {{total}} 筆",
+  "AiApiKeysPage.paginationInfo": "共 {{total}} 筆 · 第 {{page}} / {{totalPages}} 頁",
   "AiApiKeysPage.prevPage": "上一頁",
   "AiApiKeysPage.nextPage": "下一頁",
   "AiApiKeysPage.loadError": "載入金鑰資料失敗",

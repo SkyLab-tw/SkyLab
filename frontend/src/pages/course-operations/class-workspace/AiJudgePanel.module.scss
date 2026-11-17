@@ -119,34 +119,6 @@
   details { min-width: 0; }
 }
 
-/* 行內收合（Disclosure）：文字＋向下箭頭，展開時箭頭轉半圈；不顯示瀏覽器原生的三角形 */
-.disclosure {
-  min-width: 0;
-
-  > summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    width: fit-content;
-    color: var(--color-text-muted);
-    list-style: none;
-    cursor: pointer;
-    transition: color $transition-base;
-
-    &::-webkit-details-marker { display: none; }
-    &:hover { color: var(--color-primary); }
-    &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 4px; }
-
-    > :last-child { transition: transform $transition-base; }
-  }
-
-  &[open] > summary {
-    color: var(--color-primary);
-
-    > :last-child { transform: rotate(180deg); }
-  }
-}
-
 /* 彈窗內文的補充說明：跟彈窗說明文字同一級（14px、次要色） */
 .dialogNote {
   margin: 0;
@@ -2036,9 +2008,14 @@ strong.reviewStatValue { font-size: $font-size-14; }
     padding: $spacing-8 12px;
   }
 
-  // 分頁撐滿側邊欄、內距收小都走 SegmentedControl 的 fullWidth／compact prop，這裡只管它在標頭列不被壓縮
+  // 分頁撐滿側邊欄、內距收小都走 Tabs 的 fullWidth／compact prop，這裡只管它在標頭列不被壓縮
   .sidebarTabs {
     flex: 0 0 auto;
+  }
+
+  // 標頭列只有分頁時（寬版）拉滿列高：選中的指示條剛好壓在標頭底線上；窄版跟換週同一列，維持 36px
+  .sidebarHead:not(.sidebarHeadCompact) .sidebarTabs {
+    align-self: stretch;
   }
 
   .sessionList {

@@ -325,6 +325,7 @@ function DemoMonitoring({ t, toolbar }) {
     <div className={styles.tabStack}>
       {toolbar && createPortal(
         <SegmentedControl
+          quiet
           className={styles.segmentScroll}
           options={TIMEFRAMES.map((tf) => ({ value: tf.value, label: t(tf.labelKey) }))}
           value={timeframe}
@@ -359,6 +360,7 @@ function DemoMonitoring({ t, toolbar }) {
             <p className={styles.cardDesc}>{t("MonitoringTab.dataPointsCount", { count: data.length })}</p>
           </div>
           <SegmentedControl
+            quiet
             options={CHART_TABS.map((ct) => ({ value: ct.key, label: ct.labelKey ? t(ct.labelKey) : ct.label }))}
             value={chartTab}
             onChange={setChartTab}

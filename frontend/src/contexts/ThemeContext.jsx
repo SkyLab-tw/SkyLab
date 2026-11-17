@@ -85,6 +85,7 @@ function paletteToCss(p) {
     `--color-text-muted: ${p.textMuted};`,
     `--color-text-on-primary: ${p.textOnPrimary};`,
     `--color-hover: ${p.hover};`,
+    `--color-row-hover: ${p.rowHover};`,
     `--color-border: ${p.border};`,
     `--color-divider: ${p.divider};`,
     `--color-bg-base: ${p.bgBase};`,

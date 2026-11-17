@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createColumnHelper, FlexRender, useTable } from "@tanstack/react-table";
+import { createColumnHelper, useTable } from "@tanstack/react-table";
 import styles from "./AuditPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import DataTable from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { useToast } from "../../../hooks/useToast";
@@ -19,7 +21,7 @@ import {
   useAuditUsersQuery,
 } from "../../../queries/auditLogs";
 import PageHeader from "../../../components/PageHeader/PageHeader";
-import Pagination from "../shared/Pagination";
+import Pagination from "../../../components/Pagination/Pagination";
 import { formatDateTime } from "../../../utils/formatDate";
 
 const PAGE_SIZE = 50;
@@ -84,23 +86,75 @@ function ColTitle({ name }) {
   return t(`AuditPage.${name}`);
 }
 
+/* ── 窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起 VMID、IP、操作、使用者；時間（第一欄，捲動時固定的那欄）與內容永遠在。
+   VMID 與操作收進內容欄（操作徽章在內容上方、「VMID 101」在下方），IP 收到使用者底下；
+   使用者再收起時，連同 IP 一起接在時間底下。
+   欄寬只寫在這裡：完整時間（英文 11/17/2026, 14:30:15）要 170px；操作徽章 200px 放得下約 23 字元的代碼
+   （更長的 vm_request_submit_auto_approved 在徽章內截斷，title 看全文）；內容兩行截斷，滑過看全文。
+   全部欄 980px，1440 筆電（約 1003px）不用收；1366 筆電（約 929px）收掉 VMID 剩 900px；
+   1100 寬視窗（約 678px）與 1440 開著 AI 助手（約 567px）再收 IP、操作剩 560px；手機（約 448px）收掉使用者剩 370px */
+const AUDIT_FIT_COLUMNS = Object.freeze([
+  { id: "created_at", width: 170 },
+  { id: "user", width: 190, fold: 4 },
+  { id: "action", width: 200, fold: 3 },
+  { id: "details", width: 200 },
+  { id: "vmid", width: 80, fold: 1 },
+  { id: "ip_address", width: 140, fold: 2 },
+]);
+
+function ActionBadge({ action }) {
+  return <span className={styles.actionBadge} title={action}>{action}</span>;
+}
+
+/* 使用者欄：姓名＋email，收起的 IP 接在底下（IP 本身看得出是什麼，不加欄名） */
 function UserCell({ log }) {
   const { t } = useTranslation("system");
+  const fit = useTableFitContext();
   return (
-    <div className={styles.userCell}>
-      <span>{log.user_full_name ?? (log.user_email ? "—" : t("AuditPage.systemUser"))}</span>
-      <span className={styles.userEmail}>{log.user_email ?? ""}</span>
+    <div className={styles.cellStack}>
+      <span className={styles.userName}>{log.user_full_name ?? (log.user_email ? "—" : t("AuditPage.systemUser"))}</span>
+      <span className={styles.subLine} title={log.user_email ?? undefined}>{log.user_email ?? ""}</span>
+      {fit.isFolded("ip_address") && log.ip_address && <span className={styles.subLine}>{log.ip_address}</span>}
+    </div>
+  );
+}
+
+/* 收起的使用者（連同已收起的 IP）接在時間底下：只寫有的值，沒有姓名就不放「—」 */
+function FoldedUserLines({ log }) {
+  const { t } = useTranslation("system");
+  const fit = useTableFitContext();
+  if (!fit.isFolded("user")) return null;
+  const name = log.user_full_name ?? (log.user_email ? null : t("AuditPage.systemUser"));
+  return (
+    <>
+      {name && <div className={styles.subLine}>{name}</div>}
+      {log.user_email && <div className={styles.subLine} title={log.user_email}>{log.user_email}</div>}
+      {fit.isFolded("ip_address") && log.ip_address && <div className={styles.subLine}>{log.ip_address}</div>}
+    </>
+  );
+}
+
+/* 內容欄：收起的操作徽章在上方、VMID 在下方（光看數字看不出是什麼，加欄名） */
+function DetailsCell({ log }) {
+  const fit = useTableFitContext();
+  return (
+    <div className={styles.cellStack}>
+      {fit.isFolded("action") && <ActionBadge action={log.action} />}
+      <span className={styles.detailsText}>{log.details}</span>
+      {fit.isFolded("vmid") && log.vmid != null && <span className={styles.subLine}>VMID {log.vmid}</span>}
     </div>
   );
 }
 
 const columnHelper = createColumnHelper();
 
-/* 欄位定義放模組層級：FlexRender 把函式型的 header／cell 當元件掛載，render 裡新建會整格重新掛載 */
+/* 欄位定義放模組層級：FlexRender 把函式型的 header／cell 當元件掛載，render 裡新建會整格重新掛載。
+   時間留在 cell 函式裡格式化：它每次都拿到新的 lang，切換語言時跟著換格式 */
 const auditColumns = columnHelper.columns([
   columnHelper.accessor("created_at", {
     header: () => <ColTitle name="colTime" />,
-    cell: ({ row }) => formatDateTime(row.original.created_at),
+    cell: ({ row }) => <>{formatDateTime(row.original.created_at)}<FoldedUserLines log={row.original} /></>,
     meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.tdNowrap}` },
   }),
   columnHelper.display({
@@ -111,14 +165,18 @@ const auditColumns = columnHelper.columns([
   }),
   columnHelper.accessor("action", {
     header: () => <ColTitle name="colAction" />,
-    cell: ({ row }) => <span className={styles.actionBadge}>{row.original.action}</span>,
+    cell: ({ row }) => <ActionBadge action={row.original.action} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.accessor("details", {
     header: () => <ColTitle name="colContent" />,
-    cell: ({ row }) => row.original.details,
+    cell: ({ row }) => <DetailsCell log={row.original} />,
     /* 全文放在 td 的 title，滑過可看被截斷的內容 */
-    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.tdDetails}`, tdTitle: (log) => log.details },
+    meta: {
+      thClassName: styles.th,
+      tdClassName: styles.td,
+      tdProps: (row) => ({ title: row.original.details ?? undefined }),
+    },
   }),
   columnHelper.accessor("vmid", {
     header: "VMID",
@@ -128,28 +186,14 @@ const auditColumns = columnHelper.columns([
   columnHelper.accessor("ip_address", {
     header: "IP",
     cell: ({ row }) => row.original.ip_address ?? "—",
-    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.tdNowrap}` },
+    /* IPv6 放不下時在欄內截斷，title 看全文 */
+    meta: {
+      thClassName: styles.th,
+      tdClassName: `${styles.td} ${styles.tdTruncate}`,
+      tdProps: (row) => ({ title: row.original.ip_address ?? undefined }),
+    },
   }),
 ]);
-
-/**
- * 內容欄的 td 要帶逐列不同的 title，共用的 DataTableCells 只吃固定的 tdProps，
- * 所以這裡自己畫儲存格（DOM 與 DataTableCells 相同，只多了 title）。
- */
-function renderAuditRow(row) {
-  return (
-    <tr key={row.id} className={styles.tr}>
-      {row.getAllCells().map((cell) => {
-        const meta = cell.column.columnDef.meta;
-        return (
-          <td key={cell.id} className={meta.tdClassName} title={meta.tdTitle?.(row.original)}>
-            <FlexRender cell={cell} />
-          </td>
-        );
-      })}
-    </tr>
-  );
-}
 
 export default function AuditPage() {
   const { t } = useTranslation("system");
@@ -207,6 +251,7 @@ export default function AuditPage() {
     data: logs,
     getRowId: (log) => String(log.id),
   });
+  const fit = useTableFit(AUDIT_FIT_COLUMNS);
   useEffect(() => {
     if (loadFailedMessage) toast.error(loadFailedMessage);
   }, [loadFailedMessage, toast]);
@@ -374,8 +419,8 @@ export default function AuditPage() {
           <EmptyState hasFilter={hasFilter} onClear={resetFilters} />
         ) : (
           <>
-            <div className={styles.tableWrap} data-guide="audit-table">
-              <DataTable table={table} className={styles.table} renderRow={renderAuditRow} />
+            <div ref={fit.ref} className={styles.tableWrap} data-guide="audit-table">
+              <DataTable table={table} className={styles.table} fit={fit} rowClassName={() => styles.tr} />
             </div>
 
             <Pagination

@@ -235,7 +235,7 @@
   "AiApiKeysPage.detailActivity": "アクティビティ",
   "AiApiKeysPage.detailPurpose": "申請目的",
   "AiApiKeysPage.detailNeverUsed": "未使用",
-  "AiApiKeysPage.paginationInfo": "{{page}} / {{totalPages}} ページ（全{{total}}件）",
+  "AiApiKeysPage.paginationInfo": "全 {{total}} 件 · {{page}} / {{totalPages}} ページ",
   "AiApiKeysPage.prevPage": "前のページ",
   "AiApiKeysPage.nextPage": "次のページ",
   "AiApiKeysPage.loadError": "キーデータの読み込みに失敗しました",

@@ -15,7 +15,7 @@ const HEADER_STEP = {
 /* 班級啟用後分頁列才是 SegmentedControl（每顆都帶 data-guide-tab="class-section"），
    準備中的步驟列是共用 Stepper、沒有掛點，所以這步是 optional，只指出目前所在的那一顆 */
 const SECTION_TAB_STEP = {
-  selector: '[data-guide-tab="class-section"][aria-pressed="true"]',
+  selector: '[data-guide-tab="class-section"][aria-selected="true"]',
   optional: true,
   titleKey: `${P}.common.tabs.title`,
   textKey: `${P}.common.tabs.text`,
@@ -124,7 +124,7 @@ export const CLASS_WORKSPACE_GUIDES = {
     cleanupSelector: JUDGE_TAB,
     steps: [
       judgeStep('[data-page-guide="header"]', "header"),
-      judgeStep('[data-guide-tab="class-section"][aria-pressed="true"]', "tabs", { optional: true }),
+      judgeStep('[data-guide-tab="class-section"][aria-selected="true"]', "tabs", { optional: true }),
       judgeStep('[data-guide="ai-judge-locked"]', "locked", { optional: true }),
       judgeStep('[data-guide="ai-judge-sessions"]', "sessions", { optional: true }),
       judgeStep('[data-guide="ai-judge-empty"]', "empty", { optional: true }),

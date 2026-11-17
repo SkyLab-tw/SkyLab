@@ -12,16 +12,9 @@
   }
 }
 
-/* ── Tabs ── */
-/* 分頁：共用 SegmentedControl；五段在窄螢幕放不下時自己橫向捲動（元件註解的建議作法） */
-.tabs {
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
+/* ── 頁面分頁（<Tabs page>）：放不下時 Tabs 自己橫向捲動 ── */
+.pageTabs {
+  @include page-tabs-row;
 }
 
 /* ── Content ── */

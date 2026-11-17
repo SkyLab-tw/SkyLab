@@ -3,6 +3,13 @@
 /* 分段切換器：外框膠囊 + 選中段以主色填滿。
    高度固定 36px，跟按鈕（btn-*）、輸入框（form-control）同高，同一列才對得齊；
    各段撐滿內框（36 − 內距 3×2 − 框 1×2 = 28px），文字垂直置中，有沒有徽章都一樣高 */
+/* 寬度跟著內容走：放進直排 flex／grid 容器時，子層會被轉成區塊並拉滿容器寬，軌道後面空出一大截。
+   用 :where 把權重降到 0，頁面 className 要撐滿（width: 100%、flex: 1）照樣蓋得過；要撐滿請優先用 fullWidth。
+   段數多、放不下時 fit-content 等於內容寬，再由頁面的 max-width: 100% + overflow-x: auto 橫向捲動 */
+:where(.segment) {
+  width: fit-content;
+}
+
 .segment {
   box-sizing: border-box;
   display: inline-flex;
@@ -88,6 +95,41 @@
 .segmentActive .segmentBadge {
   background: color-mix(in srgb, var(--color-text-on-primary) 22%, transparent);
   color: var(--color-text-on-primary);
+}
+
+/* quiet：檢視選項（時間區間、圖表指標、程式語言…）的輕量版。沒有外框軌道與陰影、選中段不填色，
+   只用 1px 主色細框＋白底＋深色字標示，份量比實心的清單篩選低一階，放在頁面分頁旁或圖表標頭不會搶過分頁與內容。
+   外框高度照樣 36px，跟同一列的按鈕、欄位對得齊。
+   選中段的 hover 要寫到跟 .segmentBtn:hover:not(:disabled) 一樣重，否則會被蓋回未選中的樣子 */
+.segmentQuiet {
+  gap: 2px;
+  /* 看不到外框，左右不留內距：第一段的框貼齊容器左緣，跟上下的內容對齊 */
+  padding: 3px 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+
+  .segmentBtn {
+    padding: 0 12px;
+    border: 1px solid transparent;
+
+    &:hover:not(:disabled) {
+      background: var(--color-hover);
+    }
+  }
+
+  /* 字用 --color-text-primary（比主色深一階）：--color-text 在藍色主題就等於主色，跟細框糊在一起 */
+  .segmentActive,
+  .segmentActive:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+  }
+
+  .segmentActive .segmentBadge {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    color: var(--color-primary);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .segmentBtn {

@@ -5,6 +5,8 @@ import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import { useSystemHealthQuery } from "../../../queries/monitoring";
 import { useLoadError } from "../../../hooks/useQueryLoadState";
 import { formatDateTime } from "../../../utils/formatDate";
@@ -77,11 +79,44 @@ function ColTitle({ i18nKey }) {
   return t(i18nKey);
 }
 
+/* ── 任務明細表窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起耗時、連續失敗、上次執行、上次成功、最近錯誤；任務、狀態永遠在，
+   收起的內容都是任務的狀態，改寫在狀態徽章底下。兩個時間排在一起：只收上次執行時接在上次成功底下，
+   兩個都收時依欄位順序排在狀態底下。欄寬沿用原本的 colgroup（任務 240、狀態與時間 110、數字 90），
+   狀態加寬到 130、連續失敗 100，收進來的「上次成功 3 分鐘前」一行才放得下；最近錯誤原本吃剩餘寬度，
+   現在給 190（fixed layout 下表格比欄寬合計寬時，多的寬度依比例分給各欄）。
+   全部欄 970px：1440（約 1003px）不用收，1366 筆電（約 929px）收掉耗時（880px），
+   1100 寬視窗（約 678px）收到上次執行（670px），1440 開著 AI 助手（約 567px）收到上次成功（560px），
+   手機（448px）連最近錯誤都收（370px），一律不用橫捲 */
+const TASK_FIT_COLUMNS = Object.freeze([
+  { id: "task", width: 240 },
+  { id: "status", width: 130 },
+  { id: "last_run_at", width: 110, fold: 3 },
+  { id: "last_success_at", width: 110, fold: 4 },
+  { id: "consecutive_failures", width: 100, fold: 2 },
+  { id: "last_duration_ms", width: 90, fold: 1 },
+  { id: "last_error", width: 190, fold: 5 },
+]);
+
+/* 收起的欄在狀態底下的一行小字；欄名一律寫（光看「3 分鐘前」「120 ms」看不出是什麼） */
+function FoldedLine({ label, title, className, children }) {
+  return (
+    <div className={`${styles.foldedLine} ${className ?? ""}`} title={title}>
+      <span className={styles.foldedLabel}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function durationText(ms) {
+  return ms != null ? `${Math.round(ms)} ms` : "—";
+}
+
 function TaskNameCell({ task }) {
   const { t } = useTranslation("system");
   return (
     <>
-      <span className={styles.healthTaskName}>{task.task}</span>
+      <span className={styles.healthTaskName} title={task.task}>{task.task}</span>
       <span className={styles.healthTaskLoop}>
         {t(`SystemHealth.loop.${task.loop}`, { defaultValue: task.loop })}
       </span>
@@ -89,14 +124,55 @@ function TaskNameCell({ task }) {
   );
 }
 
-function TaskStatusCell({ status }) {
+/* 窄版收欄時狀態欄多畫（依欄位順序）：上次執行、上次成功、連續失敗（0 次不寫）、耗時、最近錯誤（紅字一行，全文在 title） */
+function TaskStatusCell({ task, now }) {
   const { t } = useTranslation("system");
-  return <StatusBadge status={status} t={t} />;
+  const fit = useTableFitContext();
+  return (
+    <>
+      <StatusBadge status={task.status} t={t} />
+      {fit.isFolded("last_run_at") && fit.isFolded("last_success_at") && (
+        <FoldedLine label={t("SystemHealth.colLastRun")}><Ago ts={task.last_run_at} now={now} t={t} /></FoldedLine>
+      )}
+      {fit.isFolded("last_success_at") && (
+        <FoldedLine label={t("SystemHealth.colLastSuccess")}><Ago ts={task.last_success_at} now={now} t={t} /></FoldedLine>
+      )}
+      {fit.isFolded("consecutive_failures") && task.consecutive_failures > 0 && (
+        <FoldedLine label={t("SystemHealth.colFailures")}>{task.consecutive_failures}</FoldedLine>
+      )}
+      {fit.isFolded("last_duration_ms") && task.last_duration_ms != null && (
+        <FoldedLine label={t("SystemHealth.colDuration")}>{durationText(task.last_duration_ms)}</FoldedLine>
+      )}
+      {fit.isFolded("last_error") && task.last_error && (
+        <FoldedLine
+          label={t("SystemHealth.colLastError")}
+          title={task.last_error}
+          className={`${styles.foldedLineTruncate} ${styles.foldedDanger}`}
+        >
+          {task.last_error}
+        </FoldedLine>
+      )}
+    </>
+  );
 }
 
 function TaskAgoCell({ ts, now }) {
   const { t } = useTranslation("system");
   return <Ago ts={ts} now={now} t={t} />;
+}
+
+/* 只收起上次執行時，它接在上次成功底下 */
+function TaskLastSuccessCell({ task, now }) {
+  const { t } = useTranslation("system");
+  const fit = useTableFitContext();
+  return (
+    <>
+      <Ago ts={task.last_success_at} now={now} t={t} />
+      {fit.isFolded("last_run_at") && (
+        <FoldedLine label={t("SystemHealth.colLastRun")}><Ago ts={task.last_run_at} now={now} t={t} /></FoldedLine>
+      )}
+    </>
+  );
 }
 
 const columnHelper = createColumnHelper();
@@ -111,7 +187,7 @@ const taskColumns = columnHelper.columns([
   }),
   columnHelper.accessor("status", {
     header: () => <ColTitle i18nKey="MonitoringPage.colStatus" />,
-    cell: ({ row }) => <TaskStatusCell status={row.original.status} />,
+    cell: ({ row, rowState }) => <TaskStatusCell task={row.original} now={rowState.now} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.accessor("last_run_at", {
@@ -121,7 +197,7 @@ const taskColumns = columnHelper.columns([
   }),
   columnHelper.accessor("last_success_at", {
     header: () => <ColTitle i18nKey="SystemHealth.colLastSuccess" />,
-    cell: ({ row, rowState }) => <TaskAgoCell ts={row.original.last_success_at} now={rowState.now} />,
+    cell: ({ row, rowState }) => <TaskLastSuccessCell task={row.original} now={rowState.now} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.accessor("consecutive_failures", {
@@ -131,7 +207,7 @@ const taskColumns = columnHelper.columns([
   }),
   columnHelper.accessor("last_duration_ms", {
     header: () => <ColTitle i18nKey="SystemHealth.colDuration" />,
-    cell: ({ row }) => (row.original.last_duration_ms != null ? `${Math.round(row.original.last_duration_ms)} ms` : "—"),
+    cell: ({ row }) => durationText(row.original.last_duration_ms),
     meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.numericCell}` },
   }),
   columnHelper.accessor("last_error", {
@@ -169,6 +245,8 @@ export default function SystemHealthCard() {
     data: tasks,
     getRowId: (task) => `${task.loop}/${task.task}`,
   });
+  /* 同 useTable，要在下面的提早 return 之前呼叫 */
+  const fit = useTableFit(TASK_FIT_COLUMNS);
 
   if (health === null) {
     return (
@@ -262,21 +340,11 @@ export default function SystemHealthCard() {
             </div>
           )}
 
-          <div className={styles.tableScroll}>
+          <div ref={fit.ref} className={styles.tableScroll}>
             <DataTable
               table={table}
-              className={`${styles.table} ${styles.healthTable}`}
-              colgroup={(
-                <colgroup>
-                  <col className={styles.healthColTask} />
-                  <col className={styles.healthColStatus} />
-                  <col className={styles.healthColTime} />
-                  <col className={styles.healthColTime} />
-                  <col className={styles.healthColNum} />
-                  <col className={styles.healthColNum} />
-                  <col />
-                </colgroup>
-              )}
+              className={styles.table}
+              fit={fit}
               renderRow={(row) => (
                 <tr key={row.id} className={styles.tr}>
                   <DataTableCells row={row} rowState={{ now }} />

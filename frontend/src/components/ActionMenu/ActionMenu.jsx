@@ -19,7 +19,8 @@ const ITEM_SELECTOR = '[role="menuitem"]:not(:disabled)';
  * - 選了選項：先關選單、焦點回觸發鈕，再執行動作（動作若開對話框，對話框關掉時焦點會回到觸發鈕）。
  * - 呼叫端用 useDialogPresence(open, 130) 保留離場動畫：關閉期間傳 closing。
  * - header 是選項上方的說明區（例如帳號選單的頭像、姓名），不能聚焦，下面自動接一條分隔線。
- * - placement="side" 給側欄底部的選單，貼著側欄外緣彈出（見 useAnchoredMenu）；glass 換成跟側欄同一套玻璃。
+ * - placement="side" 給側欄底部的選單，貼著側欄外緣彈出（見 useAnchoredMenu）。
+ * - 底色一律是 popover-glass（跟側欄彈出同一套玻璃，隨介面風格與主題色變）。
  *
  * items: [{ key, label, icon?, onSelect, danger?, disabled?, title?, separatorBefore? }]
  * 危險項（刪除、封存）放最後並加 separatorBefore，跟一般動作用分隔線隔開。
@@ -35,7 +36,6 @@ export default function ActionMenu({
   align = "right",
   placement,
   header,
-  glass = false,
 }) {
   const { ref, pos } = useAnchoredMenu({ anchorRef, onClose, width, align, placement });
   const handleKeyDown = useMenuKeyboard({
@@ -50,7 +50,6 @@ export default function ActionMenu({
 
   const className = [
     styles.menu,
-    glass ? styles.menuGlass : "",
     pos?.openUp ? styles.menuUp : styles.menuDown,
     closing ? styles.menuOut : "",
   ].filter(Boolean).join(" ");

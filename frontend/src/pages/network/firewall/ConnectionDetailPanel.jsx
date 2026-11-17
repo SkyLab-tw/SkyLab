@@ -25,6 +25,15 @@ const MODE_META = {
   [PORT_MODE.FIREWALL]: { icon: "shield",     labelKey: "ConnectionPanel.modeFirewallOnly" },
 };
 
+/**
+ * 第二行發布方式後面接的內容。網址那條第一行只有網域，看不出轉到機器哪個 port，
+ * 補成 5678/tcp（與舊版線標籤的寫法相同）；其他方式的 port 第一行已經有，這裡只講協定。
+ */
+function modeDetail(port, mode) {
+  if (mode === PORT_MODE.DOMAIN && port.port) return `${port.port}/${port.protocol ?? "tcp"}`;
+  return port.protocol ?? "";
+}
+
 export default function ConnectionDetailPanel({
   edge,
   resolveName,
@@ -99,6 +108,7 @@ export default function ConnectionDetailPanel({
             {ports.map((port, i) => {
               const mode = portMode(port);
               const meta = MODE_META[mode];
+              const detail = modeDetail(port, mode);
               return (
                 <li key={`${port.protocol}-${port.port}-${i}`} className={styles.portRow}>
                   <MIcon name={meta.icon} size={14} />
@@ -106,7 +116,7 @@ export default function ConnectionDetailPanel({
                     <span className={styles.portText}>{describePort(port)}</span>
                     <span className={styles.portMode}>
                       {t(meta.labelKey)}
-                      {port.protocol ? ` · ${port.protocol}` : ""}
+                      {detail ? ` · ${detail}` : ""}
                     </span>
                     {mode === PORT_MODE.DOMAIN && allowOpen && onToggleIndexing && (
                       <Switch

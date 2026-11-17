@@ -9,12 +9,13 @@ import { baseFeatures } from "../../../components/DataTable/features";
 import LoadingState, { LoadingSpinner } from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import ErrorState from "../../../components/ErrorState/ErrorState";
+import Disclosure from "../../../components/Disclosure/Disclosure";
 import ActionMenu from "../../../components/ActionMenu/ActionMenu";
 import ListboxPopover from "../../../components/ListboxPopover/ListboxPopover";
 import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
 import OctoAvatar from "../../../components/OctoPet/OctoAvatar";
-import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
 import StatusBadge from "../../../components/StatusBadge/StatusBadge";
 import { useToast } from "../../../hooks/useToast";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
@@ -2755,19 +2756,6 @@ function checkStatusMeta(status) {
   };
 }
 
-/* 行內收合：文字＋向下箭頭（展開時轉半圈），不用瀏覽器原生的 ▶ 三角形 */
-function Disclosure({ label, className = "", children }) {
-  return (
-    <details className={`${styles.disclosure} ${className}`}>
-      <summary>
-        <span>{label}</span>
-        <MIcon name="expand_more" size={16} />
-      </summary>
-      {children}
-    </details>
-  );
-}
-
 function parseCheckRaw(raw) {
   if (typeof raw !== "string" || !raw) return null;
   try {
@@ -2959,7 +2947,7 @@ export function ExecutionFailure({ target }) {
       <strong>{t(`AiJudgePanel.execution${kind}`)}</strong>
       <p>{t(`AiJudgePanel.execution${kind}Hint`)}</p>
       <p>{t("AiJudgePanel.executionNotGraded")}</p>
-      <Disclosure label={t("AiJudgePanel.executionEvidence")}>
+      <Disclosure variant="inline" label={t("AiJudgePanel.executionEvidence")}>
         <div className={styles.cmdLog}>
           <p>{t("AiJudgePanel.executionReason", { reason: target.reason_code || "unknown", stage: target.failure_stage || "unknown" })}</p>
           {target.exit_code != null && <p>{t("AiJudgePanel.exitCode", { code: target.exit_code })}</p>}
@@ -3058,7 +3046,7 @@ function ReviewCheckRow({ check, decision, onDecide, canDecide = true }) {
         <p>{summary === "—" ? t("AiJudgePanel.noSummary") : summary}</p>
         {check?.status === "unknown" && parseCheckRaw(check?.raw)?.error_code && <p>{t("AiJudgePanel.collectionErrorHint")}</p>}
         {hasLog && (
-          <Disclosure label={t("AiJudgePanel.viewEvidence")}><CommandLog raw={check?.raw} fallbackText={(check?.errors ?? []).join("\n")} /></Disclosure>
+          <Disclosure variant="inline" label={t("AiJudgePanel.viewEvidence")}><CommandLog raw={check?.raw} fallbackText={(check?.errors ?? []).join("\n")} /></Disclosure>
         )}
       </div>
       {reviewable && (
@@ -3567,7 +3555,7 @@ export function ExecutionTiming({ timing }) {
   ].filter(([, value]) => hasSeconds(value));
   if (metrics.length === 0) return null;
   return (
-    <Disclosure className={styles.executionTiming} label={t("AiJudgePanel.timingTitle")}>
+    <Disclosure variant="inline" className={styles.executionTiming} label={t("AiJudgePanel.timingTitle")}>
       <dl>
         {metrics.map(([key, value]) => (
           <div key={key}>
@@ -3628,7 +3616,7 @@ function MachineReviewDetail({
             />
           ))}
           {(row.unmappedChecks ?? []).length > 0 && (
-            <Disclosure className={styles.judgeDetails} label={t("AiJudgePanel.unmappedChecks")}>
+            <Disclosure variant="inline" className={styles.judgeDetails} label={t("AiJudgePanel.unmappedChecks")}>
               <CheckResultsTable checks={row.unmappedChecks} />
             </Disclosure>
           )}
@@ -5042,7 +5030,7 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
           窄版沒有週次清單，換週控制也收進這一條，左邊換週、右邊分頁 */}
       <div className={compactWeeks ? `${styles.sidebarHead} ${styles.sidebarHeadCompact}` : styles.sidebarHead}>
         {compactWeeks && !loading && renderWeekSwitcher()}
-        <SegmentedControl
+        <Tabs
           ariaLabel={t("AiJudgePanel.tabsAria")}
           className={styles.sidebarTabs}
           compact

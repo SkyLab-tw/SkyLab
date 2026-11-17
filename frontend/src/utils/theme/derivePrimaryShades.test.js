@@ -123,9 +123,19 @@ describe("derivePrimaryTheme — 介面用色（hover / 邊框 / 底色）", () 
 
   test("深色模式：hover / 邊框 / 底色壓暗", () => {
     const { dark } = derivePrimaryTheme("#e91e63");
-    for (const c of [dark.hover, dark.border, dark.divider, dark.bgBase]) {
+    for (const c of [dark.hover, dark.border, dark.divider, dark.bgBase, dark.rowHover]) {
       expect(lightnessOf(c)).toBeLessThanOrEqual(25);
     }
+  });
+
+  test("表格列 hover 跟主色同色相，比一般 hover 深一階（深色模式亮一階），兩者分得出來", () => {
+    const { h: baseHue } = hexToHsl("#7d2b3f");
+    const { light, dark } = derivePrimaryTheme("#7d2b3f");
+    expect(light.rowHover).toMatch(HEX6_RE);
+    expect(Math.abs(hexToHsl(light.rowHover).h - baseHue)).toBeLessThan(3);
+    expect(lightnessOf(light.rowHover)).toBeGreaterThanOrEqual(88);
+    expect(lightnessOf(light.hover) - lightnessOf(light.rowHover)).toBeGreaterThanOrEqual(3);
+    expect(lightnessOf(dark.rowHover) - lightnessOf(dark.hover)).toBeGreaterThanOrEqual(4);
   });
 
   test("主色上的文字依亮度自動選色：極亮主色配深字、一般主色配白字", () => {

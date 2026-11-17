@@ -6,6 +6,8 @@ import { useAuth } from "../../../contexts/AuthContext";
 import styles from "./RequestsPage.module.scss";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import { VmRequestsService } from "../../../services/vmRequests";
 import { CONSUMED_REQUEST_MARKERS } from "../../../services/pendingResources";
 import {
@@ -134,6 +136,70 @@ function getSpecDisplay(req, t) {
   return t("RequestsPage.specDisplay", { cores: req.cores, mem: getMemDisplay(req.memory), storage: req.storage });
 }
 
+/* ── 窄版收欄（useTableFit） ──
+   申請表依序收起 GPU、申請時間、帳號、申請原因、系統、規格、預約期間；資源、狀態、操作永遠在。
+   收起的內容改畫在資源欄（系統、規格、GPU、帳號、申請原因）與狀態欄（申請時間、預約期間）裡的小字行；
+   兩個時間排在一起：只收申請時間時接在預約期間底下，兩個都收時依先後排在狀態徽章底下。
+   欄寬只寫在這裡：狀態欄要放英文的 Waiting for Resources 徽章；操作欄的按鈕放不下時會換行，
+   寬度以最寬的單顆（英文 Go to My Resources）為準，中文的「重試＋撤銷」同一行放得下。
+   全部欄 1400px；1440（約 1003px）還留得下系統（970px），1366 筆電（約 929～944px）收到只剩
+   資源、規格、預約期間、狀態、操作（850px）；收到底只剩三欄 560px，1440 開著 AI 助手（約 567px）也放得下，
+   再窄才橫捲並固定資源欄 */
+const REQUEST_FIT_COLUMNS = Object.freeze([
+  { id: "resource", width: 210 },
+  { id: "os", width: 120, fold: 5 },
+  { id: "account", width: 100, fold: 3 },
+  { id: "spec", width: 140, fold: 6 },
+  { id: "gpu", width: 80, fold: 1 },
+  { id: "reason", width: 150, fold: 4 },
+  { id: "requestedAt", width: 100, fold: 2 },
+  { id: "period", width: 150, fold: 7 },
+  { id: "status", width: 160 },
+  { id: "actions", width: 190 },
+]);
+
+/* 規格調整表依序收起申請原因、申請時間、套用時間、變更內容；機器、狀態、操作永遠在。
+   變更內容與申請原因收進機器欄，兩個時間收進狀態欄（只收申請時間時接在套用時間底下）。
+   狀態欄要放英文的 Approved · Ready to Apply 徽章；操作欄比照申請表，放不下時按鈕換行。
+   全部欄 1145px；1440 只收申請原因（995px），1366 筆電再收申請時間（895px），收到底只剩三欄 560px */
+const SPEC_FIT_COLUMNS = Object.freeze([
+  { id: "machine", width: 200 },
+  { id: "change", width: 190, fold: 4 },
+  { id: "reason", width: 150, fold: 1 },
+  { id: "requestedAt", width: 100, fold: 2 },
+  { id: "appliedAt", width: 145, fold: 3 },
+  { id: "status", width: 180 },
+  { id: "actions", width: 180 },
+]);
+
+/* 收起的欄在主欄裡的一行小字；label 給「光看值看不出是什麼」的欄（帳號、申請時間…） */
+function FoldedLine({ label, title, truncate = false, children }) {
+  return (
+    <div className={`${styles.foldedLine} ${truncate ? styles.foldedLineTruncate : ""}`} title={title}>
+      {label && <span className={styles.foldedLabel}>{label}</span>}
+      {children}
+    </div>
+  );
+}
+
+/* 名稱欄裡的說明行：收起的值用「 · 」接成一行，沒收起或沒有值的略過 */
+function joinMeta(...parts) {
+  return parts.filter(Boolean).join(" · ");
+}
+
+/* 收進名稱欄的申請原因：自由文字可能很長，只留一行，全文在 title */
+function FoldedReasonLine({ reason }) {
+  const { t } = useTranslation("personal");
+  if (!reason) return null;
+  return <FoldedLine label={t("RequestsPage.colReason")} title={reason} truncate>{reason}</FoldedLine>;
+}
+
+/* 收進其他欄的申請時間（兩張表共用，欄位本身也只寫日期） */
+function FoldedRequestedLine({ req }) {
+  const { t } = useTranslation("personal");
+  return <FoldedLine label={t("RequestsPage.colRequestedAt")}>{formatDate(req.created_at)}</FoldedLine>;
+}
+
 
 /* ── Error Log Modal ── */
 /* 管理員限定：原始開通錯誤 log 太長，不進表格也不進展開列，點狀態旁圖示開窗看 */
@@ -194,10 +260,17 @@ function RequestCreatedCell({ rowState }) {
 }
 
 /* ── VM 申請表的儲存格 ── */
+/* 窄版收欄時資源欄多畫：系統、規格、GPU 接成一行（機器的組成），帳號、申請原因各一行 */
 function RequestResourceCell({ rowState }) {
   const { t } = useTranslation("personal");
+  const fit = useTableFitContext();
   const { req, showVmid } = rowState;
   const type = RESOURCE_TYPE_MAP[req.resource_type] ?? { label: req.resource_type, icon: "computer" };
+  const machineLine = joinMeta(
+    fit.isFolded("os") && getOsDisplay(req),
+    fit.isFolded("spec") && getSpecDisplay(req, t),
+    fit.isFolded("gpu") && req.gpu_mapping_id && `${t("RequestsPage.colGpu")} ${req.gpu_mapping_id}`,
+  );
   return (
     <div className={styles.nameCell}>
       <div className={styles.nameIcon}>
@@ -209,6 +282,11 @@ function RequestResourceCell({ rowState }) {
           {t(type.labelKey ?? type.label)}
           {showVmid && req.vmid != null && t("RequestRow.numberSuffix", { vmid: req.vmid })}
         </span>
+        {machineLine && <FoldedLine>{machineLine}</FoldedLine>}
+        {fit.isFolded("account") && req.username && (
+          <FoldedLine label={t("RequestsPage.fieldAccount")}>{req.username}</FoldedLine>
+        )}
+        {fit.isFolded("reason") && <FoldedReasonLine reason={req.reason} />}
       </div>
     </div>
   );
@@ -234,52 +312,83 @@ function RequestGpuCell({ rowState }) {
   return <span className={styles.osCell} title={gpu ?? undefined}>{gpu ?? "—"}</span>;
 }
 
-function RequestPeriodCell({ rowState }) {
-  const { req } = rowState;
-  /* 無值時回 null（不是「—」），依此決定要不要顯示時段 */
-  const startFmt = formatDateTime(req.start_at, null);
-  const endFmt   = formatDateTime(req.end_at, null);
-  return startFmt ? (
+/* 有沒有預約時段：formatDateTime 無值時回 null（不是「—」） */
+function hasPeriod(req) {
+  return formatDateTime(req.start_at, null) !== null;
+}
+
+/* 起訖時間直排兩行 */
+function PeriodLines({ req }) {
+  const endFmt = formatDateTime(req.end_at, null);
+  return (
     <div className={styles.periodCell}>
-      <span>{startFmt}</span>
+      <span>{formatDateTime(req.start_at)}</span>
       {endFmt && <span>~ {endFmt}</span>}
     </div>
-  ) : (
-    <span className={styles.periodCell}>—</span>
   );
 }
 
+/* 只收起申請時間時，它接在預約期間底下 */
+function RequestPeriodCell({ rowState }) {
+  const fit = useTableFitContext();
+  const { req } = rowState;
+  return (
+    <>
+      {hasPeriod(req) ? <PeriodLines req={req} /> : <span className={styles.periodCell}>—</span>}
+      {fit.isFolded("requestedAt") && <FoldedRequestedLine req={req} />}
+    </>
+  );
+}
+
+/* 收進狀態欄的預約期間：欄名一行、起訖各一行（沒有預約時段就不畫） */
+function FoldedPeriodLines({ req }) {
+  const { t } = useTranslation("personal");
+  if (!hasPeriod(req)) return null;
+  return (
+    <div className={styles.foldedLine}>
+      <span className={styles.foldedLabel}>{t("RequestsPage.colPeriod")}</span>
+      <PeriodLines req={req} />
+    </div>
+  );
+}
+
+/* 窄版收欄時狀態欄多畫：申請時間、預約期間（依先後） */
 function RequestStatusCell({ rowState }) {
   const { t } = useTranslation("personal");
+  const fit = useTableFitContext();
   const { req, showFailureLog, onOpenLog } = rowState;
   const showRejection = req.status === "rejected" && req.review_comment;
   const showWaiting = isWaitingForResources(req);
   return (
-    <div className={styles.statusCell}>
-      <StatusBadge req={req} />
-      {/* 展開明細已移除：退件備註／等待資源說明改掛在小圖示的 tooltip */}
-      {showRejection && (
-        <span className={styles.statusNote} title={req.review_comment}>
-          <MIcon name="comment" size={14} />
-        </span>
-      )}
-      {showWaiting && (
-        <span className={styles.statusNote} title={req.resource_warning}>
-          <MIcon name="hourglass_empty" size={14} />
-        </span>
-      )}
-      {showFailureLog && (
-        <button
-          type="button"
-          className={styles.logBtn}
-          title={t("RequestRow.viewErrorLog")}
-          aria-label={t("RequestRow.viewErrorLog")}
-          onClick={onOpenLog}
-        >
-          <MIcon name="receipt_long" size={14} />
-        </button>
-      )}
-    </div>
+    <>
+      <div className={styles.statusCell}>
+        <StatusBadge req={req} />
+        {/* 展開明細已移除：退件備註／等待資源說明改掛在小圖示的 tooltip */}
+        {showRejection && (
+          <span className={styles.statusNote} title={req.review_comment}>
+            <MIcon name="comment" size={14} />
+          </span>
+        )}
+        {showWaiting && (
+          <span className={styles.statusNote} title={req.resource_warning}>
+            <MIcon name="hourglass_empty" size={14} />
+          </span>
+        )}
+        {showFailureLog && (
+          <button
+            type="button"
+            className={styles.logBtn}
+            title={t("RequestRow.viewErrorLog")}
+            aria-label={t("RequestRow.viewErrorLog")}
+            onClick={onOpenLog}
+          >
+            <MIcon name="receipt_long" size={14} />
+          </button>
+        )}
+      </div>
+      {fit.isFolded("requestedAt") && fit.isFolded("period") && <FoldedRequestedLine req={req} />}
+      {fit.isFolded("period") && <FoldedPeriodLines req={req} />}
+    </>
   );
 }
 
@@ -313,8 +422,10 @@ function RequestActionsCell({ rowState }) {
 }
 
 /* ── 規格調整申請表的儲存格 ── */
+/* 窄版收欄時機器欄多畫：變更內容（本身看得出是什麼，不加欄名）、申請原因 */
 function SpecMachineCell({ rowState }) {
   const { t } = useTranslation("personal");
+  const fit = useTableFitContext();
   const { req, showVmid } = rowState;
   const machineName = req.resource_name || t("SpecRequestRow.machineFallback", { vmid: req.vmid });
   return (
@@ -328,6 +439,8 @@ function SpecMachineCell({ rowState }) {
           {t("SpecRequestRow.kindLabel")}
           {showVmid && t("RequestRow.numberSuffix", { vmid: req.vmid })}
         </span>
+        {fit.isFolded("change") && <FoldedLine>{specRequestChangeLabel(req, t)}</FoldedLine>}
+        {fit.isFolded("reason") && <FoldedReasonLine reason={req.reason} />}
       </div>
     </div>
   );
@@ -338,12 +451,33 @@ function SpecChangeCell({ rowState }) {
   return <span className={styles.specCell}>{specRequestChangeLabel(rowState.req, t)}</span>;
 }
 
+/* 只收起申請時間時，它接在套用時間底下 */
 function SpecAppliedCell({ rowState }) {
-  return <span className={styles.dateTimeCell}>{formatDateTime(rowState.req.applied_at)}</span>;
+  const fit = useTableFitContext();
+  const { req } = rowState;
+  return (
+    <>
+      <span className={styles.dateTimeCell}>{formatDateTime(req.applied_at)}</span>
+      {fit.isFolded("requestedAt") && <FoldedRequestedLine req={req} />}
+    </>
+  );
 }
 
+/* 收進狀態欄的套用時間：只寫日期，完整時間在 title；還沒套用就不畫 */
+function FoldedAppliedLine({ req }) {
+  const { t } = useTranslation("personal");
+  if (!req.applied_at) return null;
+  return (
+    <FoldedLine label={t("RequestsPage.specColAppliedAt")} title={formatDateTime(req.applied_at)}>
+      {formatDate(req.applied_at)}
+    </FoldedLine>
+  );
+}
+
+/* 窄版收欄時狀態欄多畫：申請時間、套用時間（依先後） */
 function SpecStatusCell({ rowState }) {
   const { t } = useTranslation("personal");
+  const fit = useTableFitContext();
   const { req } = rowState;
   const display     = specRequestDisplayStatus(req);
   const statusLabel = display.labelKey ? t(display.labelKey) : display.key;
@@ -355,25 +489,29 @@ function SpecStatusCell({ rowState }) {
       : null;
   const applyNote = req.apply_error || null;
   return (
-    <div className={styles.statusCell}>
-      <span className={`${styles.badge} ${styles[`badge_${display.color}`]}`}>{statusLabel}</span>
-      {/* 展開明細已移除（比照上方申請表）：審核備註／機器已刪除／套用失敗訊息改掛在小圖示的 tooltip */}
-      {reviewNote && (
-        <span className={styles.statusNote} title={reviewNote}>
-          <MIcon name="comment" size={14} />
-        </span>
-      )}
-      {deletedByMachine && (
-        <span className={styles.statusNote} title={t("SpecRequestRow.deletedNote")}>
-          <MIcon name="info" size={14} />
-        </span>
-      )}
-      {applyNote && (
-        <span className={styles.statusNote} title={applyNote}>
-          <MIcon name={req.applied_at ? "warning" : "error_outline"} size={14} />
-        </span>
-      )}
-    </div>
+    <>
+      <div className={styles.statusCell}>
+        <span className={`${styles.badge} ${styles[`badge_${display.color}`]}`}>{statusLabel}</span>
+        {/* 展開明細已移除（比照上方申請表）：審核備註／機器已刪除／套用失敗訊息改掛在小圖示的 tooltip */}
+        {reviewNote && (
+          <span className={styles.statusNote} title={reviewNote}>
+            <MIcon name="comment" size={14} />
+          </span>
+        )}
+        {deletedByMachine && (
+          <span className={styles.statusNote} title={t("SpecRequestRow.deletedNote")}>
+            <MIcon name="info" size={14} />
+          </span>
+        )}
+        {applyNote && (
+          <span className={styles.statusNote} title={applyNote}>
+            <MIcon name={req.applied_at ? "warning" : "error_outline"} size={14} />
+          </span>
+        )}
+      </div>
+      {fit.isFolded("requestedAt") && fit.isFolded("appliedAt") && <FoldedRequestedLine req={req} />}
+      {fit.isFolded("appliedAt") && <FoldedAppliedLine req={req} />}
+    </>
   );
 }
 
@@ -632,6 +770,9 @@ export default function RequestsPage() {
     data: specRequests,
     getRowId: getRequestId,
   });
+  /* 兩張表各量各的（ref 掛在各自會橫捲的 .tableWrap） */
+  const requestFit = useTableFit(REQUEST_FIT_COLUMNS);
+  const specFit = useTableFit(SPEC_FIT_COLUMNS);
 
   /* 已經停在本頁時 useState 的初值不會再跑一次，所以導覽助手在這頁按步驟
      只會換掉 location.state。兩個方向都要跟：帶 create 就開表單，沒帶就回列表
@@ -706,10 +847,11 @@ export default function RequestsPage() {
         ) : (
           <>
             {requests.length > 0 && (
-              <div className={styles.tableWrap}>
+              <div ref={requestFit.ref} className={styles.tableWrap}>
                 <DataTable
                   table={requestTable}
                   className={styles.table}
+                  fit={requestFit}
                   renderRow={(row) => <RequestRow key={row.id} row={row} req={row.original} onUpdated={handleUpdated} />}
                 />
               </div>
@@ -719,10 +861,11 @@ export default function RequestsPage() {
               <section className={styles.subSection}>
                 <h2 className={styles.sectionTitle}>{t("RequestsPage.specSectionTitle")}</h2>
                 <p className={styles.sectionDesc}>{t("RequestsPage.specSectionDesc")}</p>
-                <div className={styles.tableWrap}>
+                <div ref={specFit.ref} className={styles.tableWrap}>
                   <DataTable
                     table={specTable}
                     className={styles.table}
+                    fit={specFit}
                     renderRow={(row) => <SpecRequestRow key={row.id} row={row} req={row.original} onUpdated={handleSpecUpdated} />}
                   />
                 </div>

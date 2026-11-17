@@ -1,0 +1,110 @@
+@use "../../assets/styles/variables" as *;
+
+/* 收合。選擇器一律用子代（>）：收合裡面再放收合時，外層展開不會讓裡層的箭頭跟著轉 */
+.disclosure {
+  min-width: 0;
+}
+
+/* boxed（預設）：白底細框、與輸入框同寬的整行可點列（玻璃卡裡的區塊一律白底細框，淺色只留給 hover）。
+   字級跟欄位標題一樣 14px／500；內容接在列下方 16px，跟上方欄位對齊 */
+.summary {
+  display: flex;
+  align-items: center;
+  gap: $spacing-8;
+  min-height: 40px;
+  padding: $spacing-8 12px;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-8;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
+  list-style: none;
+  cursor: pointer;
+  transition: background $transition-base, color $transition-base;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:hover {
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary-on-surface);
+    outline-offset: 2px;
+  }
+}
+
+.icon {
+  color: var(--color-primary);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+}
+
+.meta {
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  font-weight: $font-weight-400;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  transition: transform $transition-base;
+}
+
+.disclosure[open] > .summary > .chevron {
+  transform: rotate(180deg);
+}
+
+.body {
+  margin-top: $spacing-16;
+}
+
+/* inline：只有「文字＋箭頭」、沒有框；字級跟著外框（頁面用 className 設），平常淡色、滑過或展開變主色。
+   內容緊接在收合列下面，間距由內容自己決定 */
+.inline > .summary {
+  display: inline-flex;
+  gap: 2px;
+  width: fit-content;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: inherit;
+
+  &:hover {
+    color: var(--color-primary);
+    background: transparent;
+  }
+}
+
+.inline > .summary > .label {
+  flex: 0 1 auto;
+}
+
+.inline > .summary > .chevron {
+  color: inherit;
+}
+
+.inline[open] > .summary {
+  color: var(--color-primary);
+}
+
+.inline > .body {
+  margin-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary,
+  .chevron {
+    transition: none;
+  }
+}

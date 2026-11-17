@@ -1,0 +1,194 @@
+@use "../../assets/styles/variables" as *;
+
+$tab-padding-x: 12px;
+$tab-padding-x-compact: $spacing-8;
+$tab-active-weight: 600;
+
+/* 分頁（預設＝區塊分頁）：沒有外框軌道，選中的分頁字下有一條 2px 圓角主色短指示條（只跨文字＋圖示＋徽章，不拉滿整列）。
+   高度 36px，跟按鈕、輸入框、分段切換同一列對得齊；放不下時自己橫向捲動（不顯示捲軸）。
+   頁面分頁見下方 .tabsPage */
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  /* 下方多 2px 給指示條，文字在指示條上面垂直置中 */
+  padding: 0 $tab-padding-x 2px;
+  border: 0;
+  border-radius: $radius-8;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color $transition-base, background $transition-base;
+
+  /* 指示條：選中時從中間展開；左右內縮跟內距一樣，剛好對齊內容 */
+  &::after {
+    content: "";
+    position: absolute;
+    right: $tab-padding-x;
+    bottom: 0;
+    left: $tab-padding-x;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--color-primary);
+    opacity: 0;
+    transform: scaleX(0.4);
+    transition: opacity $transition-base, transform $transition-base;
+  }
+
+  &:hover {
+    color: var(--color-text-primary);
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+}
+
+/* 選中：字色深一階＋加粗＋指示條。只靠深淺一階分不出目前在哪個分頁（淡藍背景上尤其明顯） */
+.tabActive {
+  color: var(--color-text-primary);
+  font-weight: $tab-active-weight;
+
+  &::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+/* 標籤寬度＝加粗後的寬度：::after 用 data-label 排一份隱形的粗體字（第二列、高度 0），
+   格線欄寬取兩者較寬的，選中變粗時不會把後面的分頁往右推。
+   文字本身放在 .labelText，窄容器（fullWidth）照樣能縮成刪節號 */
+.label {
+  display: inline-grid;
+  min-width: 0;
+
+  &::after {
+    content: attr(data-label);
+    content: attr(data-label) / "";
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    font-weight: $tab-active-weight;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+  }
+}
+
+.labelText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 數量徽章：中性淡底；選中的分頁換主色淡底主色字（徽章不加外框） */
+.badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: $radius-pill;
+  line-height: 18px;
+  background: var(--color-hover);
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  /* 固定字重：不跟著選中分頁加粗，數字變寬會把後面的分頁推開 */
+  font-weight: $font-weight-500;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.tabActive .badge {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+/* compact：窄容器（側邊欄）左右內距收成 8px；fullWidth：撐滿容器、各分頁平分。
+   兩者都是元件自己的變體，頁面不要覆寫 .tab 的內距或 flex */
+.tabsCompact .tab {
+  padding: 0 $tab-padding-x-compact 2px;
+
+  &::after {
+    right: $tab-padding-x-compact;
+    left: $tab-padding-x-compact;
+  }
+}
+
+/* page：頁面分頁（標題下方、切換整頁主要內容）。圖示放進 28px 圓角方塊，選中的方塊換主色實心白圖示，
+   不畫字下指示條（方塊就是選中記號）；字 16px、列高 44px，份量比區塊分頁重一階，旁邊的篩選搶不過它。
+   整列往左拉一個內距，第一個方塊對齊頁面標題、下方卡片的左緣；hover 淡底會比內容左緣多出這段內距，屬預期 */
+.tabsPage {
+  gap: $spacing-4;
+  margin-left: -$tab-padding-x;
+  max-width: calc(100% + #{$tab-padding-x});
+
+  .tab {
+    gap: $spacing-8;
+    min-height: 44px;
+    padding: 0 $tab-padding-x;
+    font-size: $font-size-16;
+
+    &::after {
+      display: none;
+    }
+
+    &:hover .iconBox {
+      background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    }
+  }
+
+  .tabActive .iconBox,
+  .tabActive:hover .iconBox {
+    background: var(--color-primary);
+    color: var(--color-text-on-primary);
+  }
+}
+
+.iconBox {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: $radius-8;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-text-secondary);
+  transition: background $transition-base, color $transition-base;
+}
+
+.tabsFullWidth {
+  width: 100%;
+
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .tab::after,
+  .iconBox {
+    transition: none;
+  }
+}

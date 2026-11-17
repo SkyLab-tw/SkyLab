@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
-import useAnchoredMenu from "../../../hooks/useAnchoredMenu";
 import styles from "./TemplatesPage.module.scss";
 import MIcon from "../../../components/MIcon";
+import ActionMenu from "../../../components/ActionMenu/ActionMenu";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import Modal from "../../../components/Modal/Modal";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import { TemplatesService } from "../../../services/templates";
@@ -110,112 +111,50 @@ function ManualDialog({ template, closing = false, onClose }) {
   );
 }
 
-/** 單列的「⋯」操作選單。
-   portal 到 body 並用 fixed 定位：選單原本絕對定位在 .tableScroll 裡，
-   overflow-x: auto 會連 y 軸一起變裁切上下文，選單被切掉還撑出捲軸（同 PowerMenu 的做法） */
-const ROW_MENU_WIDTH = 200;
+/** 單列「⋮」選單的選項（共用 ActionMenu 畫，定位、鍵盤、portal 都在裡面）。
+   編輯／更新循環／重新轉換／刪除只有擁有者與管理員做得到（後端 require_template_owner）：
+   別人的範本只留克隆與使用手冊，不然老師會看到按了就 403 的選項 */
+function rowMenuItems({ template, canManage, cycleBusy, onClone, onEdit, onManual, onRetry, onCycle, onDelete }, t) {
+  const items = [{
+    key: "clone",
+    icon: "content_copy",
+    label: t("TemplatesPage.menuClone"),
+    disabled: template.status !== "ready",
+    onSelect: () => onClone(template),
+  }];
+  if (canManage) {
+    items.push({ key: "edit", icon: "edit", label: t("TemplatesPage.menuEdit"), onSelect: () => onEdit(template) });
+  }
+  if (template.attachment_count > 0) {
+    items.push({
+      key: "manual",
+      icon: "description",
+      label: t("TemplatesPage.menuManual", { count: template.attachment_count }),
+      onSelect: () => onManual(template),
+    });
+  }
+  if (!canManage) return items;
 
-function RowMenu({ template, canManage, cycleBusy, onClone, onEdit, onManual, onRetry, onCycle, onDelete, onClose, anchorRef, closing = false }) {
-  const { t } = useTranslation("resource");
-  const { ref, pos } = useAnchoredMenu({ anchorRef, onClose, width: ROW_MENU_WIDTH });
-
-  return createPortal(
-    <div
-      ref={ref}
-      className={`${styles.rowMenu} ${closing ? styles.rowMenuOut : ""}`}
-      style={pos ? { top: pos.top, left: pos.left } : { top: 0, left: 0, visibility: "hidden" }}
-    >
-      <button
-        type="button"
-        className={styles.rowMenuItem}
-        disabled={template.status !== "ready"}
-        onClick={() => { onClose(); onClone(template); }}
-      >
-        <MIcon name="content_copy" size={15} />
-        {t("TemplatesPage.menuClone")}
-      </button>
-      {/* 編輯／更新循環／重新轉換／刪除只有擁有者與管理員做得到（後端 require_template_owner）：
-          別人的範本只留克隆與使用手冊，不然老師會看到按了就 403 的選項 */}
-      {canManage && (
-        <button
-          type="button"
-          className={styles.rowMenuItem}
-          onClick={() => { onClose(); onEdit(template); }}
-        >
-          <MIcon name="edit" size={15} />
-          {t("TemplatesPage.menuEdit")}
-        </button>
-      )}
-      {template.attachment_count > 0 && (
-        <button
-          type="button"
-          className={styles.rowMenuItem}
-          onClick={() => { onClose(); onManual(template); }}
-        >
-          <MIcon name="description" size={15} />
-          {t("TemplatesPage.menuManual", { count: template.attachment_count })}
-        </button>
-      )}
-      {canManage && (
-        <>
-          <div className={styles.rowMenuDivider} />
-          {template.status === "failed" && (
-            <button
-              type="button"
-              className={styles.rowMenuItem}
-              disabled={cycleBusy}
-              onClick={() => { onClose(); onRetry(template.id); }}
-            >
-              <MIcon name="restart_alt" size={15} />
-              {t("TemplatesPage.menuRetry")}
-            </button>
-          )}
-          {template.status === "ready" && (
-            <button
-              type="button"
-              className={styles.rowMenuItem}
-              disabled={cycleBusy}
-              onClick={() => { onClose(); onCycle(template.id, "start"); }}
-            >
-              <MIcon name="sync" size={15} />
-              {t("TemplatesPage.menuStartCycle")}
-            </button>
-          )}
-          {template.status === "updating" && (
-            <>
-              <button
-                type="button"
-                className={styles.rowMenuItem}
-                disabled={cycleBusy}
-                onClick={() => { onClose(); onCycle(template.id, "finish"); }}
-              >
-                <MIcon name="sync" size={15} />
-                {t("TemplatesPage.menuFinishCycle")}
-              </button>
-              <button
-                type="button"
-                className={styles.rowMenuItem}
-                disabled={cycleBusy}
-                onClick={() => { onClose(); onCycle(template.id, "cancel"); }}
-              >
-                {t("TemplatesPage.menuCancelCycle")}
-              </button>
-            </>
-          )}
-          <div className={styles.rowMenuDivider} />
-          <button
-            type="button"
-            className={`${styles.rowMenuItem} ${styles.rowMenuItemDanger}`}
-            onClick={() => { onClose(); onDelete(template); }}
-          >
-            <MIcon name="delete_outline" size={15} />
-            {t("TemplatesPage.menuDelete")}
-          </button>
-        </>
-      )}
-    </div>,
-    document.body,
-  );
+  const cycleItems = [];
+  if (template.status === "failed") {
+    cycleItems.push({ key: "retry", icon: "restart_alt", label: t("TemplatesPage.menuRetry"), disabled: cycleBusy, onSelect: () => onRetry(template.id) });
+  }
+  if (template.status === "ready") {
+    cycleItems.push({ key: "startCycle", icon: "sync", label: t("TemplatesPage.menuStartCycle"), disabled: cycleBusy, onSelect: () => onCycle(template.id, "start") });
+  }
+  if (template.status === "updating") {
+    cycleItems.push(
+      { key: "finishCycle", icon: "sync", label: t("TemplatesPage.menuFinishCycle"), disabled: cycleBusy, onSelect: () => onCycle(template.id, "finish") },
+      { key: "cancelCycle", icon: "cancel", label: t("TemplatesPage.menuCancelCycle"), disabled: cycleBusy, onSelect: () => onCycle(template.id, "cancel") },
+    );
+  }
+  /* 更新循環這組跟上面隔一條線；建立中、已刪除的範本沒有這組，就只剩刪除前那一條 */
+  if (cycleItems.length > 0) cycleItems[0] = { ...cycleItems[0], separatorBefore: true };
+  return [
+    ...items,
+    ...cycleItems,
+    { key: "delete", icon: "delete_outline", label: t("TemplatesPage.menuDelete"), danger: true, separatorBefore: true, onSelect: () => onDelete(template) },
+  ];
 }
 
 /* ── 表格欄位（TanStack Table）──
@@ -241,8 +180,38 @@ function ColumnTitle({ index }) {
   return useColumns()[index];
 }
 
+/* ── 窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起版本、類型、VMID、可見範圍：前三樣收進名稱下面一行小字，可見範圍收到狀態底下。
+   欄寬只寫在這裡：可見範圍只有「全部可見／私人」兩種，110px 放得下（英文 Visible to Everyone 折兩行），
+   英文的 Actions 表頭要 80px；狀態徽章不換行，英文的 Update cycle in progress 放不下時在欄內截斷（title 看全文）。
+   全部欄 830px，1366 筆電（表格區約 944px）不用捲；收掉 VMID、類型、版本後 560px，
+   1440 開著 AI 助手（約 567px）、窄視窗（約 600px）都還放得下可見範圍這一欄 */
+/* 類型是分類、不是狀態，寫純文字不做膠囊（整張表只留狀態一種膠囊）。
+   qemu 是 Proxmox 內部名稱，對使用者寫 VM，跟「我的資源」的「虛擬機 (VM)」同一個說法；縮寫各語系通用 */
+const TEMPLATE_TYPE_LABELS = Object.freeze({ qemu: "VM", lxc: "LXC" });
+
+function templateTypeLabel(type) {
+  return TEMPLATE_TYPE_LABELS[type] ?? type;
+}
+
+const TEMPLATE_FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 230 },
+  { id: "pve_vmid", width: 90, fold: 3 },
+  { id: "resource_type", width: 100, fold: 2 },
+  { id: "status", width: 140 },
+  { id: "visibility", width: 110, fold: 4 },
+  { id: "version", width: 80, fold: 1 },
+  { id: "actions", width: 80 },
+]);
+
 function TemplateNameCell({ template }) {
   const { t } = useTranslation("resource");
+  const fit = useTableFitContext();
+  const foldedMeta = [
+    fit.isFolded("pve_vmid") && template.pve_vmid,
+    fit.isFolded("resource_type") && templateTypeLabel(template.resource_type),
+    fit.isFolded("version") && t("TemplatesPage.versionLabel", { version: template.version }),
+  ].filter(Boolean).join(" · ");
   return (
     <>
       <div className={styles.nameCell}>
@@ -263,6 +232,7 @@ function TemplateNameCell({ template }) {
           </span>
         )}
       </div>
+      {foldedMeta && <p className={`${styles.nameDesc} ${styles.monoMeta}`}>{foldedMeta}</p>}
       {template.description && (
         <p className={styles.nameDesc}>{template.description}</p>
       )}
@@ -276,6 +246,16 @@ function TemplateNameCell({ template }) {
 function VisibilityCell({ template }) {
   const { t } = useTranslation("resource");
   return visibilityLabel(template, t);
+}
+
+/* 窄版收起可見範圍時，改寫在狀態徽章底下 */
+function TemplateStatusCell({ template }) {
+  const { t } = useTranslation("resource");
+  const fit = useTableFitContext();
+  return <>
+    <TemplateStatusBadge status={template.status} />
+    {fit.isFolded("visibility") && <p className={styles.foldedLine}>{visibilityLabel(template, t)}</p>}
+  </>;
 }
 
 function VersionCell({ version }) {
@@ -303,18 +283,11 @@ function TemplateMenuCell({
   return (
     <div className={styles.menuWrap}>
       {menuOpen && (
-        <RowMenu
-          template={template}
-          canManage={canManage}
-          cycleBusy={cycleBusy}
-          onClone={onClone}
-          onEdit={onEdit}
-          onManual={onManual}
-          onRetry={onRetry}
-          onCycle={onCycle}
-          onDelete={onDelete}
-          onClose={onCloseMenu}
+        <ActionMenu
           anchorRef={menuBtnRef}
+          ariaLabel={t("TemplatesPage.moreActionsTitle")}
+          items={rowMenuItems({ template, canManage, cycleBusy, onClone, onEdit, onManual, onRetry, onCycle, onDelete }, t)}
+          onClose={onCloseMenu}
           closing={menuClosing}
         />
       )}
@@ -326,6 +299,8 @@ function TemplateMenuCell({
         onClick={onToggleMenu}
         title={t("TemplatesPage.moreActionsTitle")}
         aria-label={t("TemplatesPage.moreActionsTitle")}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen && !menuClosing}
       >
         <MIcon name="more_vert" size={18} />
       </button>
@@ -346,12 +321,12 @@ const templateColumns = columnHelper.columns([
   }),
   columnHelper.accessor("resource_type", {
     header: () => <ColumnTitle index={2} />,
-    cell: ({ row }) => <span className={styles.typeChip}>{row.original.resource_type}</span>,
-    meta: { thClassName: styles.th, tdClassName: styles.td },
+    cell: ({ row }) => templateTypeLabel(row.original.resource_type),
+    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.mutedCell}` },
   }),
   columnHelper.accessor("status", {
     header: () => <ColumnTitle index={3} />,
-    cell: ({ row }) => <TemplateStatusBadge status={row.original.status} />,
+    cell: ({ row }) => <TemplateStatusCell template={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td, tdProps: { "data-guide": "templates-status" } },
   }),
   columnHelper.accessor("visibility", {
@@ -368,7 +343,7 @@ const templateColumns = columnHelper.columns([
     id: "actions",
     header: () => <ColumnTitle index={6} />,
     cell: ({ row, rowState }) => <TemplateMenuCell template={row.original} {...rowState} />,
-    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.tdMenu}` },
+    meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
 ]);
 
@@ -512,6 +487,7 @@ export default function TemplatesPage() {
     data: list,
     getRowId: (template) => String(template.id),
   });
+  const fit = useTableFit(TEMPLATE_FIT_COLUMNS);
 
   return (
     <div className={styles.page}>
@@ -543,10 +519,11 @@ export default function TemplatesPage() {
         />
       ) : (
         <div className={styles.card} data-guide="templates-table">
-          <div className={styles.tableScroll}>
+          <div ref={fit.ref} className={styles.tableScroll}>
           <DataTable
             table={table}
             className={styles.table}
+            fit={fit}
             renderRow={(row) => (
               <ManagementRow
                 key={row.id}

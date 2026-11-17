@@ -176,10 +176,12 @@
   }
 }
 
-/* 任務／提醒分段切換：撐滿彈窗寬，兩段均分 */
+/* 任務／提醒分段切換：撐滿彈窗寬，兩段均分。
+   分段切換預設寬度跟著內容走，這裡要靠直排容器拉滿，所以明寫 width: auto（含左右外距，不能用 fullWidth 的 100%） */
 .popoverTabs {
   display: flex;
   flex-shrink: 0;
+  width: auto;
   margin: 0 $spacing-4 $spacing-4;
 
   > button {

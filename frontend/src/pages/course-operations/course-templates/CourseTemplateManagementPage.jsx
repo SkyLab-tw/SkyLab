@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import MIcon from "../../../components/MIcon";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
 import { baseFeatures } from "../../../components/DataTable/features";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { CourseEnvironmentsService } from "../../../services/courseEnvironments";
 import { useCourseEnvironmentCacheUpdater, useCourseEnvironmentsQuery } from "../../../queries/courseEnvironments";
 import { useToast } from "../../../hooks/useToast";
 import { useQueryView } from "../../../hooks/useQueryLoadState";
+import useTableFit from "../../../hooks/useTableFit";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import styles from "../CourseOperations.module.scss";
 import { environmentSpecs } from "../nodeSpecs";
@@ -48,9 +50,48 @@ function ColumnTitle({ index }) {
   return useColumns()[index];
 }
 
+/* ── 窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起版本、資源合計、每位學生的機器、使用班級、提供方式；名稱、狀態、操作永遠在。
+   機器數、資源合計、版本是這份環境的內容，依欄位順序接在名稱下一行；使用班級、提供方式是它目前怎麼被用，
+   一項一行排在狀態徽章底下（值本身看得出是什麼，不加欄名）。
+   欄寬只寫在這裡：每位學生的機器要放得下日文表頭「学生 1 人あたりのマシン」與英文「2 machines/student」；
+   資源合計放得下「16 CPU · 32 GB RAM」；版本欄寬給日文表頭「バージョン」；使用班級給英文表頭「Classes using it」；
+   操作欄是兩顆 32px 圖示鈕。
+   全部欄 1124px：1366、1440 筆電（約 929～1018px）收掉版本、資源合計剩 859px；
+   1100 寬視窗（約 678px）再收機器數、使用班級剩 564px，1440 開著 AI 助手（約 567px）也還看得到提供方式；
+   手機（約 448px）連提供方式也收，只剩名稱、狀態、操作 424px */
+const ENV_FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 190 },
+  { id: "machines", width: 170, fold: 3 },
+  { id: "resources", width: 170, fold: 2 },
+  { id: "version", width: 95, fold: 1 },
+  { id: "usageScope", width: 140, fold: 5 },
+  { id: "classes", width: 125, fold: 4 },
+  { id: "status", width: 130 },
+  { id: "actions", width: 104 },
+]);
+
+const usageLabelKey = (usageScope) => USAGE_LABEL_KEYS[usageScope] ?? USAGE_LABEL_KEYS.course;
+
+/* 名稱欄：收起的機器數、資源合計、版本依欄位順序接在名稱下一行；
+   每一項不從中間折開（「2 台／每位學生」「4 CPU · 8 GB RAM」），放不下時只在項目之間換行 */
 function NameCell({ template }) {
   const { t } = useTranslation("teaching");
-  return <strong className={template.name?.trim() ? undefined : styles.envUnnamed}>{displayName(template, t)}</strong>;
+  const fit = useTableFitContext();
+  const folded = [
+    fit.isFolded("machines") && t("CourseTemplateManagementPage.machinesPerStudentUnit", { count: template.nodes.length }),
+    fit.isFolded("resources") && t("CourseTemplateManagementPage.resourceSummary", environmentSpecs(template.nodes)),
+    fit.isFolded("version") && `v${template.version}`,
+  ].filter(Boolean);
+  return <>
+    <strong className={`${styles.envName} ${template.name?.trim() ? "" : styles.envUnnamed}`}>{displayName(template, t)}</strong>
+    {folded.length > 0 && <small>
+      {folded.map((item, index) => <Fragment key={index}>
+        {index > 0 && " · "}
+        <span className={styles.envFoldedItem}>{item}</span>
+      </Fragment>)}
+    </small>}
+  </>;
 }
 
 function MachinesCell({ count }) {
@@ -65,7 +106,7 @@ function ResourceCell({ nodes }) {
 
 function UsageCell({ usageScope }) {
   const { t } = useTranslation("teaching");
-  return <strong>{t(USAGE_LABEL_KEYS[usageScope] ?? USAGE_LABEL_KEYS.course)}</strong>;
+  return <strong>{t(usageLabelKey(usageScope))}</strong>;
 }
 
 function ClassesCell({ count }) {
@@ -73,9 +114,17 @@ function ClassesCell({ count }) {
   return t("CourseTemplateManagementPage.classesCount", { count });
 }
 
-function StatusCell({ status }) {
+/* 狀態欄：收起的提供方式、使用班級依序接在徽章底下，一項一行
+   （英文「Course + quick practice」在窄欄裡自己換行，不跟班級數擠在同一行） */
+function StatusCell({ template }) {
   const { t } = useTranslation("teaching");
-  return <span className={`${styles.statusBadge} ${styles[`status_${status}`]}`}>{t(STATUS_LABEL_KEYS[status])}</span>;
+  const fit = useTableFitContext();
+  const { status } = template;
+  return <>
+    <span className={`${styles.statusBadge} ${styles[`status_${status}`]}`}>{t(STATUS_LABEL_KEYS[status])}</span>
+    {fit.isFolded("usageScope") && <small>{t(usageLabelKey(template.usageScope))}</small>}
+    {fit.isFolded("classes") && <small>{t("CourseTemplateManagementPage.classesCount", { count: template.classes })}</small>}
+  </>;
 }
 
 function ActionsCell({ busy, onRemove, onOpen }) {
@@ -86,6 +135,7 @@ function ActionsCell({ busy, onRemove, onOpen }) {
   </div>;
 }
 
+/* 欄寬與收合順序在 ENV_FIT_COLUMNS（id 要對得上） */
 const environmentColumns = columnHelper.columns([
   columnHelper.accessor("name", { header: () => <ColumnTitle index={0} />, cell: ({ row }) => <NameCell template={row.original} /> }),
   columnHelper.display({ id: "machines", header: () => <ColumnTitle index={1} />, cell: ({ row }) => <MachinesCell count={row.original.nodes.length} /> }),
@@ -93,7 +143,7 @@ const environmentColumns = columnHelper.columns([
   columnHelper.accessor("version", { header: () => <ColumnTitle index={3} />, cell: ({ row }) => <>v{row.original.version}</> }),
   columnHelper.accessor("usageScope", { header: () => <ColumnTitle index={4} />, cell: ({ row }) => <UsageCell usageScope={row.original.usageScope} /> }),
   columnHelper.accessor("classes", { header: () => <ColumnTitle index={5} />, cell: ({ row }) => <ClassesCell count={row.original.classes} /> }),
-  columnHelper.accessor("status", { header: () => <ColumnTitle index={6} />, cell: ({ row }) => <StatusCell status={row.original.status} /> }),
+  columnHelper.accessor("status", { header: () => <ColumnTitle index={6} />, cell: ({ row }) => <StatusCell template={row.original} /> }),
   /* 動作欄的點擊不往上冒泡到整列的「開啟」 */
   columnHelper.display({
     id: "actions",
@@ -166,6 +216,7 @@ export default function CourseTemplateManagementPage() {
     data: rows,
     getRowId: (template) => String(template.id),
   });
+  const fit = useTableFit(ENV_FIT_COLUMNS);
   const openTemplate = (id) => navigate(`/course-template-management/${id}`);
 
   const statusCounts = useMemo(() => templates.reduce(
@@ -196,8 +247,9 @@ export default function CourseTemplateManagementPage() {
       {loading ? <LoadingState /> : !rows.length ? <EmptyState icon="view_quilt" title={t("CourseTemplateManagementPage.emptyTitle")}
         action={templates.length
           ? <button type="button" className={styles.btnSecondary} onClick={() => { setQuery(""); setStatus("all"); }}><MIcon name="filter_alt_off" size={16} />{t("EmptyState.clearFilters", { ns: "common" })}</button>
-          : <button type="button" className={styles.btnPrimary} onClick={() => navigate("/course-template-management/new")}><MIcon name="add" size={16} />{t("CourseTemplateManagementPage.createEnvBtn")}</button>} /> : <div className={styles.envTableWrap} data-guide="course-tpl-table"><DataTable
+          : <button type="button" className={styles.btnPrimary} onClick={() => navigate("/course-template-management/new")}><MIcon name="add" size={16} />{t("CourseTemplateManagementPage.createEnvBtn")}</button>} /> : <div ref={fit.ref} className={styles.envTableWrap} data-guide="course-tpl-table"><DataTable
         table={table}
+        fit={fit}
         className={styles.envTable}
         renderRow={(row) => <EnvironmentRow key={row.id} row={row} template={row.original} busy={busyId === row.original.id} onOpen={openTemplate} onRemove={remove} />}
       /></div>}

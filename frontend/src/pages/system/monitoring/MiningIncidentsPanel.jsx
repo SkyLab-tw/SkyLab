@@ -7,6 +7,8 @@ import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import { MiningIncidentsService } from "../../../services/miningIncidents";
@@ -15,7 +17,7 @@ import { useToast } from "../../../hooks/useToast";
 import { useLoadError } from "../../../hooks/useQueryLoadState";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import useDialogPresence from "../../../hooks/useDialogPresence";
-import { formatDateTime } from "../../../utils/formatDate";
+import { formatDate, formatDateTime } from "../../../utils/formatDate";
 import { joinClauses } from "../../../utils/joinList";
 
 /** 待處理＝detected／suspended（與後端 open 定義相同）；banned／dismissed 為已結案 */
@@ -60,18 +62,58 @@ function ColTitle({ name }) {
   return t(`MiningIncidentsPanel.${name}`);
 }
 
-function VmidCell({ vmid }) {
+/* ── 挖礦事件表窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起觀察視窗、存證快照、平均 CPU、偵測時間、擁有者；VMID、狀態、操作永遠在。
+   觀察視窗是平均 CPU 的統計區間，只收它時接在平均 CPU 底下；偵測證據（平均 CPU、存證快照）與偵測時間
+   收到狀態徽章底下；擁有者收到 VMID 底下（欄窄，只寫姓名一行，email 在 title）。
+   欄寬只寫在這裡：觀察視窗 140px 是為了英文表頭 Observation Window；操作欄放得下中文「停權＋誤判解除」，
+   英文／日文放不下時兩顆換行。原本表格直接放在卡片裡（卡片 overflow: hidden），放不下的欄被裁掉也捲不到，
+   現在包一層 .tableScroll。全部欄 1230px：1440（約 1003px）、1366 筆電（約 929px）收掉觀察視窗與存證快照（920px），
+   1100 寬視窗（約 678px）收到偵測時間（660px），1440 開著 AI 助手（約 567px）收到擁有者（490px）；
+   再窄才橫捲並固定 VMID 欄 */
+const INCIDENT_FIT_COLUMNS = Object.freeze([
+  { id: "vmid", width: 90 },
+  { id: "owner", width: 170, fold: 5 },
+  { id: "avg_cpu", width: 90, fold: 3 },
+  { id: "window_hours", width: 140, fold: 1 },
+  { id: "snapshot_name", width: 170, fold: 2 },
+  { id: "status", width: 160 },
+  { id: "detected_at", width: 170, fold: 4 },
+  { id: "actions", width: 240 },
+]);
+
+/* 收起的欄在主欄裡的一行小字；label 給「光看值看不出是什麼」的欄（平均 CPU、偵測時間） */
+function FoldedLine({ label, title, truncate = false, children }) {
+  return (
+    <div className={`${styles.foldedLine} ${truncate ? styles.foldedLineTruncate : ""}`} title={title}>
+      {label && <span className={styles.foldedLabel}>{label}</span>}
+      {children}
+    </div>
+  );
+}
+
+/* 窄版收起擁有者時，姓名接在 VMID 底下 */
+function VmidCell({ incident }) {
   const { t } = useTranslation("system");
+  const fit = useTableFitContext();
+  const { vmid } = incident;
   /* 判斷誤判要看機器用途、CPU 曲線與存證快照，直接連到資源詳情 */
   return (
-    <Link
-      to={`/resource-mgmt/${vmid}`}
-      className={styles.vmLink}
-      title={t("MiningIncidentsPanel.openResourceDetail", { vmid })}
-    >
-      {vmid}
-      <MIcon name="open_in_new" size={12} />
-    </Link>
+    <>
+      <Link
+        to={`/resource-mgmt/${vmid}`}
+        className={styles.vmLink}
+        title={t("MiningIncidentsPanel.openResourceDetail", { vmid })}
+      >
+        {vmid}
+        <MIcon name="open_in_new" size={12} />
+      </Link>
+      {fit.isFolded("owner") && (
+        <FoldedLine title={incident.owner_email || undefined} truncate>
+          {incident.owner_full_name || incident.owner_email || t("MiningIncidentsPanel.ownerUnknown")}
+        </FoldedLine>
+      )}
+    </>
   );
 }
 
@@ -94,6 +136,21 @@ function WindowCell({ hours }) {
   return t("MiningIncidentsPanel.hoursValue", { hours });
 }
 
+function avgCpuText(incident) {
+  return `${incident.avg_cpu.toFixed(1)}%`;
+}
+
+/* 只收起觀察視窗時，統計區間接在平均 CPU 底下（「98.5%／6 小時」看得出是幾小時的平均） */
+function AvgCpuCell({ incident }) {
+  const fit = useTableFitContext();
+  return (
+    <>
+      {avgCpuText(incident)}
+      {fit.isFolded("window_hours") && <FoldedLine><WindowCell hours={incident.window_hours} /></FoldedLine>}
+    </>
+  );
+}
+
 function SnapshotCell({ name }) {
   const { t } = useTranslation("system");
   return name ? (
@@ -106,8 +163,10 @@ function SnapshotCell({ name }) {
   );
 }
 
+/* 窄版收欄時狀態欄多畫：平均 CPU（觀察視窗也收了就接在後面）、存證快照、偵測時間 */
 function StatusCell({ incident }) {
   const { t } = useTranslation("system");
+  const fit = useTableFitContext();
   const STATUS_LABELS = {
     detected: t("MiningIncidentsPanel.statusDetected"),
     suspended: t("MiningIncidentsPanel.statusSuspended"),
@@ -125,6 +184,19 @@ function StatusCell({ incident }) {
           {incident.review_note}
         </div>
       )}
+      {fit.isFolded("avg_cpu") && (
+        <FoldedLine label={t("MiningIncidentsPanel.colAvgCpu")}>
+          {avgCpuText(incident)}
+          {fit.isFolded("window_hours") && <> · <WindowCell hours={incident.window_hours} /></>}
+        </FoldedLine>
+      )}
+      {/* 快照有相機圖示、失敗時寫「存證失敗」，不另加欄名 */}
+      {fit.isFolded("snapshot_name") && <FoldedLine><SnapshotCell name={incident.snapshot_name} /></FoldedLine>}
+      {fit.isFolded("detected_at") && (
+        <FoldedLine label={t("MiningIncidentsPanel.colDetectedAt")} title={formatDateTime(incident.detected_at)}>
+          {formatDate(incident.detected_at)}
+        </FoldedLine>
+      )}
     </>
   );
 }
@@ -134,7 +206,7 @@ function IncidentActions({ incident, busy, table }) {
   const { t } = useTranslation("system");
   if (!isOpenIncident(incident.status)) return null;
   return (
-    <>
+    <div className={styles.incidentActions}>
       <button
         type="button"
         className={styles.btnDangerOutline}
@@ -153,7 +225,7 @@ function IncidentActions({ incident, busy, table }) {
         <MIcon name="undo" size={14} />
         {t("MiningIncidentsPanel.dismissMisjudged")}
       </button>
-    </>
+    </div>
   );
 }
 
@@ -163,7 +235,7 @@ const columnHelper = createColumnHelper();
 const incidentColumns = columnHelper.columns([
   columnHelper.accessor("vmid", {
     header: "VMID",
-    cell: ({ row }) => <VmidCell vmid={row.original.vmid} />,
+    cell: ({ row }) => <VmidCell incident={row.original} />,
     meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.monoCell}` },
   }),
   columnHelper.display({
@@ -174,7 +246,7 @@ const incidentColumns = columnHelper.columns([
   }),
   columnHelper.accessor("avg_cpu", {
     header: () => <ColTitle name="colAvgCpu" />,
-    cell: ({ row }) => <>{row.original.avg_cpu.toFixed(1)}%</>,
+    cell: ({ row }) => <AvgCpuCell incident={row.original} />,
     meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.monoCell}` },
   }),
   columnHelper.accessor("window_hours", {
@@ -202,7 +274,7 @@ const incidentColumns = columnHelper.columns([
     header: () => <ColTitle name="colActions" />,
     /* busy 是面板的狀態：經 rowState 傳進來（只改 table meta 不會讓儲存格重繪） */
     cell: ({ row, table, rowState }) => <IncidentActions incident={row.original} busy={rowState.busy} table={table} />,
-    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.tdActions}` },
+    meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
 ]);
 
@@ -294,6 +366,8 @@ export default function MiningIncidentsPanel({ onCountChange }) {
     getRowId: (incident) => String(incident.id),
     meta: { onBan: handleBan, onDismiss: setDismissTarget },
   });
+  /* 面板在監控頁的分頁裡：沒選中時 display: none 量不到寬度（不收欄），切過來時 ResizeObserver 會重量 */
+  const fit = useTableFit(INCIDENT_FIT_COLUMNS);
 
   return (
     <div className={styles.card}>
@@ -308,15 +382,18 @@ export default function MiningIncidentsPanel({ onCountChange }) {
       ) : incidents.length === 0 ? (
         <EmptyState icon="verified_user" title={t("MiningIncidentsPanel.emptyNone")} />
       ) : (
-        <DataTable
-          table={table}
-          className={styles.table}
-          renderRow={(row) => (
-            <tr key={row.id} className={styles.tr}>
-              <DataTableCells row={row} rowState={{ busy }} />
-            </tr>
-          )}
-        />
+        <div ref={fit.ref} className={styles.tableScroll}>
+          <DataTable
+            table={table}
+            className={styles.table}
+            fit={fit}
+            renderRow={(row) => (
+              <tr key={row.id} className={styles.tr}>
+                <DataTableCells row={row} rowState={{ busy }} />
+              </tr>
+            )}
+          />
+        </div>
       )}
 
       {/* 誤判解除：要勾選豁免與填備註，不能用 useConfirm；送出中 Esc／點遮罩都不關 */}
