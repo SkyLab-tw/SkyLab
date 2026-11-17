@@ -268,14 +268,14 @@ test("在導師核查換週次時停在導師核查，不會跳回任務設定",
     reviewTab().click();
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
-  expect(reviewTab().getAttribute("aria-selected")).toBe("true");
+  expect(reviewTab().getAttribute("aria-pressed")).toBe("true");
 
   const weekOne = container.querySelectorAll('[data-guide="ai-judge-sessions"] [role="listitem"] button')[0];
   await act(async () => {
     weekOne.click();
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
-  expect(reviewTab().getAttribute("aria-selected")).toBe("true");
+  expect(reviewTab().getAttribute("aria-pressed")).toBe("true");
   expect(container.querySelector('[data-guide="ai-judge-review"]')).toBeTruthy();
   expect(selectedWeek(container)?.textContent).toContain(tr("weekRowTitle", { week: 1 }));
   expect(locationParams(container).get("week")).toBe("week-1");

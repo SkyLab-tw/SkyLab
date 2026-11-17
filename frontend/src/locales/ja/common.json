@@ -45,6 +45,7 @@
   "FileDropzone.notAnImage": "画像ファイルのみアップロードできます",
   "FileDropzone.dropToAdd": "ドロップしてファイルを追加",
   "FileDropzone.browse": "ファイルを選択",
+  "Tabs.more": "その他",
   "FileDropzone.uploading": "アップロード中…",
   "FileDropzone.uploadingCount": "アップロード中…（{{current}}/{{total}}）",
   "PasswordInput.show": "パスワードを表示",

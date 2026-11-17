@@ -44,12 +44,11 @@ describe("SegmentedControl", () => {
     expect(onChange.mock.calls).toEqual([["7d"]]);
   });
 
-  test("quiet 只加輕量版類名，行為不變；預設不帶", () => {
-    act(() => root.render(<SegmentedControl options={OPTIONS} value="7d" onChange={() => {}} ariaLabel="日期區間" />));
-    expect(host.querySelector('[role="group"]').className).not.toMatch(/segmentQuiet/);
-
-    act(() => root.render(<SegmentedControl quiet options={OPTIONS} value="7d" onChange={() => {}} ariaLabel="日期區間" />));
-    expect(host.querySelector('[role="group"]').className).toMatch(/segmentQuiet/);
+  test("窄容器：compact＋fullWidth 只加對應類名，行為不變", () => {
+    act(() => root.render(<SegmentedControl compact fullWidth options={OPTIONS} value="7d" onChange={() => {}} ariaLabel="側欄分頁" />));
+    const group = host.querySelector('[role="group"]');
+    expect(group.className).toMatch(/segmentCompact/);
+    expect(group.className).toMatch(/segmentFullWidth/);
     expect(buttons()[0].getAttribute("aria-pressed")).toBe("true");
   });
 });

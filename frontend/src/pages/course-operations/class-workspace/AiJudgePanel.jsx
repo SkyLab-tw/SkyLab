@@ -15,7 +15,7 @@ import ListboxPopover from "../../../components/ListboxPopover/ListboxPopover";
 import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
 import OctoAvatar from "../../../components/OctoPet/OctoAvatar";
-import Tabs from "../../../components/Tabs/Tabs";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 import StatusBadge from "../../../components/StatusBadge/StatusBadge";
 import { useToast } from "../../../hooks/useToast";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
@@ -5017,7 +5017,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [], machineNodes = []
           窄版沒有週次清單，換週控制也收進這一條，左邊換週、右邊分頁 */}
       <div className={compactWeeks ? `${styles.sidebarHead} ${styles.sidebarHeadCompact}` : styles.sidebarHead}>
         {compactWeeks && !loading && renderWeekSwitcher()}
-        <Tabs
+        {/* 220px 側欄放不下分頁（Tabs）：用分段切換的窄容器款（compact＋fullWidth） */}
+        <SegmentedControl
           ariaLabel={t("AiJudgePanel.tabsAria")}
           className={styles.sidebarTabs}
           compact

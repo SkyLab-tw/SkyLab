@@ -45,6 +45,7 @@
   "FileDropzone.notAnImage": "Only image files can be uploaded",
   "FileDropzone.dropToAdd": "Drop to add files",
   "FileDropzone.browse": "Browse files",
+  "Tabs.more": "More",
   "FileDropzone.uploading": "Uploading…",
   "FileDropzone.uploadingCount": "Uploading… ({{current}}/{{total}})",
   "PasswordInput.show": "Show password",

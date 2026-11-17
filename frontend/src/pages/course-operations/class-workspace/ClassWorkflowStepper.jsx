@@ -21,7 +21,6 @@ export default function ClassWorkflowStepper({ item, activeKey, onSelect }) {
   if (item.status === "active") {
     return (
       <Tabs
-        page
         className={styles.tabs}
         ariaLabel={ariaLabel}
         value={activeKey}

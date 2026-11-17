@@ -154,7 +154,6 @@ export default function ResourceDetailPage({ backTo = "/my-resources" }) {
 
       <div className={styles.tabsRow} data-guide="resource-detail-tabs">
         <Tabs
-          page
           options={visibleTabs.map((tabDef) => ({
             value: tabDef.key,
             label: t(tabDef.labelKey),

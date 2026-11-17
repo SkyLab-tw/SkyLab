@@ -796,7 +796,6 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
           <h3 className={styles.docsStepTitle}>{t("AiApiPage.docsExampleTitle")}</h3>
           <div className={styles.codeToolbar}>
             <SegmentedControl
-              quiet
               options={endpointKinds}
               value={endpointKind}
               onChange={setEndpointKind}
@@ -804,7 +803,6 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
               className={styles.codeTabs}
             />
             <SegmentedControl
-              quiet
               options={CODE_LANGUAGES.map((item) => ({ value: item.key, label: t(item.labelKey) }))}
               value={language}
               onChange={setLanguage}
@@ -1177,7 +1175,6 @@ function MyUsageTab() {
     <div className={styles.usageTab}>
       <div className={styles.usageDateRow} data-guide="ai-usage-panel">
         <SegmentedControl
-          quiet
           options={PRESETS}
           value={preset}
           onChange={setPreset}
@@ -1594,7 +1591,6 @@ export default function AiApiPage() {
       {/* ── 分頁切換 ── */}
       <div className={styles.tabsBar} data-guide="ai-tabs">
         <Tabs
-          page
           ariaLabel={t("AiApiPage.tabsAriaLabel")}
           value={activeTab}
           onChange={setActiveTab}
