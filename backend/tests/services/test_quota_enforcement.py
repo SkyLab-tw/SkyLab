@@ -71,6 +71,9 @@ def test_spec_change_review_blocked_by_quota(monkeypatch: pytest.MonkeyPatch) ->
         raise ConflictError("配額不足")
 
     monkeypatch.setattr(spec_change_service.quota_service, "check_quota", _deny)
+    monkeypatch.setattr(
+        spec_change_service.pending_capacity, "lock_allocation", lambda _s: None
+    )
     review_data = SimpleNamespace(
         status=spec_change_service.SpecChangeRequestStatus.approved,
         review_comment=None,

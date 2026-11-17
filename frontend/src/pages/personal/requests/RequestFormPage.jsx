@@ -22,6 +22,7 @@ import MIcon from "../../../components/MIcon";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import PasswordInput from "../../../components/PasswordInput/PasswordInput";
 import PasswordRules from "../../../components/PasswordRules/PasswordRules";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 import { WINDOWS_PASSWORD_RULES, windowsPasswordIssues } from "../../../utils/windowsPassword";
 import { focusInvalidField } from "../../../utils/focusField";
 import { formatShortDateTime } from "../../../utils/formatDate";
@@ -1142,7 +1143,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
     <div className={`${styles.formPage} ${animCls}`}>
       {/* ── 頁首 ── */}
       <PageHeader title={t("RequestFormPage.title")}>
-        <button type="button" className={styles.backBtn} onClick={handleBack}>
+        <button type="button" className={styles.backBtn} onClick={handleBack} data-guide="request-form-back">
           <MIcon name="arrow_back" size={18} />
           {t("RequestFormPage.back")}
         </button>
@@ -1155,7 +1156,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
           {/* AI 代填一定要說出來：使用者要知道哪些值不是自己填的 */}
           {aiPrefilled && (
             <p className={styles.adviceBox}>
-              <MIcon name="auto_awesome" size={15} />
+              <MIcon name="edit_note" size={15} />
               {" "}{t("RequestFormPage.aiPrefillNotice")}
             </p>
           )}
@@ -1164,22 +1165,16 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
             {isPrivileged && (
               <div className={styles.formSection}>
                 <h2 className={styles.sectionTitle}>{t("RequestFormPage.requestModeTitle")}</h2>
-                <div className={styles.typeToggle}>
-                  {[
-                    { key: "scheduled", labelKey: "RequestFormPage.modeScheduled", icon: "calendar_month" },
-                    { key: "immediate", labelKey: "RequestFormPage.modeImmediate", icon: "bolt" },
-                  ].map((m) => (
-                    <button
-                      key={m.key}
-                      type="button"
-                      className={`${styles.typeBtn} ${mode === m.key ? styles.typeBtnActive : ""}`}
-                      onClick={() => setMode(m.key)}
-                    >
-                      <MIcon name={m.icon} size={16} />
-                      {t(m.labelKey)}
-                    </button>
-                  ))}
-                </div>
+                {/* 預約／立即二選一：互斥切換一律用共用 SegmentedControl */}
+                <SegmentedControl
+                  ariaLabel={t("RequestFormPage.requestModeTitle")}
+                  value={mode}
+                  onChange={setMode}
+                  options={[
+                    { value: "scheduled", label: t("RequestFormPage.modeScheduled"), icon: "calendar_month" },
+                    { value: "immediate", label: t("RequestFormPage.modeImmediate"), icon: "bolt" },
+                  ]}
+                />
               </div>
             )}
 

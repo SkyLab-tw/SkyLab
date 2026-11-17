@@ -20,12 +20,6 @@
 .feedbackTop strong { color: var(--color-text-primary); font-size: $font-size-14; }
 .feedbackTop p { margin: 3px 0 0; color: var(--color-text-secondary); font-size: $font-size-12; line-height: 1.5; }
 .number { @include flex-center; width: 28px; height: 28px; border-radius: 50%; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, transparent); font-size: $font-size-12; font-weight: $font-weight-700; }
-.feedbackStatus { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-muted); font-size: $font-size-12; white-space: nowrap; }
-.feedback_completed .feedbackStatus, .feedback_passed .feedbackStatus { color: var(--color-success); }
-.feedback_partial .feedbackStatus, .feedback_needs_review .feedbackStatus { color: var(--color-info); }
-.feedback_failed .feedbackStatus, .feedback_cancelled .feedbackStatus { color: var(--color-danger); }
-/* 機器連不上、腳本沒跑完：一樣是錯誤狀態走紅色（橙色只給待審核語意），文案會說明不是學生做錯 */
-.feedback_env_error .feedbackStatus { color: var(--color-danger); }
 .checkpointMachine { display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--color-text-muted); font-size: $font-size-12; }
 .feedbackBody { display: grid; gap: 5px; padding: 11px 13px 13px 53px; border-top: 1px solid var(--color-divider); background: color-mix(in srgb, var(--color-primary) 3%, var(--color-surface)); }
 .feedbackBody strong { color: var(--color-primary); font-size: $font-size-14; }
@@ -44,4 +38,4 @@
 .fileList button > :first-child, .fileList button > :last-child { color: var(--color-primary); }
 
 @include respond-below(lg) { .grid { grid-template-columns: 1fr; } }
-@include respond-below(sm) { .page { padding-inline: $spacing-16; } .panel { padding: $spacing-16; } .feedbackTop { grid-template-columns: 28px minmax(0, 1fr); } .feedbackStatus { grid-column: 2; } .feedbackBody { padding-left: 51px; } }
+@include respond-below(sm) { .page { padding-inline: $spacing-16; } .panel { padding: $spacing-16; } .feedbackTop { grid-template-columns: 28px minmax(0, 1fr); } .feedbackStatus { grid-column: 2; justify-self: start; } .feedbackBody { padding-left: 51px; } }

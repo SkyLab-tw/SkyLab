@@ -4,17 +4,22 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { createTestQueryClient, withQueryClient } from "./testing";
-import { bootingPollInterval, useMyResourcesQuery, useResourceCacheUpdater } from "./resources";
+import { resourcePollInterval, useMyResourcesQuery, useResourceCacheUpdater } from "./resources";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), listMySessions: vi.fn() }));
 vi.mock("../services/resources", () => ({ ResourcesService: { list: mocks.list } }));
 vi.mock("../services/quickPractice", () => ({ QuickPracticeService: { listMySessions: mocks.listMySessions } }));
 
-describe("bootingPollInterval", () => {
+describe("resourcePollInterval", () => {
   test("polls fast while any machine is starting", () => {
-    expect(bootingPollInterval({ resources: [{ status: "running" }] })).toBe(30_000);
-    expect(bootingPollInterval({ resources: [{ status: "starting" }] })).toBe(5_000);
-    expect(bootingPollInterval(undefined)).toBe(30_000);
+    expect(resourcePollInterval({ resources: [{ status: "running" }] })).toBe(30_000);
+    expect(resourcePollInterval({ resources: [{ status: "starting" }] })).toBe(5_000);
+    expect(resourcePollInterval(undefined)).toBe(30_000);
+  });
+
+  test("開通中的佔位列 10 秒一次，同時有開機中的機器時仍以 5 秒為準", () => {
+    expect(resourcePollInterval({ resources: [{ status: "provisioning", is_placeholder: true }] })).toBe(10_000);
+    expect(resourcePollInterval({ resources: [{ status: "provisioning" }, { status: "starting" }] })).toBe(5_000);
   });
 });
 

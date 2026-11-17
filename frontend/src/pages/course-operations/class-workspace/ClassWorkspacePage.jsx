@@ -1,9 +1,10 @@
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Background, BackgroundVariant, Controls, Panel, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import LoadingState from "../../../components/LoadingState/LoadingState";
+import ActionMenu from "../../../components/ActionMenu/ActionMenu";
 import MIcon from "../../../components/MIcon";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import EmptyState from "../../../components/EmptyState/EmptyState";
@@ -279,7 +280,7 @@ function Overview({
 /* 批量移除的確認框裡最多列出幾位的名字，其餘寫「等 N 位」 */
 const BATCH_NAME_PREVIEW = 5;
 
-function Students({ item, onRefresh }) {
+export function Students({ item, onRefresh }) {
   const { t } = useTranslation("teaching");
   const confirm = useConfirm();
   const toast = useToast();
@@ -392,19 +393,10 @@ function Students({ item, onRefresh }) {
     catch (error) { toast.error(error?.message ?? t("ClassWorkspacePage.removeFailed")); }
   }
   return <div className={styles.stack}>
-    <div className={styles.memberPageHeader}>
-      <div><h2>{t("ClassWorkspacePage.studentsTitle")}</h2><span>{t("ClassWorkspacePage.peopleCountUnit", { count: item.students.length })}</span></div>
-      <div className={styles.memberActions} data-guide="class-students-actions">
-        <input ref={fileRef} className={styles.hiddenFileInput} disabled={locked} type="file" accept=".csv,text/csv" onChange={importCsv} />
-        <button type="button" className={styles.btnSecondary} disabled={locked || busy} onClick={() => fileRef.current?.click()}><MIcon name="upload" size={16} />{t("ClassWorkspacePage.importCsvBtn")}</button>
-        <button type="button" className={styles.btnSecondary} disabled={locked || busy} onClick={() => setShowGroupImport(true)}><MIcon name="groups" size={16} />{t("ClassWorkspacePage.importGroupBtn")}</button>
-        {/* 還沒有學生時，下方空狀態的「新增學生」就是入口，這裡不再放一顆 */}
-        {item.students.length > 0 && <button type="button" className={styles.btnSecondary} disabled={locked || busy} onClick={() => setShowAdd(true)}><MIcon name="person_add" size={16} />{t("ClassWorkspacePage.addStudentsBtn")}</button>}
-      </div>
-    </div>
-
-    {/* 平常是搜尋；勾選學生後原地換成批量移除（同一個高度，名單不會跳）。只有準備中的班級能移除 */}
-    {item.students.length > 0 && <DataToolbar
+    {/* 一列放完：標題與人數／機器數｜搜尋｜匯入與加入。勾選學生後整列原地換成批量移除（DataToolbar 會黏在頂端，
+        所以它要直接放在 .stack 底下，包進別的容器就黏不住）。
+        送出建機後名單鎖定：不擺三顆停用鈕，直接說明為什麼不能改 */}
+    <DataToolbar
       selecting={selectedStudents.length > 0}
       batch={(
         <BatchBar
@@ -420,12 +412,24 @@ function Students({ item, onRefresh }) {
         </BatchBar>
       )}
     >
-      <ToolbarSearch value={query} onChange={setQuery} placeholder={t("ClassWorkspacePage.searchStudentsPlaceholder")} />
-    </DataToolbar>}
+      <div className={styles.memberTitle}>
+        <h2>{t("ClassWorkspacePage.studentsTitle")}</h2>
+        <span>{t("ClassWorkspacePage.peopleCountUnit", { count: item.students.length })} · {t("ClassWorkspacePage.machinesReadyShort", { ready: item.readyMachines, total: item.totalMachines || 0 })}</span>
+      </div>
+      {item.students.length > 0 && <ToolbarSearch value={query} onChange={setQuery} placeholder={t("ClassWorkspacePage.searchStudentsPlaceholder")} />}
+      {locked
+        ? <span className={styles.memberLockedNote}><MIcon name="lock" size={15} />{t("ClassWorkspacePage.rosterLockedNote")}</span>
+        : <div className={styles.memberActions} data-guide="class-students-actions">
+          <input ref={fileRef} className={styles.hiddenFileInput} type="file" accept=".csv,text/csv" onChange={importCsv} />
+          <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => fileRef.current?.click()}><MIcon name="upload" size={16} />{t("ClassWorkspacePage.importCsvBtn")}</button>
+          <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => setShowGroupImport(true)}><MIcon name="groups" size={16} />{t("ClassWorkspacePage.importGroupBtn")}</button>
+          {/* 還沒有學生時，下方空狀態的「新增學生」就是入口，這裡不再放一顆 */}
+          {item.students.length > 0 && <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => setShowAdd(true)}><MIcon name="person_add" size={16} />{t("ClassWorkspacePage.addStudentsBtn")}</button>}
+        </div>}
+    </DataToolbar>
 
     <section className={styles.memberPanel} data-guide="class-students-list">
-      <div className={styles.memberPanelHead}><strong>{t("ClassWorkspacePage.memberListHeader", { count: item.students.length })}</strong><span>{t("ClassWorkspacePage.machinesReadyShort", { ready: item.readyMachines, total: item.totalMachines || 0 })}</span></div>
-      {item.students.length && !visibleStudents.length ? <EmptyState icon="search_off" title={t("ClassWorkspacePage.emptySearchTitle")} action={<button type="button" className={styles.btnSecondary} onClick={() => setQuery("")}><MIcon name="search_off" size={16} />{t("EmptyState.clearSearch", { ns: "common" })}</button>} /> : item.students.length ? <div className={`${styles.memberList} ${locked ? "" : styles.memberSelectable}`}>
+      {item.students.length && !visibleStudents.length ? <EmptyState icon="search_off" title={t("ClassWorkspacePage.emptySearchTitle")} action={<button type="button" className={styles.btnSecondary} onClick={() => setQuery("")}><MIcon name="search_off" size={16} />{t("EmptyState.clearSearch", { ns: "common" })}</button>} /> : item.students.length ? <div className={`${styles.memberList} ${locked ? styles.memberLocked : styles.memberSelectable}`}>
         {/* 欄位標題：和下方每列用同一組欄寬，VMID、日期這些數字才看得出是什麼 */}
         <div className={styles.memberColumns}>
           {!locked && <SelectCheckbox
@@ -438,7 +442,7 @@ function Students({ item, onRefresh }) {
           <span>{t("ClassWorkspacePage.memberColVmid")}</span>
           <span>{t("ClassWorkspacePage.memberColMachines")}</span>
           <span>{t("ClassWorkspacePage.memberColJoined")}</span>
-          <span />
+          {!locked && <span />}
         </div>
         {visibleStudents.map((student) => {
         const ready = student.machines.filter((machine) => machine.status === "completed").length;
@@ -454,7 +458,8 @@ function Students({ item, onRefresh }) {
           <span>{student.machines.length ? joinList(student.machines.map((machine) => machine.vmid ?? "—")) : "—"}</span>
           <span className={`${styles.memberMachineState} ${ready === item.nodes.length && item.nodes.length ? styles.memberReady : ""}`}>{item.nodes.length ? t("ClassWorkspacePage.readyCountLabel", { ready, total: item.nodes.length }) : t("ClassWorkspacePage.notBuiltLabel")}</span>
           <span>{formatDate(student.joined_at)}</span>
-          {!locked ? <button type="button" className={styles.memberRemove} data-guide="class-students-remove" aria-label={t("ClassWorkspacePage.removeStudentAriaLabel")} onClick={() => remove(student.id)}><MIcon name="person_remove" size={17} /></button> : <span />}
+          {/* 鎖定時連空欄都不留（.memberLocked 的欄寬少最後一欄） */}
+          {!locked && <button type="button" className={styles.memberRemove} data-guide="class-students-remove" aria-label={t("ClassWorkspacePage.removeStudentAriaLabel")} onClick={() => remove(student.id)}><MIcon name="person_remove" size={17} /></button>}
         </article>;
       })}</div> : <EmptyState icon="group_add" title={t("ClassWorkspacePage.emptyStudentsTitle")} action={!locked && <button type="button" className={styles.btnPrimary} disabled={busy} onClick={() => setShowAdd(true)}><MIcon name="person_add" size={16} />{t("ClassWorkspacePage.addStudentsBtn")}</button>} />}
     </section>
@@ -902,7 +907,8 @@ ${t("ClassWorkspacePage.clickToWatchLabel")}` : ""}`}
   </button>;
 });
 
-/** 座位格旁的「需要注意」：高負載（由高到低）與上課中關機的學生；全班都關機時只說一句，不列整班 */
+/** 學生格上方的「需要注意」一條：高負載（由高到低）與上課中關機的學生，排成可點的小卡；
+    沒有狀況時只有一行字，全班都關機時只說一句，不列整班。放在上方而不是右欄：右欄常常只有一兩筆，卻一直佔掉學生格的寬度 */
 function HeatAttention({ cells, nodeName, nodeType, onWatch, watching }) {
   const { t } = useTranslation("teaching");
   const anyOn = cells.some((cell) => cell.state === "on");
@@ -911,22 +917,25 @@ function HeatAttention({ cells, nodeName, nodeType, onWatch, watching }) {
   const high = cells.filter((cell) => heatTone(cell.state, cell.usage) === "high").sort((a, b) => b.usage - a.usage);
   const off = anyOn ? cells.filter((cell) => cell.state === "off") : [];
   const rows = [...high, ...off];
-  return <aside className={styles.heatAttention} data-guide="class-progress-attention" aria-label={t("ClassWorkspacePage.attentionTitle")}>
-    <div className={styles.heatAttentionHead}><strong>{t("ClassWorkspacePage.attentionTitle")}</strong>{rows.length > 0 && <span>{rows.length}</span>}</div>
+  return <section className={styles.heatAttention} data-guide="class-progress-attention" aria-label={t("ClassWorkspacePage.attentionTitle")}>
+    <strong className={styles.heatAttentionTitle}>
+      {t("ClassWorkspacePage.attentionTitle")}
+      {rows.length > 0 && <span className={styles.heatAttentionCount}>{rows.length}</span>}
+    </strong>
     {allOff
       ? <p>{t("ClassWorkspacePage.attentionAllOff")}</p>
       : rows.length === 0
         ? <p>{t("ClassWorkspacePage.attentionEmpty")}</p>
-        : <ul>{rows.map(({ student, machine, index, state, usage }) => {
+        : <ul className={styles.heatAttentionList}>{rows.map(({ student, machine, index, state, usage }) => {
           const seat = String(index + 1).padStart(2, "0");
           const name = student.full_name || student.email || t("ClassWorkspacePage.studentFallbackName", { index: index + 1 });
           const canWatch = Boolean(machine?.vmid) && state === "on" && !watching;
-          const value = state === "off" ? <em>{t("ClassWorkspacePage.offLabel")}</em> : <b>{usage}%</b>;
+          const content = <><span>{seat}</span><strong>{name}</strong>{state === "off" ? <em>{t("ClassWorkspacePage.offLabel")}</em> : <b>{usage}%</b>}</>;
           return <li key={student.id}>{canWatch
-            ? <button type="button" onClick={() => onWatch(student, machine, { name: nodeName, resource_type: nodeType })} aria-label={t("ClassWorkspacePage.openStudentMachineAria", { machine: nodeName, name })}><span>{seat}</span><strong>{name}</strong>{value}</button>
-            : <div><span>{seat}</span><strong>{name}</strong>{value}</div>}</li>;
+            ? <button type="button" className={styles.heatAttentionChip} onClick={() => onWatch(student, machine, { name: nodeName, resource_type: nodeType })} aria-label={t("ClassWorkspacePage.openStudentMachineAria", { machine: nodeName, name })}>{content}</button>
+            : <div className={styles.heatAttentionChip}>{content}</div>}</li>;
         })}</ul>}
-  </aside>;
+  </section>;
 }
 
 export function StudentMachines({ item }) {
@@ -1132,15 +1141,23 @@ export function StudentMachines({ item }) {
       <div className={styles.broadcastTools} data-guide="class-progress-power"><MIcon name="power_settings_new" size={18} /><strong>{t("ClassWorkspacePage.classPowerLabel", { count: classVmids.length })}</strong><div className={styles.broadcastControls}><button type="button" className={styles.btnSecondary} disabled={!!power || !classVmids.length || item.status !== "active"} onClick={() => runClassPower("start")}><MIcon name="play_arrow" size={16} />{t("ClassWorkspacePage.classPowerStartBtn")}</button><button type="button" className={styles.btnDangerOutline} disabled={!!power || !classVmids.length || item.status !== "active"} onClick={() => runClassPower("shutdown")}><MIcon name="power_settings_new" size={16} />{t("ClassWorkspacePage.classPowerShutdownBtn")}</button>{power ? <span>{t("ClassWorkspacePage.classPowerProgress", { done: power.done, total: power.total })}</span> : <span>{t("ClassWorkspacePage.classPowerHint")}</span>}</div></div>
 
       <div className={styles.heatmapToolbar} data-guide="class-progress-toolbar">
-        <div className={styles.machineTabs} role="tablist" aria-label={t("ClassWorkspacePage.selectMachineAria")}>
-          {item.nodes.map((node, index) => {
-            const selected = String(node.id) === String(selectedNode?.id);
-            return <button key={node.id} type="button" role="tab" aria-selected={selected} className={selected ? styles.machineTabActive : ""} onClick={() => setSelectedNodeId(String(node.id))}>
-              <span><MIcon name={node.resource_type === "lxc" ? "terminal" : "dns"} size={17} /></span>
-              <span><small>{t("ClassWorkspacePage.machineIndexLabel", { index: String(index + 1).padStart(2, "0") })}</small><strong>{node.name}</strong></span>
-            </button>;
-          })}
-        </div>
+        {/* 兩台以上才給分頁切換；只有一台時沒得選，只標出是哪台機器，不做成看起來能點的分頁卡 */}
+        {/* 機器多台時用共用 SegmentedControl 切換（互斥選項），跟右邊的 CPU／RAM 切換同一種外觀 */}
+        {item.nodes.length > 1 ? <SegmentedControl
+          className={styles.machineSwitch}
+          ariaLabel={t("ClassWorkspacePage.selectMachineAria")}
+          value={String(selectedNode?.id ?? "")}
+          onChange={(value) => setSelectedNodeId(value)}
+          options={item.nodes.map((node) => ({
+            value: String(node.id),
+            label: node.name,
+            icon: node.resource_type === "lxc" ? "terminal" : "dns",
+          }))}
+        /> : selectedNode && <div className={styles.machineSingle}>
+          <MIcon name={selectedNode.resource_type === "lxc" ? "terminal" : "dns"} size={18} />
+          <strong>{selectedNode.name}</strong>
+          <span>{selectedNode.resource_type === "lxc" ? "LXC" : "VM"}</span>
+        </div>}
         <SegmentedControl
           className={styles.metricSwitch}
           ariaLabel={t("ClassWorkspacePage.selectMetricAria")}
@@ -1151,9 +1168,18 @@ export function StudentMachines({ item }) {
       </div>
 
       {selectedNode && item.students.length ? <>
+        {/* 統計數字在左、圖例在右：圖例跟它說明的數字與格子靠在一起，不再獨佔卡片最底下一列 */}
         <div className={styles.heatmapSummary}>
           <dl><div><dt>{t("ClassWorkspacePage.poweredOnLabel")}</dt><dd>{activeCells.length}<small>/{cells.length}</small></dd></div><div><dt>{t("ClassWorkspacePage.averageLabel")}</dt><dd>{average ?? "—"}{average !== null && <small>%</small>}</dd></div><div><dt>{t("ClassWorkspacePage.highLoadLabel")}</dt><dd>{highUsage}<small>{t("ClassWorkspacePage.highLoadPeopleUnit")}</small></dd></div></dl>
+          <div className={styles.heatLegend} aria-label={t("ClassWorkspacePage.heatLegendAria")}>
+            <span className={styles.heatLegendScale}>{t("ClassWorkspacePage.usageRateLabel")}<i className={styles.heatTile_low} /><i className={styles.heatTile_mid} /><i className={styles.heatTile_busy} /></span>
+            <span><i className={styles.heatTile_high} />{t("ClassWorkspacePage.highLoadLegend", { percent: HIGH_USAGE })}</span>
+            <span><i className={styles.heatTile_off} />{t("ClassWorkspacePage.offLabel")}</span>
+            <span><i className={styles.heatTile_unknown} />{t("ClassWorkspacePage.noDataLabel")}</span>
+          </div>
         </div>
+
+        <HeatAttention cells={cells} nodeName={selectedNode.name} nodeType={selectedNode.resource_type} onWatch={openWatch} watching={watching} />
 
         <div className={styles.heatBoard}>
           <div className={styles.heatTiles} data-guide="class-progress-tiles" aria-label={`${selectedNode.name} ${metricInfo.label} ${t("ClassWorkspacePage.usageRateLabel")}`}>
@@ -1176,14 +1202,6 @@ export function StudentMachines({ item }) {
               watching={watching}
             />)}
           </div>
-          <HeatAttention cells={cells} nodeName={selectedNode.name} nodeType={selectedNode.resource_type} onWatch={openWatch} watching={watching} />
-        </div>
-
-        <div className={styles.heatLegend} aria-label={t("ClassWorkspacePage.heatLegendAria")}>
-          <span className={styles.heatLegendScale}>{t("ClassWorkspacePage.usageRateLabel")}<i className={styles.heatTile_low} /><i className={styles.heatTile_mid} /><i className={styles.heatTile_busy} /></span>
-          <span><i className={styles.heatTile_high} />{t("ClassWorkspacePage.highLoadLegend", { percent: HIGH_USAGE })}</span>
-          <span><i className={styles.heatTile_off} />{t("ClassWorkspacePage.offLabel")}</span>
-          <span><i className={styles.heatTile_unknown} />{t("ClassWorkspacePage.noDataLabel")}</span>
         </div>
       </> : <EmptyState icon="grid_view" title={selectedNode ? t("ClassWorkspacePage.noStudentsInClassTitle") : t("ClassWorkspacePage.noClassroomMachinesTitle")} />}
     </section>
@@ -1245,8 +1263,11 @@ export default function ClassWorkspacePage() {
   const scheduleDialog = useDialogPresence(scheduleOpen);
   const [extendOpen, setExtendOpen] = useState(false);
   const extendDialog = useDialogPresence(extendOpen);
+  /* 頁首「⋮」更多操作：共用 ActionMenu（portal、鍵盤、Esc 標成已處理、130ms 離場） */
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
+  const classMenu = useDialogPresence(menuOpen, 130);
+  const menuAnchorRef = useRef(null);
+  const menuId = useId();
   /* 目前套用的教學環境：班級有環境就跟著班級（換了環境才更新），選環境時先換成選到的那個 */
   const envId = item?.course_environment?.id ? String(item.course_environment.id) : "";
   const [templateId, setTemplateId] = useState(envId);
@@ -1278,17 +1299,6 @@ export default function ClassWorkspacePage() {
   useEffect(() => {
     if (landOnMonitor) navigate(`/class-management/${classId}/progress`, { replace: true });
   }, [landOnMonitor, classId, navigate]);
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    function dismiss(event) {
-      if (event.type === "keydown" && event.key !== "Escape") return;
-      if (event.type === "mousedown" && menuRef.current?.contains(event.target)) return;
-      setMenuOpen(false);
-    }
-    window.addEventListener("mousedown", dismiss);
-    window.addEventListener("keydown", dismiss);
-    return () => { window.removeEventListener("mousedown", dismiss); window.removeEventListener("keydown", dismiss); };
-  }, [menuOpen]);
   async function provision() {
     const ok = await confirm({
       title: t("ClassWorkspacePage.submitReviewConfirmTitle"),
@@ -1387,14 +1397,30 @@ export default function ClassWorkspacePage() {
     >
       <div className={styles.pageActions}>
         <button type="button" className={`${styles.btnSecondary} ${styles.backBtn}`} onClick={() => navigate("/class-management")}><MIcon name="arrow_back" size={18} />{t("ClassWorkspacePage.backToClassManagementBtn")}</button>
-        {(canEditSchedule || canManageLifecycle) && <div className={styles.headerMenuWrap} ref={menuRef}>
-          <button type="button" className={`${styles.iconBtn} ${styles.headerMenuBtn}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-label={t("ClassWorkspacePage.moreActionsAria")} onClick={() => setMenuOpen((open) => !open)}><MIcon name="more_horiz" size={19} /></button>
-          {menuOpen && <div className={styles.headerMenu} role="menu">
-            {canEditSchedule && <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setScheduleOpen(true); }}><MIcon name="edit_calendar" size={16} />{t("ClassWorkspacePage.editScheduleBtn")}</button>}
-            {canManageLifecycle && <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setExtendOpen(true); }}><MIcon name="event_repeat" size={16} />{t("ClassWorkspacePage.extendBtn")}</button>}
-            {canManageLifecycle && <><hr /><button type="button" role="menuitem" className={styles.headerMenuRisky} disabled={lifecycleBusy} onClick={() => { setMenuOpen(false); archiveClass(); }}><MIcon name="archive" size={16} />{t("ClassWorkspacePage.archiveAndReclaimBtn")}</button></>}
-          </div>}
-        </div>}
+        {(canEditSchedule || canManageLifecycle) && <button
+          type="button"
+          ref={menuAnchorRef}
+          className={styles.headerMenuBtn}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-controls={menuOpen ? menuId : undefined}
+          aria-label={t("ClassWorkspacePage.moreActionsAria")}
+          title={t("ClassWorkspacePage.moreActionsAria")}
+          onClick={() => setMenuOpen((open) => !open)}
+        ><MIcon name="more_vert" size={19} /></button>}
+        {classMenu.open && <ActionMenu
+          id={menuId}
+          anchorRef={menuAnchorRef}
+          ariaLabel={t("ClassWorkspacePage.moreActionsAria")}
+          closing={classMenu.closing}
+          onClose={() => setMenuOpen(false)}
+          items={[
+            canEditSchedule && { key: "schedule", icon: "edit_calendar", label: t("ClassWorkspacePage.editScheduleBtn"), onSelect: () => setScheduleOpen(true) },
+            /* 選單上寫清楚延長什麼（跟對話框標題同一句）；對話框裡的送出鈕仍是「延長」 */
+            canManageLifecycle && { key: "extend", icon: "event_repeat", label: t("ClassWorkspacePage.extendDialogTitle"), onSelect: () => setExtendOpen(true) },
+            canManageLifecycle && { key: "archive", icon: "archive", label: t("ClassWorkspacePage.archiveAndReclaimBtn"), onSelect: archiveClass, danger: true, disabled: lifecycleBusy, separatorBefore: true },
+          ].filter(Boolean)}
+        />}
       </div>
     </PageHeader>
     <ClassWorkflowStepper item={item} activeKey={tab} onSelect={(key) => navigate(`/class-management/${classId}/${key}`)} />

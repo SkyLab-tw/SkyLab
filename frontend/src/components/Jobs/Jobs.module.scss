@@ -84,28 +84,22 @@
 
 /* ── Popover ── */
 
-/* portal 到 body，left / bottom 由 JS 依按鈕位置以 inline style 指定；
-   毛玻璃底與側欄的使用者／外觀彈窗同一套 */
+/* portal 到 body，位置由 JobsButton 經 useAnchoredMenu 算好寫進 inline style（貼著側欄外緣、底緣對齊按鈕）。
+   外觀跟側欄的語言、帳號選單同一套玻璃（popover-glass），隨介面風格變化 */
 .popover {
   position: fixed;
-  z-index: 150;
+  z-index: 150; // 高於 sticky header(100)，低於 Dialog / Modal(200+)
   @include flex-column;
   width: min(360px, calc(100vw - #{$spacing-32}));
   max-height: calc(100vh - #{$spacing-32});
   padding: $spacing-8;
   border-radius: $radius-12;
-  @include glass-surface($shadow: var(--shadow-lg));
-  animation: jobs-popover-in 0.13s ease;
+  @include popover-glass;
+  animation: jobs-popover-in 0.14s cubic-bezier(0.25, 0.8, 0.25, 1);
   transition: opacity 0.13s ease, transform 0.13s ease;
-}
 
-/* 液態玻璃的折射濾鏡會讓彈窗被背後內容干擾，改用毛玻璃預設濾鏡確保可讀性
-   （同 Sidebar 的 .userPopup / .appearancePopup） */
-:global(body[data-style="liquid"]) {
-  .popover {
-    --color-surface-glass-border: rgba(255, 255, 255, 0.5);
-    --glass-backdrop-filter: blur(12px) saturate(1.4);
-  }
+  /* 打開時焦點移進面板本身（不是可操作的控制項），不畫焦點框 */
+  &:focus { outline: none; }
 }
 
 .popoverOut {
@@ -157,33 +151,11 @@
   justify-content: space-between;
   gap: $spacing-16;
   padding: $spacing-8 10px;
-  border-radius: $radius-8;
-  cursor: pointer;
-  transition: background $transition-base;
-
-  &:hover {
-    background: var(--color-hover);
-  }
-
-  input {
-    flex-shrink: 0;
-    accent-color: var(--color-primary);
-    cursor: pointer;
-  }
-
-  input:disabled {
-    cursor: not-allowed;
-  }
 }
 
 /* 瀏覽器已封鎖通知：開關不可用，說明改成怎麼重新允許 */
 .settingRowDisabled {
-  cursor: default;
   opacity: 0.75;
-
-  &:hover {
-    background: transparent;
-  }
 }
 
 .settingText {

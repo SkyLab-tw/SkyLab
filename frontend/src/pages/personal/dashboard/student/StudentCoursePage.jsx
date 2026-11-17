@@ -33,14 +33,17 @@ import {
   practiceMachineActionLabel,
   waitForPracticeMachine,
 } from "./studentDashboard";
+import StatusBadge from "../../../../components/StatusBadge/StatusBadge";
 import styles from "./StudentCoursePage.module.scss";
 import { feedbackFor } from "../../courses/studentWeekFeedback";
 
-/** AI 任務的每個檢查項目可被自動判定的程度。 */
+/** AI 任務的每個檢查項目可被自動判定的程度。
+ *  這是檢查方式的說明、不是結果，一律中性灰；以前「老師人工確認」用紅色，學生會以為出錯了 */
+/* 項目的檢查方式只標例外：AI 能直接檢查（auto）是預設、不掛徽章，
+   每項都掛「AI 可提供檢查建議」只是重複；要等老師確認的項目才標，學生一眼看得出哪幾項要等 */
 const AI_DETECTABLE_META = {
-  auto: { labelKey: "StudentCoursePage.detectableAuto", icon: "support_agent", tone: "auto" },
-  partial: { labelKey: "StudentCoursePage.detectablePartial", icon: "rule", tone: "partial" },
-  manual: { labelKey: "StudentCoursePage.detectableManual", icon: "how_to_reg", tone: "manual" },
+  partial: { labelKey: "StudentCoursePage.detectablePartial", icon: "rule" },
+  manual: { labelKey: "StudentCoursePage.detectableManual", icon: "how_to_reg" },
 };
 
 const EMPTY = [];
@@ -94,16 +97,6 @@ function createGuideDemoCourse(t) {
       status: "running",
     }],
   };
-}
-
-function StatusBadge({ meta }) {
-  const { t } = useTranslation("personal");
-  return (
-    <span className={`${styles.statusBadge} ${styles[meta.tone]}`}>
-      <MIcon name={meta.icon} size={16} />
-      {t(meta.labelKey)}
-    </span>
-  );
 }
 
 /**
@@ -408,10 +401,7 @@ export default function StudentCoursePage() {
                           </small>
                         </span>
                         {hasTeacherReply ? (
-                          <span className={styles.teacherReplyBadge}>
-                            <MIcon name="forum" size={15} />
-                            {t("StudentCoursePage.teacherReplied")}
-                          </span>
+                          <StatusBadge tone="primary" icon="forum">{t("StudentCoursePage.teacherReplied")}</StatusBadge>
                         ) : <span aria-hidden="true" />}
                         {/* 打勾框疊在這一格上（按鈕裡不能放 input），箭頭固定在最右邊 */}
                         <span className={styles.weekCompletionSlot} aria-hidden="true" />
@@ -440,7 +430,7 @@ export default function StudentCoursePage() {
                         {group.assignments.map((assignment) => (
                           <div className={styles.assignmentDetailBlock} key={assignment.id}>
                             <div className={styles.aiBrief}>
-                              <span><MIcon name="auto_awesome" size={19} /></span>
+                              <span><MIcon name="checklist" size={19} /></span>
                               <div>
                                 <strong>{group.assignments.length > 1 ? assignment.title : t("StudentCoursePage.aiSummaryTitle")}</strong>
                                 <p>{assignment.summary || t("StudentCoursePage.aiSummaryFallback")}</p>
@@ -449,8 +439,9 @@ export default function StudentCoursePage() {
 
                             <ol className={styles.aiRequirementList}>
                               {(assignment.items ?? []).map((item, itemIndex) => {
-                                const detectableMeta = AI_DETECTABLE_META[item.detectable]
-                                  ?? AI_DETECTABLE_META.manual;
+                                const detectableMeta = item.detectable === "auto"
+                                  ? null
+                                  : AI_DETECTABLE_META[item.detectable] ?? AI_DETECTABLE_META.manual;
                                 return (
                                   <li
                                     className={styles.aiRequirementItem}
@@ -461,10 +452,11 @@ export default function StudentCoursePage() {
                                       <strong>{item.title}</strong>
                                       {item.description && <p>{item.description}</p>}
                                     </div>
-                                    <span className={`${styles.aiCheckBadge} ${styles[detectableMeta.tone]}`}>
-                                      <MIcon name={detectableMeta.icon} size={15} />
-                                      {t(detectableMeta.labelKey)}
-                                    </span>
+                                    {detectableMeta && (
+                                      <StatusBadge icon={detectableMeta.icon} className={styles.aiCheckBadge}>
+                                        {t(detectableMeta.labelKey)}
+                                      </StatusBadge>
+                                    )}
                                   </li>
                                 );
                               })}
@@ -503,7 +495,11 @@ export default function StudentCoursePage() {
                     : t("StudentCoursePage.thisWeekNone")}
                 </p>
               </div>
-              {heroStatusMeta && <StatusBadge meta={heroStatusMeta} />}
+              {heroStatusMeta && (
+                <StatusBadge tone={heroStatusMeta.tone} icon={heroStatusMeta.icon} className={styles.heroStatus}>
+                  {t(heroStatusMeta.labelKey)}
+                </StatusBadge>
+              )}
             </div>
 
             {currentWeek ? (

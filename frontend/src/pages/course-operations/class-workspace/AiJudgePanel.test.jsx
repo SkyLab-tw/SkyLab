@@ -19,6 +19,7 @@ import {
   applyProposalOperations,
   attachStudentReports,
   checkOutcome,
+  studentHasSavedReview,
   studentMachineChips,
   machinePowerState,
   checkpointBadge,
@@ -35,7 +36,6 @@ import {
   resolveDetectabilityNeedsReview,
   sortStudentOverviewRows,
   getScriptCreationBlocker,
-  getSessionMenuPosition,
   getScriptCreationDestination,
   getTargetReviewSummary,
   getCheckResultSummary,
@@ -726,7 +726,7 @@ describe("RubricTable", () => {
     expect(html).not.toContain("檢查條件");
     expect(html).toContain("自動檢測支援");
     expect(html).toContain('>Python 版本檢查</textarea>');
-    expect(html).toContain("可以");
+    expect(html).toContain("可自動檢查");
     expect(html).toContain("缺少資訊");
     expect(html).toContain("導師檢查");
     expect(html).toContain("導師核查／無法執行");
@@ -741,9 +741,9 @@ describe("RubricTable", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-label="展開第 1 項檢查設定"');
     expect(html.indexOf('aria-label="展開第 1 項檢查設定"')).toBeLessThan(html.indexOf('>Python 版本檢查</textarea>'));
-    // 序號跟展開鈕在同一格，排在按鈕前面
-    expect(html.indexOf(">1</span>")).toBeGreaterThan(-1);
-    expect(html.indexOf(">1</span>")).toBeLessThan(html.indexOf('aria-label="展開第 1 項檢查設定"'));
+    // 序號跟展開鈕在同一格：展開鈕在前、序號緊貼著標題
+    expect(html.indexOf(">1</span>")).toBeGreaterThan(html.indexOf('aria-label="展開第 1 項檢查設定"'));
+    expect(html.indexOf(">1</span>")).toBeLessThan(html.indexOf('>Python 版本檢查</textarea>'));
     expect(html).not.toContain(">詳細</button>");
     expect(html).toContain("執行 python --version");
     expect(html).not.toContain('placeholder="寫下學生需要符合的條件"');
@@ -872,7 +872,7 @@ describe("RubricTable", () => {
     expect(versionHtml).not.toContain("缺少資訊");
   });
 
-  test("展開後顯示執行契約、判定模式與 assertion", async () => {
+  test("展開後用白話列出檢查機器、步驟、通過條件與判定方式", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -913,14 +913,18 @@ describe("RubricTable", () => {
       toggle.click();
     });
 
-    expect(container.textContent).toContain("執行契約");
-    expect(container.textContent).toContain("執行節點");
+    expect(container.textContent).toContain("檢查機器");
     expect(container.textContent).toContain("n8n（P1）");
-    expect(container.textContent).toContain("角色：workflow · 類型：LXC · 映像：Ubuntu 24.04");
-    expect(container.textContent).toContain("系統判定");
-    expect(container.textContent).toContain("預計檢查步驟（尚未執行）");
-    expect(container.textContent).toContain("回傳碼 = 0");
-    expect(container.textContent).toContain("30 秒");
+    expect(container.textContent).toContain("workflow · LXC · 映像：Ubuntu 24.04");
+    expect(container.textContent).toContain("系統自動判定");
+    expect(container.textContent).toContain("檢查步驟");
+    expect(container.textContent).toContain("執行指令");
+    expect(container.textContent).toContain("python3 /home/student/project/main.py");
+    expect(container.textContent).toContain("通過條件：結束代碼為 0");
+    expect(container.textContent).toContain("時限 30 秒");
+    // 系統內部的代號與用語不露給老師
+    expect(container.textContent).not.toContain("執行契約");
+    expect(container.textContent).not.toContain("command");
 
     await act(async () => {
       root.unmount();
@@ -1301,20 +1305,6 @@ describe("uploaded rubric naming", () => {
       .toBe("AI導師檢查表審核系統_Python服務Running狀態檢測_簡短版");
     expect(getRubricDisplayName({ display_name: "自訂檢查表", original_filename: "保存的檢查表.docx" })).toBe("自訂檢查表");
     expect(getRubricDisplayName({ name: "  " }, "未命名檢查表")).toBe("未命名檢查表");
-  });
-});
-
-describe("session menu positioning", () => {
-  test("浮動選單會貼近觸發按鈕並限制在視窗內", () => {
-    expect(getSessionMenuPosition(
-      { top: 160, right: 780, bottom: 196 },
-      { width: 800, height: 600, menuWidth: 220, menuHeight: 280, margin: 12 },
-    )).toEqual({ top: 208, left: 560 });
-
-    expect(getSessionMenuPosition(
-      { top: 520, right: 790, bottom: 556 },
-      { width: 800, height: 600, menuWidth: 220, menuHeight: 280, margin: 12 },
-    )).toEqual({ top: 228, left: 568 });
   });
 });
 
@@ -1922,6 +1912,71 @@ describe("teacher review run-once（整組檢查點）", () => {
     container.remove();
   });
 
+  test("已存的核查（判定或評語）才算核查過；空白評語、沒有結果都不算", () => {
+    const row = (review) => ({ target: { teacher_review: review } });
+    expect(studentHasSavedReview({ machines: [row({ feedback: "", decisions: {} })] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [row({ feedback: "  ", decisions: {} })] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [{ target: null }] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [row({ feedback: "", decisions: { "check-db": "pass" } })] })).toBe(true);
+    expect(studentHasSavedReview({ machines: [{ target: null }, row({ feedback: "舊留言", decisions: {} })] })).toBe(true);
+  });
+
+  test("重新檢查已核查過的學生要先確認；取消就不執行", async () => {
+    vi.spyOn(AiJudgeService, "listSessionRuns").mockResolvedValue([
+      { id: "run-1", artifact_id: "artifact-1", run_batch_id: "batch-1", status: "completed" },
+    ]);
+    vi.spyOn(AiJudgeService, "listSessionScriptSets").mockResolvedValue([{ artifact_set_id: "set-1", is_active: true, status: "approved", children: [] }]);
+    vi.spyOn(AiJudgeService, "getSessionRunBatch").mockResolvedValue(batchPayload);
+    const createRun = vi.spyOn(AiJudgeService, "createSessionScriptSetRun").mockResolvedValue({
+      run_batch_id: "batch-2", status: "pending", summary: {}, nodes: [], students: [],
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(withQueryClient(<ConfirmProvider><TeacherReviewTab classId="class-1" sessionId="session-1" members={members} /></ConfirmProvider>, queryClient));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    await act(async () => {
+      [...container.querySelectorAll("button")].find((button) => button.textContent.includes("王小明")).click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const runStudent = () => [...container.querySelectorAll("button")]
+      .find((button) => button.textContent.includes(i18n.t("AiJudgePanel.runStudentBtn", { ns: "teaching" })));
+    const dialogButton = (label) => [...document.querySelectorAll('[role="alertdialog"] button')]
+      .find((button) => button.textContent === label);
+
+    // 王小明已經留過評語：按「檢查這位學生」先跳確認，取消就不建立新的一批
+    await act(async () => {
+      runStudent().click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(document.querySelector('[role="alertdialog"]').textContent)
+      .toContain(i18n.t("AiJudgePanel.rerunReviewedOne", { ns: "teaching" }));
+    await act(async () => {
+      dialogButton(i18n.t("ConfirmProvider.cancel", { ns: "common" })).click();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(createRun).not.toHaveBeenCalled();
+
+    await act(async () => {
+      runStudent().click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await act(async () => {
+      dialogButton(i18n.t("AiJudgePanel.rerunReviewedConfirm", { ns: "teaching" })).click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(createRun).toHaveBeenCalledExactlyOnceWith("class-1", "session-1", "set-1", {
+      userIds: ["user-1"], runBatchId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   test.each([false, true])("一個學生共用儲存按鈕：跨機器判定與回覆一起存，回覆失敗可重試（%s）", async (failReplyOnce) => {
     const batch = structuredClone(batchPayload);
     batch.students[0].nodes.push({
@@ -2456,6 +2511,20 @@ describe("導師核查：全班當週回報與指定檢查", () => {
     const bars = [...container.querySelectorAll('[role="img"]')].map((node) => node.getAttribute("aria-label"));
     expect(bars).toContain(i18n.t("AiJudgePanel.metricReportedValue", { ns: "teaching", done: 1, total: 2 }));
     expect(bars).toContain(i18n.t("AiJudgePanel.metricCheckValue", { ns: "teaching", pass: 0, fail: 0, error: 0, checked: 0, total: 2 }));
+    // 分頁列已經寫「導師核查」，總覽不再重複標題
+    expect(container.querySelector("h4")).toBeNull();
+    // 數量 0 時不上狀態色（還沒檢查就出現紅字會誤導）
+    const failCount = [...container.querySelectorAll("em")]
+      .find((node) => node.textContent === i18n.t("AiJudgePanel.metricFailCount", { ns: "teaching", count: 0 }));
+    expect(failCount.className).toMatch(/reviewStatZero/);
+    expect(failCount.className).not.toMatch(/reviewStatFail/);
+    // 回報狀態是 20px 圖示：完成＝實心綠勾，未回報＝小空心點（不畫數字、不像勾選框）
+    const ticks = [...container.querySelectorAll('[class*="reportTick"]')];
+    expect(ticks.map((tick) => tick.textContent)).toEqual(["check_circle", ""]);
+    // 回報狀態一律中性灰，狀態色只留給右側的檢查結果
+    const reportBadge = [...container.querySelectorAll("span")]
+      .find((node) => node.textContent === i18n.t("AiJudgePanel.reportReady", { ns: "teaching" }));
+    expect(reportBadge.className).toMatch(/muted/);
 
     const runReady = [...container.querySelectorAll("button")]
       .find((button) => button.textContent.includes(i18n.t("AiJudgePanel.runReadyBtn", { ns: "teaching", count: 1 })));

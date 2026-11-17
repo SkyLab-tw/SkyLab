@@ -133,7 +133,18 @@ src/pages/personal/resources/
 
 #### 狀態 Badge 的標準寫法
 
-膠囊外形與字級由 `@include badge-base;` 提供（inline-flex、膠囊圓角、12px／500、不換行），再加上內距與下面其中一組顏色：
+新程式一律用共用元件 `components/StatusBadge`，不要再在頁面 SCSS 手抄色調類別：
+
+```jsx
+<StatusBadge tone="success" icon="check_circle">已通過</StatusBadge>
+```
+
+- `tone`：`success`／`danger`／`info`／`pending`／`muted`，外加 `primary`（「老師有回覆」這類非狀態的主色標記）。
+- `icon` 選填，放在文字前面；旁邊已經有同義的狀態圖示（例如列首的打勾、檢查點標題列的圖示）就不要再放。
+- `className` 只拿來放位置（grid 欄位、對齊），不要覆寫顏色。
+- 同一個狀態在不同頁面要長得一樣：AI 導師檢查的老師端（導師核查）和學生端（週次頁、課程頁）已經共用同一組 tone 與圖示，例如「待老師確認」兩端都是 `pending`＋`person_search`。
+
+還沒換成元件的舊頁面仍是下面這套手寫法（膠囊外形與字級由 `@include badge-base;` 提供：inline-flex、膠囊圓角、12px／500、不換行，再加上內距與其中一組顏色），之後逐批改用元件：
 
 ```scss
 .badge_success { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
@@ -236,6 +247,7 @@ $z-ai-assistant: 2000   $z-screen-dialog: 2100   // 見 z-index 層級
 @include glass-surface($shadow: var(--shadow-sm));    // 換陰影
 @include glass-surface($shadow: none);                // 不輸出 box-shadow
 @include glass-surface(8px, 1.2);                     // 固定濾鏡參數（不跟隨風格切換，特殊情況才用）
+@include popover-glass;                               // 側欄延伸出來的彈出：glass-surface＋shadow-lg，液態／深色液態加重
 ```
 
 玻璃表面的 backdrop-filter 一律走 `var(--glass-backdrop-filter)`
@@ -342,6 +354,12 @@ import MIcon from "../components/MIcon";
 ```
 
 - 可點卡片的 hover 只給淡底（`background: var(--color-hover)`）或陰影／上浮，並保留 `transition` 淡入淡出；**不改邊框色**，藍框只留給「選中／目前」狀態（如分頁 active、流程目前步驟）
+- 「選中／目前」分兩層，不要混用：
+  - **導覽層級**（側欄、班級分頁、`SegmentedControl`）：實心主色＋白字。每一層只有一個，標籤短
+  - **內容清單的目前項目**（主從版面左側清單裡、右側正在顯示的那一列，例如 AI 導師檢查的週次清單、申請審核清單、建班時選的教學環境）：`@include item-current;`，8% 主色淡底＋左側 3px 主色條，**不圍框**。淡底單獨跟 hover 的淺藍分不開，主色條才是記號；刻意比導覽輕一階，才不會跟同頁的主要按鈕搶。列本身是白底卡片時傳 `item-current(var(--color-surface))`
+- 兩三個字的短選項並排二選一／多選一，一律用 `SegmentedControl`（例如申請表的預約／立即、課堂監看切換機器），不要手寫一排按鈕
+- 帶色票、說明或自己有框的選項鈕（外觀設定、機器範本可見範圍）：選中用 `@include option-selected;`，主色框＋8% 淡底＋主色字。這是「選項」，跟清單的目前項目不同，可以有框
+- 展開不是選中：展開的卡片只加深陰影（`var(--shadow-md)`），框色不變；只有一項、沒得選的資訊列不要掛選中樣式
 - 淡底不要用 `linear-gradient` 疊層：漸層無法 transition，hover 會瞬間跳色
 - 玻璃卡裡的內容區塊（資訊欄位、備註框、程式碼／日誌／金鑰等 `pre`、清單列、統計格）一律 `background: var(--color-surface)`（白）＋ `1px solid var(--color-border)`；不要鋪 `--color-hover`、`--color-bg-base` 等主色系淺藍。它們跟著主色走，使用者換了背景色，疊在透出背景的玻璃上就會糊。淺藍只留給 hover／選中狀態、按鈕、徽章、提示框
 - 警示提示塊（對話框或卡片裡講「按下去會發生什麼」，例如會自動重新開機、未存檔的工作會遺失）用 `@include warn-notice;`：白底＋`1px solid var(--color-border)`，**紅色只在 `warning` 圖示**，文字維持一般顏色。橘色只給待審核語意，不用在警示；也不要鋪紅色淡底或加紅框，提醒的語氣不要壓過旁邊的主要動作鈕。結構是 `<p><MIcon name="warning" size={16} /><span>說明</span></p>`
@@ -378,6 +396,7 @@ const presence = useDialogPresence(show);
 - 高度：`Modal` 卡片最高 `90vh`；畫面型對話框（VNC／終端機主控台、課堂觀看）自己把高度固定在 `88vh`
 - 全螢幕：可以全螢幕的對話框用 `:fullscreen` 偽類設 `max-width: 100%; height: 100%; border-radius: 0`（見 `ConsoleDialog.module.scss`）
 - 遮罩：`var(--color-overlay)` 加 `backdrop-filter: blur(4px)`、`z-index: 300`，portal 到 `document.body`：祖先有 `backdrop-filter`／`transform` 時，`position: fixed` 會被困在那一層、蓋不滿整個畫面。AI 助手面板開著時，遮罩會讓出面板的寬度（`dialog-overlay-avoid-ai`），對話框改在剩下的空間置中
+- AI 助手在 ≥1440 時跟頁面並排、<1440 時蓋在畫面上。頁面自己有對話欄（例如 AI 導師檢查的檢查助理）時，掛載期間呼叫版面 context 的 `setAssistantOverlay(true)`、卸載時還原：AI 助手改用覆蓋層開啟，不擠窄版面、也不會兩個輸入框並排
 - 卡片陰影：精簡卡用 `glass-surface` 預設陰影；`closeButton` 版用 `var(--shadow-lg)`，浮在遮罩上比較突出
 - 危險操作的確認傳 `role="alertdialog"`（`useConfirm` 已經這樣做）
 
@@ -420,7 +439,7 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
 - 頁面差異（寬度、margin、grid 位置）寫在 `@include` 之後；要更矮更小請先問是不是真的需要
 - 既有頁面的「修飾類」家族（如表格列的 `.actionBtn.actionBtnDanger`）維持基類＋修飾寫法，
   但危險修飾類**未 hover 前文字就要是紅色**，且 hover 同樣必加 `:not(:disabled)`
-- 下拉選單裡的危險項（PowerMenu、頁首 ⋯ 選單）屬選單樣式，不在此六款之列
+- 下拉選單裡的危險項（PowerMenu、頁首的 ⋮ ActionMenu）屬選單樣式，不在此六款之列
 
 #### 聊天面板（AI 助手、檢查表助理）
 
@@ -584,8 +603,13 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 ### Dropdown 選單
 
 - 浮在清單上方的選單 portal 到 `document.body`、用 `position: fixed`，由 `hooks/useAnchoredMenu` 定位：捲動與縮放時跟著錨點按鈕重算，依剩餘空間往下或往上展開，錨點捲出視窗就收起，點外面或按 Esc 也會關閉。`PowerMenu`、`ConnectionDialog` 的連接埠建議，以及 AI API 頁與範本頁的選單都用它
-- 選單底色用不透明的 `var(--color-surface)`，不要套 `glass-surface`：底下的清單列會透出來
+- 選單底色用不透明的 `var(--color-surface)`，不要套 `glass-surface`：底下的清單列會透出來。唯一例外是側欄延伸出來的彈出（見下方）：用 `popover-glass`，跟側欄同一套玻璃，隨介面風格變化（白底／黑底是實色，玻璃／液態透光）
 - 關閉動畫用 `useDialogPresence(open, 130)` + CSS `transition`，不用 `onAnimationEnd`
+- 這類選單的鍵盤操作（打開時移焦點、上下鍵、Esc／Tab 把焦點還給觸發鈕）共用 `hooks/useMenuKeyboard`；`ActionMenu`、`ListboxPopover`、`PowerMenu` 都用它，新選單也用它，不要自己寫按鍵處理
+- 從一串項目挑一個、每項要帶第二行說明（狀態、日期）時，用 `components/ListboxPopover`，例如 AI 導師檢查窄版的換週。觸發鈕帶 `aria-haspopup="listbox"`、`aria-expanded`，上下鍵直接展開。開啟時焦點在目前選中那項並捲到中間，上下鍵／Home／End 移動、Enter 選取，Esc 或 Tab 關閉並把焦點交回觸發鈕
+- 可捲動的長清單傳 `useAnchoredMenu` 的 `maxHeight`：下方放不下時把清單縮到剩下的空間，不往上推蓋住觸發鈕
+- 側欄底部的彈出（語言、帳號、背景任務）傳 `placement="side"`：貼著側欄外緣往右彈出、底緣對齊觸發鈕，側欄展開或收合都同一個位置。語言用 `ListboxPopover`，帳號用帶 `header`（頭像、姓名）的 `ActionMenu`，背景任務面板直接用 `useAnchoredMenu`。三個都傳 `glass`（或 `@include popover-glass`），保留側欄的玻璃
+- 「更多操作」選單用 `components/ActionMenu`，觸發鈕一律用直的 ⋮（`more_vert`），帶 `aria-haspopup="menu"`、`aria-expanded`。開啟時焦點在第一個可用的選項，上下鍵頭尾相接、Home／End 移動，Esc 或 Tab 關閉並把焦點交回觸發鈕；Esc 會標成已處理，同頁其他聽 Esc 的元件不會跟著動作。危險項放最後、加 `separatorBefore`，紅字用 `danger`，不要用 `!important` 壓顏色。選項上方不能點的說明（帳號選單的頭像、姓名）放 `header`，下面自動接分隔線
 
 ### 步驟列（Stepper）
 

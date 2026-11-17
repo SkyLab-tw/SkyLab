@@ -35,7 +35,7 @@
 .backBtn {
   box-shadow: var(--shadow-sm);
   white-space: nowrap;
-  /* 帶框的按鈕用預設 1.6 行高會撐到 38.4px；收成 20px 剛好 36px，跟旁邊 36px 的「⋯」選單鈕同高 */
+  /* 帶框的按鈕用預設 1.6 行高會撐到 38.4px；收成 20px 剛好 36px，跟旁邊 36px 的「⋮」選單鈕同高 */
   line-height: 20px;
 }
 
@@ -219,35 +219,41 @@
   font-size: $font-size-14;
 }
 
-.memberPageHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  min-height: 54px;
-}
-
-.memberPageHeader>div:first-child {
+/* 學生名單的工具列（DataToolbar）：標題與人數／機器數｜搜尋｜匯入與加入（或鎖定說明）靠右 */
+.memberTitle {
   display: flex;
   align-items: baseline;
   gap: 8px;
-}
+  margin-right: $spacing-8;
 
-.memberPageHeader h2 {
-  margin: 0;
-  font-size: $font-size-18;
-  font-weight: $font-weight-700;
-}
+  h2 {
+    margin: 0;
+    font-size: $font-size-18;
+    font-weight: $font-weight-700;
+  }
 
-.memberPageHeader>div:first-child span {
-  color: var(--color-text-muted);
-  font-size: $font-size-12;
+  span {
+    color: var(--color-text-muted);
+    font-size: $font-size-12;
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 .memberActions {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+}
+
+/* 送出建機後名單鎖定：一行說明取代三顆停用鈕 */
+.memberLockedNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
 }
 
 .hiddenFileInput {
@@ -264,57 +270,48 @@
   border-radius: $radius-16;
 }
 
-.memberPanelHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 56px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.memberPanelHead strong {
-  font-size: $font-size-16;
-  font-weight: $font-weight-700;
-}
-
-.memberPanelHead span {
-  color: var(--color-text-muted);
-  font-size: $font-size-12;
-  font-variant-numeric: tabular-nums;
-}
-
 /* 欄位怎麼排看的是名單本身有多寬（容器查詢）而不是視窗：側邊欄出現（≥1024）後內容比 992 時還窄，
-   用視窗寬度切會在 1024～1140 之間把列撐出面板外被裁掉。門檻見下方 @container */
+   用視窗寬度切會在 1024～1140 之間把列撐出面板外被裁掉。門檻見下方 @container。
+   列是表格列（分隔線、不各自包框），跟全站其他清單一樣；28 人的班級高度比一列一張卡片少四成 */
 .memberList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 20px 18px;
   container-type: inline-size;
 }
 
-/* 欄位標題：跟每列同一組欄寬；左右內距 = 列的內距 14 + 邊框 1，字才對得齊 */
-.memberColumns {
+/* 欄寬：學生欄最寬 360、VMID 120、機器 110；剩下的空間給加入日期那欄吃掉，
+   寬螢幕時機器狀態不會被推到離姓名一千多 px 的最右邊，移除鈕仍貼齊右緣 */
+.memberColumns,
+.memberRow {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(120px, .8fr) 110px 110px 34px;
+  grid-template-columns: minmax(220px, 360px) 120px 110px minmax(110px, 1fr) 34px;
+  align-items: center;
   gap: 16px;
-  padding: 0 15px;
+  padding: 0 20px;
+}
+
+.memberColumns {
+  min-height: 40px;
+  border-bottom: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: $font-size-12;
   font-weight: $font-weight-500;
 }
 
 .memberRow {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(120px, .8fr) 110px 110px 34px;
-  align-items: center;
-  gap: 16px;
-  min-height: 60px;
-  padding: 10px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
+  min-height: 52px;
+  padding-block: 6px;
+  transition: background $transition-base;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--color-divider);
+  }
+}
+
+/* 名單鎖定（送出建機後）：沒有移除鈕，最後那欄也不留 */
+.memberLocked .memberColumns,
+.memberLocked .memberRow {
+  grid-template-columns: minmax(220px, 360px) 120px 110px minmax(110px, 1fr);
 }
 
 .memberRowSelected {
@@ -330,12 +327,12 @@
 /* 可以批量移除（準備中的班級）：最前面多一欄勾選框，欄寬見下方 @container */
 .memberSelectable .memberColumns,
 .memberSelectable .memberRow {
-  grid-template-columns: 16px minmax(220px, 1.5fr) minmax(120px, .8fr) 110px 110px 34px;
+  grid-template-columns: 16px minmax(220px, 360px) 120px 110px minmax(110px, 1fr) 34px;
 }
 
-/* 一行排完的最小寬度：220＋120＋110＋110＋34＋間距 16×4＋列內距 28＋框 2 = 688，有勾選欄再加 32 = 720。
-   放不下就先收起加入日期，再放不下（勾選欄版 544）改成上下疊排 */
-@container (max-width: 719px) {
+/* 一行排完的最小寬度：220＋120＋110＋110＋34＋間距 16×4＋列左右內距 40 = 698，有勾選欄再加 32 = 730。
+   放不下就先收起加入日期，再放不下（勾選欄版 554）改成上下疊排 */
+@container (max-width: 729px) {
   .memberRow,
   .memberColumns {
     grid-template-columns: minmax(200px, 1.3fr) minmax(100px, .7fr) 100px 34px;
@@ -346,6 +343,11 @@
     grid-template-columns: 16px minmax(200px, 1.3fr) minmax(100px, .7fr) 100px 34px;
   }
 
+  .memberLocked .memberRow,
+  .memberLocked .memberColumns {
+    grid-template-columns: minmax(200px, 1.3fr) minmax(100px, .7fr) 100px;
+  }
+
   /* 加入日期收起：列裡是第 3 個 span，欄位標題裡是第 4 個 */
   .memberRow>span:nth-of-type(3),
   .memberColumns>span:nth-of-type(4) {
@@ -354,7 +356,7 @@
 }
 
 /* 疊排：每列上下兩行，欄位對不起來，標題列收起 */
-@container (max-width: 543px) {
+@container (max-width: 553px) {
   .memberColumns {
     display: none;
   }
@@ -363,6 +365,10 @@
   .memberSelectable .memberRow {
     grid-template-columns: minmax(0, 1fr) auto 30px;
     gap: 8px 12px;
+  }
+
+  .memberLocked .memberRow {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .memberIdentity {
@@ -452,7 +458,8 @@
 }
 
 /* 課堂監看的工具列（直播示範、全班電源）：圖示＋標籤欄固定同寬，兩列的選單與按鈕從同一條線開始；
-   選單／按鈕與說明文字包成 .broadcastControls，放不下換行時也從按鈕的起點對齊 */
+   選單／按鈕與說明文字包成 .broadcastControls，放不下換行時也從按鈕的起點對齊。
+   不鋪底色（玻璃卡裡不鋪主色淺藍），跟上面的標題列一樣只靠分隔線分段 */
 .broadcastTools {
   display: flex;
   min-height: 52px;
@@ -461,7 +468,6 @@
   padding: 8px 20px;
   border-bottom: 1px solid var(--color-border);
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface));
 }
 
 .broadcastTools strong {
@@ -490,16 +496,10 @@
   color: var(--color-text-muted);
 }
 
+/* 直播示範的選單：跟全站欄位同一組（36px、14px 字、聚焦主色框＋光暈），只限制寬度 */
 .broadcastTools select {
+  @include form-control;
   width: min(360px, 100%);
-  min-height: 36px;
-  padding: 5px 9px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  color: var(--color-text);
-  background: var(--color-surface);
-  font: inherit;
-  font-size: $font-size-12;
 }
 
 @media (min-width: $breakpoint-sidebar) {
@@ -603,31 +603,23 @@
   line-height: 1.5;
 }
 
-/* 即時資料更新失敗（課堂監看熱力圖）：錯誤一律紅色，橘色只給待審核 */
+/* 「每 10 秒更新」／「更新失敗」：全站徽章同一組（badge-base、上下 2px），錯誤一律紅色，橘色只給待審核 */
+.liveBadge,
 .failedBadge {
-  display: inline-flex;
-  align-items: center;
+  @include badge-base;
   gap: 5px;
   flex: 0 0 auto;
-  padding: 5px 10px;
-  border-radius: $radius-pill;
-  color: var(--color-danger);
-  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
+  padding: 2px 10px;
 }
 
 .liveBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  padding: 5px 10px;
-  border-radius: $radius-pill;
   color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 12%, transparent);
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
+}
+
+.failedBadge {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
 }
 
 /* 上下內距對稱：原本上緣 0，機器分頁直接貼在直播列的分隔線上 */
@@ -641,80 +633,35 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.machineTabs {
-  display: flex;
-  flex: 1 1 360px;
-  gap: 7px;
+/* 機器切換（兩台以上）：共用 SegmentedControl；機器多時在容器內橫向捲動，不把工具列撐寬 */
+.machineSwitch {
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.machineTabs::-webkit-scrollbar {
-  display: none;
-}
-
-.machineTabs>button {
+/* 只有一台機器：不做分頁，只標出機器名稱與類型，高度跟右邊的 CPU／RAM 切換同為 36px */
+.machineSingle {
   display: flex;
-  width: 220px;
-  max-width: 100%;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 9px;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  padding: 9px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-  text-align: left;
-  transition: border-color $transition-base, background $transition-base, color $transition-base;
-}
-
-.machineTabs>button:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
-  background: var(--color-hover);
-}
-
-.machineTabs>button>span:first-child {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  place-items: center;
-  overflow: hidden;
-  border-radius: $radius-8;
-  background: var(--color-hover);
-}
-
-.machineTabs>button>span:last-child {
-  display: flex;
-  flex-direction: column;
+  gap: 8px;
   min-width: 0;
-}
+  min-height: 36px;
+  color: var(--color-text-secondary);
 
-.machineTabs small {
-  color: var(--color-text-muted);
-  font-size: $font-size-12;
-}
+  strong {
+    @include text-truncate;
+    color: var(--color-text-primary);
+    font-size: $font-size-14;
+    font-weight: $font-weight-700;
+  }
 
-.machineTabs strong {
-  overflow: hidden;
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.machineTabs>button.machineTabActive {
-  border-color: color-mix(in srgb, var(--color-primary) 50%, var(--color-border));
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
-}
-
-.machineTabs>button.machineTabActive>span:first-child {
-  background: color-mix(in srgb, var(--color-primary) 13%, var(--color-surface));
+  span:last-child {
+    color: var(--color-text-muted);
+    font-size: $font-size-12;
+  }
 }
 
 /* CPU／RAM 切換（共用 SegmentedControl）：靠右 */
@@ -775,19 +722,14 @@
   font-weight: $font-weight-500;
 }
 
-/* 熱力圖：精簡卡片（座號 姓名＋數值＋細進度條）＋「需要注意」清單。
+/* 熱力圖：精簡卡片（座號 姓名＋數值＋細進度條），「需要注意」在上方一條，學生格佔滿整寬。
    使用中的依使用率上三階主題色（越忙越深），高負載改淡紅；關機虛線框、暫無資料點線框，都不上色。 */
 .heatBoard {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 16px 24px;
-  padding: 0 20px 18px;
+  padding: 0 20px 20px;
 }
 
 .heatTiles {
   display: grid;
-  flex: 1 1 360px;
   grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
   align-content: start;
   gap: 6px;
@@ -819,11 +761,6 @@
 .heatTileClickable:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-text-primary) 14%, transparent);
-}
-
-.heatTile:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
-  outline-offset: 2px;
 }
 
 .heatTileHead {
@@ -903,120 +840,96 @@
   border: 1px dotted var(--color-border);
 }
 
-/* 玻璃卡裡的內容區塊：白底細框 */
+/* 學生格上方的「需要注意」：玻璃卡裡的內容區塊，白底細框；標題在左，狀況接在後面（一行字或一排小卡） */
 .heatAttention {
-  flex: 0 1 260px;
-  min-width: 220px;
-  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 20px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--color-border);
   border-radius: $radius-12;
   background: var(--color-surface);
+
+  p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: $font-size-12;
+    line-height: 1.5;
+  }
 }
 
-.heatAttentionHead {
-  display: flex;
+.heatAttentionTitle {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding: 0 6px;
-}
-
-.heatAttentionHead strong {
+  gap: 6px;
+  min-height: 28px;
   color: var(--color-text-primary);
   font-size: $font-size-14;
+  font-weight: $font-weight-700;
 }
 
-.heatAttentionHead span {
+.heatAttentionCount {
+  @include badge-base;
+  justify-content: center;
   min-width: 22px;
   padding: 1px 7px;
-  border-radius: $radius-pill;
   color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 12%, transparent);
-  font-size: $font-size-12;
   font-weight: $font-weight-700;
-  text-align: center;
 }
 
-.heatAttention p {
-  margin: 0;
-  padding: 0 6px;
-  color: var(--color-text-muted);
-  font-size: $font-size-12;
-  line-height: 1.5;
-}
-
-.heatAttention ul {
+.heatAttentionList {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.heatAttention li+li {
-  border-top: 1px solid var(--color-divider);
-}
-
-.heatAttention li>button,
-.heatAttention li>div {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+/* 一位學生一張小卡：座號、姓名、使用率（紅）或「關機」；開得了的才是按鈕 */
+.heatAttentionChip {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 6px;
-  border: 0;
-  border-radius: $radius-8;
-  color: inherit;
-  background: transparent;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-pill;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
   font: inherit;
-  text-align: left;
+  font-size: $font-size-12;
+
+  span {
+    color: var(--color-text-muted);
+    font-weight: $font-weight-700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  strong { font-weight: $font-weight-500; }
+  b { color: var(--color-danger); font-weight: $font-weight-700; }
+  em { color: var(--color-text-muted); font-style: normal; }
 }
 
-.heatAttention li>button {
+button.heatAttentionChip {
   cursor: pointer;
   transition: background $transition-base;
+
+  &:hover { background: var(--color-hover); }
 }
 
-.heatAttention li>button:hover {
-  background: var(--color-hover);
-}
-
-.heatAttention li span {
-  color: var(--color-text-muted);
-  font-size: $font-size-12;
-  font-weight: $font-weight-700;
-  font-variant-numeric: tabular-nums;
-}
-
-.heatAttention li strong {
-  @include text-truncate;
-  color: var(--color-text-primary);
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-}
-
-.heatAttention li b {
-  color: var(--color-danger);
-  font-size: $font-size-12;
-  font-weight: $font-weight-700;
-}
-
-.heatAttention li em {
-  color: var(--color-text-muted);
-  font-size: $font-size-12;
-  font-style: normal;
-}
-
+/* 圖例跟統計數字同一列、靠右 */
 .heatLegend {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px 14px;
-  padding: 12px 20px 16px;
-  border-top: 1px solid var(--color-divider);
+  margin-left: auto;
   color: var(--color-text-muted);
   font-size: $font-size-12;
 }
@@ -1401,76 +1314,12 @@
 }
 
 /* 頁首的 ⋯ 選單：低頻、不可逆的操作收在這裡，不與日常資訊並排。 */
-.headerMenuWrap {
-  position: relative;
-}
-
+/* 頁首「⋮」更多操作：跟旁邊的「返回班級管理」同一款次要鈕，做成 36px 正方形；選單本身是共用 ActionMenu */
 .headerMenuBtn {
+  @include btn-secondary;
   width: 36px;
-  height: 36px;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.headerMenuBtn:hover {
-  background: var(--color-hover);
-}
-
-.headerMenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 60;
-  width: 236px;
-  padding: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-12;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
-}
-
-.headerMenu button {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 9px;
-  min-height: 38px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: $radius-8;
-  color: var(--color-text-primary);
-  background: transparent;
-  font: inherit;
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-  text-align: left;
-  cursor: pointer;
-}
-
-.headerMenu button:hover:not(:disabled) {
-  background: var(--color-hover);
-}
-
-.headerMenu button:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
-
-.headerMenu hr {
-  height: 1px;
-  margin: 5px 8px;
-  border: 0;
-  background: var(--color-divider);
-}
-
-.headerMenuRisky {
-  color: var(--color-danger) !important;
-}
-
-.headerMenuRisky:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-danger) 8%, transparent) !important;
+  padding: 0;
+  box-shadow: var(--shadow-sm); // 同 .backBtn
 }
 
 .overviewInfoCard {
@@ -1680,14 +1529,15 @@
   opacity: 0.55;
 }
 
+/* 剛建立好的那個環境：只給淡底提示；左側主色條留給「已選」，兩者才分得開 */
 .envChoiceSuggested {
-  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
-  box-shadow: inset 3px 0 var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
 }
 
-.envChoiceSelected {
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)) !important;
-  box-shadow: inset 3px 0 var(--color-primary);
+/* 已選的環境：內容清單的「目前項目」（淡底＋左側主色條）。
+   選擇器帶 .envChoices>button 才蓋得過上面的 hover 規則，不必用 !important */
+.envChoices>button.envChoiceSelected {
+  @include item-current(var(--color-surface));
 }
 
 .envChoiceIcon {
@@ -2455,13 +2305,11 @@
     margin-inline: 18px;
   }
 
-  .memberPageHeader {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
+  /* 手機：動作鈕換到工具列的下一行、兩兩一排撐滿 */
   .memberActions {
     display: grid;
+    width: 100%;
+    margin-left: 0;
     grid-template-columns: 1fr 1fr;
   }
 
@@ -2472,18 +2320,7 @@
     flex-direction: column;
   }
 
-  .machineTabs {
-    display: grid;
-    width: 100%;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    overflow: visible;
-  }
-
-  .machineTabs>button {
-    width: 100%;
-    min-width: 0;
-  }
-
+  .machineSwitch,
   .metricSwitch {
     align-self: flex-start;
   }
@@ -2625,10 +2462,6 @@
   .failedBadge,
   .liveBadge {
     align-self: flex-start;
-  }
-
-  .machineTabs {
-    grid-template-columns: 1fr;
   }
 
   .heatBoard {
