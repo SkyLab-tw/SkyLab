@@ -121,6 +121,18 @@ def test_qwen_overrides_xhigh_and_preserves_other_template_settings(legacy_bool)
     assert adapter.adapt_chat_request(wire) == wire
 
 
+def test_birc_llm_turns_thinking_off_with_top_level_effort() -> None:
+    profile = adapter.load_model_profiles().models["BIRC-LLM"]
+    assert (profile.thinking, profile.thinking_parameter) == ("none", "reasoning_effort")
+    wire = adapter.adapt_chat_request(_payload("BIRC-LLM"))
+    assert wire["reasoning_effort"] == "none"
+    assert wire["chat_template_kwargs"] == {"custom": "keep"}
+    assert adapter.adapt_chat_request(wire) == wire
+    tools = _payload("BIRC-LLM")
+    tools.update(tools=[{"type": "function"}], tool_choice="auto")
+    assert adapter.adapt_chat_request(tools)["tool_choice"] == "auto"
+
+
 def test_qwen_template_effort_requires_low(monkeypatch, tmp_path):
     config = _config()
     config["models"][QWEN]["thinking"] = "none"
@@ -168,7 +180,6 @@ def test_config_is_cached_and_independent_of_cwd(monkeypatch, tmp_path) -> None:
         ("thinking", None),
         ("thinking", False),
         ("thinking", "high"),
-        ("thinking", "none"),
         ("thinking_parameter", "arbitrary.field"),
         ("native_tool_calls", "true"),
         ("native_tool_calls", False),

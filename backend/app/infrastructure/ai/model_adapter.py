@@ -42,8 +42,7 @@ class ModelProfile(BaseModel):
     @model_validator(mode="after")
     def validate_contract(self) -> ModelProfile:
         if (
-            self.thinking_parameter
-            in {"reasoning_effort", "chat_template_reasoning_effort"}
+            self.thinking_parameter == "chat_template_reasoning_effort"
             and self.thinking != "low"
         ):
             raise ValueError("reasoning_effort requires thinking='low'")

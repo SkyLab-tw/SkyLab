@@ -1178,15 +1178,15 @@ export function proposalToolCallLines(message) {
     ? message.metadata_json.tool_calls
     : [];
   const lines = [];
-  toolCalls.forEach((call) => {
+  // 成功項合併計數：新增與修改分開，同標題重試只算一次；失敗維持逐項。
+  const createdTitles = new Set();
+  const updatedTitles = new Set();
+  toolCalls.forEach((call, index) => {
     if (!call || typeof call !== "object") return;
     if (call.resolved) return;
     if (call.status === "staged") {
-      const label =
-        call.operation === "update"
-          ? jt("toolProposalUpdated")
-          : jt("toolProposalCreated");
-      lines.push({ icon: "check_circle", text: jt("labelValue", { label, value: call.title ?? "" }) });
+      const titles = call.operation === "update" ? updatedTitles : createdTitles;
+      titles.add(call.title || `#${index}`);
     } else if (call.status === "rejected" || call.status === "error") {
       lines.push({
         icon: "cancel",
@@ -1208,7 +1208,20 @@ export function proposalToolCallLines(message) {
     seen.add(line.text);
     dedupedReversed.push(line);
   }
-  return dedupedReversed.reverse();
+  const summary = [];
+  if (createdTitles.size) {
+    summary.push({
+      icon: "check_circle",
+      text: jt("toolProposalCreatedCount", { count: createdTitles.size }),
+    });
+  }
+  if (updatedTitles.size) {
+    summary.push({
+      icon: "check_circle",
+      text: jt("toolProposalUpdatedCount", { count: updatedTitles.size }),
+    });
+  }
+  return [...summary, ...dedupedReversed.reverse()];
 }
 
 /** 待送出的附件列：沒有附件時不畫；onRemove 沒給就不顯示移除鈕 */
@@ -4573,7 +4586,7 @@ export function TeacherReviewTab({
                           className={styles.replyInput}
                           value={value}
                           maxLength={REPLY_MAX_LENGTH}
-                          rows={1}
+                          rows={4}
                           aria-label={t("AiJudgePanel.replyLabel")}
                           placeholder={t("AiJudgePanel.replyPlaceholder")}
                           onChange={(event) => {

@@ -7,6 +7,7 @@
 /public/openapi.json
 # VitePress
 .vitepress/cache/
+.vitepress/.temp/
 .vitepress/dist/
 node_modules/
 
