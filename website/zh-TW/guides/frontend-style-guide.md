@@ -247,7 +247,7 @@ $z-ai-assistant: 2000   $z-screen-dialog: 2100   // 見 z-index 層級
 @include glass-surface($shadow: var(--shadow-sm));    // 換陰影
 @include glass-surface($shadow: none);                // 不輸出 box-shadow
 @include glass-surface(8px, 1.2);                     // 固定濾鏡參數（不跟隨風格切換，特殊情況才用）
-@include popover-glass;                               // 側欄延伸出來的彈出：glass-surface＋shadow-lg，液態／深色液態加重
+@include popover-glass;                               // 浮層選單與側欄彈出：glass-surface＋shadow-lg，液態／深色液態加重
 ```
 
 玻璃表面的 backdrop-filter 一律走 `var(--glass-backdrop-filter)`
@@ -595,6 +595,17 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 - 固定欄由 `table-base` 內建（`data-overflow="start|both"` 時才生效）。有自己底色的列（群組列、hover）用 `@include table-row-bg(色)` 設底色，固定欄才會跟同一列同色
 - 目前用在：我的資源、機器範本
 
+#### 規則五：資料多時依性質挑分頁、虛擬捲動或載入更多
+
+| 做法 | 什麼時候用 | 用在哪裡 |
+|---|---|---|
+| 分頁：`components/Pagination`（每頁 50 筆，「共 N 筆 · 第 x / y 頁」＋上下頁） | 管理者看全部資料、動輒上百上千筆，搭配搜尋與篩選 | 使用者管理、稽核日誌、IP 管理、回饋、AI 金鑰管理 |
+| 虛擬捲動：`hooks/useVirtualRows`（滿 60 列才啟動） | 要一次看全部、上下捲著比較，不想切頁 | 資源管理 |
+| 載入更多（每次 20 筆） | 依時間排序的紀錄，通常只看最近的 | AI API 我的用量明細 |
+
+- 使用者自己的少量資料（自己的金鑰、機器）全部列出就好，次要的（已失效）摺疊起來
+- 分頁列一律用 `components/Pagination`，不要在頁面裡手抄；頁數文字照「共 N 筆 · 第 x / y 頁」
+
 ### 清單工具列與批量操作（DataToolbar）
 
 清單或表格上方的「篩選＋搜尋」與「勾選後的批量操作」**一律用 `components/DataToolbar` 這一組**，不要在頁面裡另做浮動操作列或自己的勾選框：
@@ -637,12 +648,12 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 ### Dropdown 選單
 
 - 浮在清單上方的選單 portal 到 `document.body`、用 `position: fixed`，由 `hooks/useAnchoredMenu` 定位：捲動與縮放時跟著錨點按鈕重算，依剩餘空間往下或往上展開，錨點捲出視窗就收起，點外面或按 Esc 也會關閉。`PowerMenu`、`ConnectionDialog` 的連接埠建議，以及 AI API 頁與範本頁的選單都用它
-- 選單底色用不透明的 `var(--color-surface)`，不要套 `glass-surface`：底下的清單列會透出來。唯一例外是側欄延伸出來的彈出（見下方）：用 `popover-glass`，跟側欄同一套玻璃，隨介面風格變化（白底／黑底是實色，玻璃／液態透光）
+- 選單底色一律用 `@include popover-glass`，跟側欄同一套玻璃，隨介面風格與主題色變化（白底／黑底是實色，玻璃／液態透光，液態另外加重模糊與塗層，底下的字不會干擾閱讀）。`ActionMenu`、`ListboxPopover`、`PowerMenu` 已內建，手寫的選單也要用它，不要寫 `background: var(--color-surface)`
 - 關閉動畫用 `useDialogPresence(open, 130)` + CSS `transition`，不用 `onAnimationEnd`
 - 這類選單的鍵盤操作（打開時移焦點、上下鍵、Esc／Tab 把焦點還給觸發鈕）共用 `hooks/useMenuKeyboard`；`ActionMenu`、`ListboxPopover`、`PowerMenu` 都用它，新選單也用它，不要自己寫按鍵處理
 - 從一串項目挑一個、每項要帶第二行說明（狀態、日期）時，用 `components/ListboxPopover`，例如 AI 導師檢查窄版的換週。觸發鈕帶 `aria-haspopup="listbox"`、`aria-expanded`，上下鍵直接展開。開啟時焦點在目前選中那項並捲到中間，上下鍵／Home／End 移動、Enter 選取，Esc 或 Tab 關閉並把焦點交回觸發鈕
 - 可捲動的長清單傳 `useAnchoredMenu` 的 `maxHeight`：下方放不下時把清單縮到剩下的空間，不往上推蓋住觸發鈕
-- 側欄底部的彈出（語言、帳號、背景任務）傳 `placement="side"`：貼著側欄外緣往右彈出、底緣對齊觸發鈕，側欄展開或收合都同一個位置。語言用 `ListboxPopover`，帳號用帶 `header`（頭像、姓名）的 `ActionMenu`，背景任務面板直接用 `useAnchoredMenu`。三個都傳 `glass`（或 `@include popover-glass`），保留側欄的玻璃
+- 側欄底部的彈出（語言、帳號、背景任務）傳 `placement="side"`：貼著側欄外緣往右彈出、底緣對齊觸發鈕，側欄展開或收合都同一個位置。語言用 `ListboxPopover`，帳號用帶 `header`（頭像、姓名）的 `ActionMenu`，背景任務面板直接用 `useAnchoredMenu`。底色跟其他選單一樣是 `popover-glass`，不用另外傳參數
 - 「更多操作」選單用 `components/ActionMenu`，觸發鈕一律用直的 ⋮（`more_vert`），帶 `aria-haspopup="menu"`、`aria-expanded`。開啟時焦點在第一個可用的選項，上下鍵頭尾相接、Home／End 移動，Esc 或 Tab 關閉並把焦點交回觸發鈕；Esc 會標成已處理，同頁其他聽 Esc 的元件不會跟著動作。危險項放最後、加 `separatorBefore`，紅字用 `danger`，不要用 `!important` 壓顏色。選項上方不能點的說明（帳號選單的頭像、姓名）放 `header`，下面自動接分隔線
 
 ### 步驟列（Stepper）
@@ -765,4 +776,4 @@ function closeMenu() {
 
 > ⚠️ 注意：使用 `backdrop-filter` 或 `transform` 的元素會建立新的 stacking context，子元素的 `z-index` 無法穿透至外層。若發現 Dropdown 被其他卡片遮住，請確認父元素是否有這類屬性。
 >
-> 玻璃表面（`glass-surface`）搭配 `overflow: hidden` 的容器還會**裁掉**溢出的 absolute 選單。浮層若可能超出容器範圍，改用 `createPortal` 掛到 `document.body` 並以 `position: fixed` 定位（範例：`components/PowerMenu`），且背景要用不透明的 `var(--color-surface)`，否則會透出底下的列表內容。
+> 玻璃表面（`glass-surface`）搭配 `overflow: hidden` 的容器還會**裁掉**溢出的 absolute 選單。浮層若可能超出容器範圍，改用 `createPortal` 掛到 `document.body` 並以 `position: fixed` 定位（範例：`components/PowerMenu`），背景用 `popover-glass`（見上方 Dropdown 選單）。

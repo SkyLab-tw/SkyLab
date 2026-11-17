@@ -12,7 +12,7 @@ import { useLoadFailureMessage, useQueryView } from "../../../hooks/useQueryLoad
 import { useFeedbackCacheUpdater, useFeedbackListQuery } from "../../../queries/feedback";
 import { FEEDBACK_CATEGORIES, FeedbackService, feedbackCategoryMeta } from "../../../services/feedback";
 import { formatDateTime } from "../../../utils/formatDate";
-import Pagination from "../shared/Pagination";
+import Pagination from "../../../components/Pagination/Pagination";
 
 const PAGE_SIZE = 20;
 const EMPTY = Object.freeze([]);

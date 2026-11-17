@@ -16,6 +16,7 @@ import { useLoadError } from "../../../hooks/useQueryLoadState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Pagination from "../../../components/Pagination/Pagination";
 import { formatDate, formatDateTime } from "../../../utils/formatDate";
 
 const PAGE_SIZE = 50;
@@ -393,7 +394,16 @@ export default function AiApiKeysPage() {
                 <DataTable table={table} className={styles.table} rowClassName={credentialRowClassName} />
               </div>
 
-              {totalPages > 1 && <div className={styles.pagination}><span className={styles.paginationInfo}>{t("AiApiKeysPage.paginationInfo", { page: page + 1, totalPages, total })}</span><div className={styles.paginationBtns}><button type="button" className={styles.btnSecondary} disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>{t("AiApiKeysPage.prevPage")}</button><button type="button" className={styles.btnSecondary} disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>{t("AiApiKeysPage.nextPage")}</button></div></div>}
+              {totalPages > 1 && (
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  info={t("AiApiKeysPage.paginationInfo", { page: page + 1, totalPages, total })}
+                  prevLabel={t("AiApiKeysPage.prevPage")}
+                  nextLabel={t("AiApiKeysPage.nextPage")}
+                  onChange={setPage}
+                />
+              )}
             </>
           )
         )}

@@ -22,7 +22,7 @@ import { useToast } from "../../../hooks/useToast";
 import { useQueryView } from "../../../hooks/useQueryLoadState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import PageHeader from "../../../components/PageHeader/PageHeader";
-import Pagination from "../shared/Pagination";
+import Pagination from "../../../components/Pagination/Pagination";
 import { formatDateTime } from "../../../utils/formatDate";
 import { isAdminUser } from "../../../utils/roles";
 

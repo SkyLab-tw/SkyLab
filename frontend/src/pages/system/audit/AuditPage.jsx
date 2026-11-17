@@ -19,7 +19,7 @@ import {
   useAuditUsersQuery,
 } from "../../../queries/auditLogs";
 import PageHeader from "../../../components/PageHeader/PageHeader";
-import Pagination from "../shared/Pagination";
+import Pagination from "../../../components/Pagination/Pagination";
 import { formatDateTime } from "../../../utils/formatDate";
 
 const PAGE_SIZE = 50;

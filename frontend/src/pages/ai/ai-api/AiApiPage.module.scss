@@ -298,10 +298,9 @@
   width: 220px;
   @include flex-column;
   padding: $spacing-4;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: $radius-8;
-  box-shadow: var(--shadow-md);
+  /* 底色跟 ActionMenu 同一套玻璃，隨介面風格與主題色變 */
+  @include popover-glass;
 }
 
 .keyMenuItem {

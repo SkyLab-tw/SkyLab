@@ -3,15 +3,13 @@
 
 /* ── Power dropdown ──
    位置由 PowerMenu.jsx 經 useAnchoredMenu 依錨點按鈕即時算好寫進 inline style，
-   這裡只負責外觀。刻意不套 glass-surface：選單浮在列表內容之上，
-   半透明背景會讓底下的列（節點名稱、終端機按鈕…）透出來。 */
+   這裡只負責外觀。底色跟 ActionMenu、ListboxPopover 同一套 popover-glass
+   （隨介面風格與主題色變，白底／黑底風格是實色）。 */
 .powerMenu {
   position: fixed;
   width: 240px; // 需與 hooks/anchoredMenuPosition.js 的 MENU_WIDTH 一致
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: $radius-12;
-  box-shadow: var(--shadow-lg);
+  @include popover-glass;
   padding: $spacing-8 0;
   z-index: 150; // 高於 Sticky Header(100)，低於 Dialog / Modal(200+)
   opacity: 1;

@@ -86,10 +86,24 @@
   margin-right: 4px;
 }
 
-/* 收進名稱欄的來源徽章：名稱欄是直向 flex，不包一層會被撐滿整欄寬 */
-.foldedKind {
+/* 收起來源欄時，來源徽章接在名稱後面同一行；名稱加徽章放不下時徽章換到下一行，
+   名稱優先完整顯示（名稱本身比欄寬還長才截斷）。左右留 10px，徽章不會像黏在名稱上 */
+.nameLine {
   display: flex;
-  margin-top: 2px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  min-width: 0;
+
+  > strong {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  > :not(strong) {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
 }
 
 /* 收到來源欄（只剩名稱、狀態、IP、操作以下）時名稱欄很擠：拿掉類型圖示，

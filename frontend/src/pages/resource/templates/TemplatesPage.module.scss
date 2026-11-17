@@ -143,65 +143,6 @@
   @include btn-icon-secondary;
 }
 
-@keyframes menuIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.rowMenuOut {
-  animation: none !important;
-  opacity: 0;
-  transform: translateY(6px);
-  pointer-events: none;
-}
-
-.rowMenu {
-  animation: menuIn 0.13s ease;
-  transition: opacity 0.13s ease, transform 0.13s ease;
-  /* portal 到 body，座標由 JSX 以 fixed 指定；z-index 照規範「Portal 浮層選單」層級 */
-  position: fixed;
-  z-index: 150;
-  width: 200px;
-  @include flex-column;
-  padding: $spacing-4;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  box-shadow: var(--shadow-md);
-}
-
-.rowMenuItem {
-  display: flex;
-  align-items: center;
-  gap: $spacing-8;
-  padding: 6px $spacing-8;
-  border-radius: $radius-8;
-  font-size: $font-size-14;
-  color: var(--color-text);
-  cursor: pointer;
-  text-align: left;
-  transition: background $transition-base;
-
-  &:hover:not(:disabled) {
-    background: var(--color-hover);
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-}
-
-.rowMenuItemDanger {
-  color: var(--color-danger);
-}
-
-.rowMenuDivider {
-  height: 1px;
-  margin: $spacing-4 0;
-  background: var(--color-divider);
-}
-
 /* ── 按鈕 ── */
 .btnPrimary {
   @include btn-primary;

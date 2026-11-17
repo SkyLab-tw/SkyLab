@@ -246,7 +246,7 @@ $z-ai-assistant: 2000   $z-screen-dialog: 2100   // see z-index layers
 @include glass-surface($shadow: var(--shadow-sm));    // different shadow
 @include glass-surface($shadow: none);                // no box-shadow emitted
 @include glass-surface(8px, 1.2);                     // fixed filter parameters (ignores style switching; special cases only)
-@include popover-glass;                               // popups from the sidebar: glass-surface + shadow-lg, heavier on liquid / dark liquid
+@include popover-glass;                               // floating menus and sidebar popups: glass-surface + shadow-lg, heavier on liquid / dark liquid
 ```
 
 The backdrop-filter of a glass surface always goes through `var(--glass-backdrop-filter)`
@@ -594,6 +594,17 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 - Pinning is built into `table-base` (it only applies with `data-overflow="start|both"`). Rows with their own background (group rows, hover) set it with `@include table-row-bg(colour)` so the pinned cells match the rest of the row
 - Currently used on: My resources, Machine templates
 
+#### Rule 5: with lots of rows, choose pagination, virtual scrolling or load more by the kind of data
+
+| Approach | When | Used on |
+|---|---|---|
+| Pagination: `components/Pagination` (50 per page, "N total · Page x of y" plus previous / next) | Admins looking at all the data, often hundreds or thousands of rows, together with search and filters | User management, audit logs, IP management, feedback, AI key management |
+| Virtual scrolling: `hooks/useVirtualRows` (kicks in from 60 rows) | Everything needs to be seen at once and compared by scrolling, without switching pages | Resource management |
+| Load more (20 at a time) | Records ordered by time, where usually only the recent ones matter | AI API usage details |
+
+- A user's own small set of data (their keys, their machines) is simply listed in full, with secondary items (expired) collapsed
+- Pagination bars always use `components/Pagination`, never a hand-written copy in the page; the info text follows "N total · Page x of y"
+
 ### List toolbar and batch actions (DataToolbar)
 
 The "filters + search" bar above a list or table and the "batch actions after ticking rows" **always use the `components/DataToolbar` set**. Don't build a separate floating action bar or your own checkboxes in a page:
@@ -636,12 +647,12 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 ### Dropdown menus
 
 - Menus that float over lists are portalled to `document.body` with `position: fixed` and positioned by `hooks/useAnchoredMenu`: it follows the anchor button on scroll and resize, opens downward or upward depending on the space left, closes when the anchor scrolls out of view, and closes on an outside click or Esc. Used by `PowerMenu`, the port suggestions in `ConnectionDialog`, and menus on the AI API and templates pages
-- Give the menu an opaque `var(--color-surface)` background, not `glass-surface`: list rows underneath would show through. The one exception is popups that extend out of the sidebar (below): they use `popover-glass`, the same glass as the sidebar, so they change with the interface style (solid on white / black, see-through on glass / liquid)
+- Every menu uses `@include popover-glass` for its background: the same glass as the sidebar, changing with the interface style and theme colour (solid on white / black, see-through on glass / liquid; liquid adds extra blur and coating so text underneath does not get in the way of reading). `ActionMenu`, `ListboxPopover` and `PowerMenu` have it built in; hand-written menus use it too — do not write `background: var(--color-surface)`
 - The close animation uses `useDialogPresence(open, 130)` + a CSS `transition`, not `onAnimationEnd`
 - Keyboard handling for these menus (focus on open, arrow keys, Esc / Tab returning focus to the trigger) is shared through `hooks/useMenuKeyboard`; `ActionMenu`, `ListboxPopover` and `PowerMenu` all use it, so new menus should too instead of writing their own key handlers
 - To pick one item from a list where each item needs a second line (status, date), use `components/ListboxPopover`, e.g. the week switcher on the narrow AI tutor check layout. The trigger carries `aria-haspopup="listbox"` and `aria-expanded`, and the arrow keys open it. On open, focus lands on the selected item, scrolled to the middle; arrow keys / Home / End move, Enter picks, and Esc or Tab closes and returns focus to the trigger
 - For long scrollable lists, pass `maxHeight` to `useAnchoredMenu`: when there is not enough room below, the list shrinks to the space left instead of being pushed up over its trigger
-- Popups from the bottom of the sidebar (language, account, background tasks) pass `placement="side"`: they open beside the sidebar's outer edge with their bottom aligned to the trigger, in the same place whether the sidebar is expanded or collapsed. The language menu is a `ListboxPopover`, the account menu an `ActionMenu` with `header` (avatar, name), and the background-tasks panel uses `useAnchoredMenu` directly. All three pass `glass` (or include `popover-glass`) to keep the sidebar's glass
+- Popups from the bottom of the sidebar (language, account, background tasks) pass `placement="side"`: they open beside the sidebar's outer edge with their bottom aligned to the trigger, in the same place whether the sidebar is expanded or collapsed. The language menu is a `ListboxPopover`, the account menu an `ActionMenu` with `header` (avatar, name), and the background-tasks panel uses `useAnchoredMenu` directly. Their background is `popover-glass` like every other menu, with no extra prop
 - "More actions" menus use `components/ActionMenu`; the trigger is always the vertical ⋮ (`more_vert`) with `aria-haspopup="menu"` and `aria-expanded`. On open, focus lands on the first enabled item; arrow keys wrap, Home / End jump, and Esc or Tab closes and returns focus to the trigger. Esc is marked as handled, so other Esc listeners on the page do not fire too. Put destructive items last with `separatorBefore` and mark them `danger` instead of forcing the color with `!important`. Non-interactive context above the items (the account menu's avatar and name) goes in `header`, which gets a divider below it
 
 ### Stepper
@@ -764,4 +775,4 @@ If a component has special dark-mode needs, scope the override under `body.dark`
 
 > ⚠️ Note: elements with `backdrop-filter` or `transform` create a new stacking context, so the `z-index` of their children cannot escape to the outside. If a dropdown is hidden behind another card, check whether the parent has one of these properties.
 >
-> A glass surface (`glass-surface`) combined with an `overflow: hidden` container will also **clip** an absolutely positioned menu that overflows. If a floating layer may extend beyond its container, `createPortal` it to `document.body` and position it with `position: fixed` (example: `components/PowerMenu`), and give it an opaque `var(--color-surface)` background, otherwise the list content underneath shows through.
+> A glass surface (`glass-surface`) combined with an `overflow: hidden` container will also **clip** an absolutely positioned menu that overflows. If a floating layer may extend beyond its container, `createPortal` it to `document.body` and position it with `position: fixed` (example: `components/PowerMenu`), with a `popover-glass` background (see Dropdown menus above).

@@ -1,10 +1,11 @@
-import MIcon from "../../../components/MIcon";
+import MIcon from "../MIcon";
 import styles from "./Pagination.module.scss";
 
 /**
  * 清單底部的「共 N 筆・第 x / y 頁」＋上一頁／下一頁。
  * 純呈現：page 從 0 起算，分頁邏輯（前端切片或後端 skip/limit）與文案 i18n 由各頁自行決定，
- * 這裡只負責版面與按鈕的停用判斷。使用者、稽核日誌、IP 管理三頁共用。
+ * 這裡只負責版面與按鈕的停用判斷。使用者、稽核日誌、IP 管理、回饋、AI 金鑰管理共用；
+ * 新的分頁清單一律用它，不要在頁面裡手抄一份分頁列。
  */
 export default function Pagination({ page, totalPages, info, prevLabel, nextLabel, onChange }) {
   return (

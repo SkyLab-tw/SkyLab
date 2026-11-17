@@ -116,6 +116,12 @@ function FoldedLine({ label, children }) {
   );
 }
 
+/* 收起來源欄時，來源徽章接在名稱後面同一行（名稱放不下就截斷），不另起一行把名稱欄疊高；沒收起就只有名稱 */
+function NameLine({ badge, children }) {
+  if (!badge) return children;
+  return <div className={styles.nameLine}>{children}{badge}</div>;
+}
+
 /* 名稱欄第二行：類型等原本的說明，後面接收起的節點 */
 function joinMeta(...parts) {
   return parts.filter(Boolean).join(" · ");
@@ -461,7 +467,8 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
       onClick={canOpenDetail ? openDetail : undefined}
     >
     <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div><strong>{machine.name}</strong><small>{machine.ownerName ? <><span className={styles.machineOwner}><MIcon name="person" size={11} />{machine.ownerName}</span> · </> : null}{joinMeta(machine.role, t(type.labelKey ?? type.label), specLabel, fit.isFolded("node") && machine.node)}</small>
-      {fit.isFolded("env") && machine.os && <small>{machine.os}</small>}</div></div></td>
+      {/* 課程機器的名稱本來就取自 os 欄（老師取的機器名），跟名稱一樣就不再寫一行 */}
+      {fit.isFolded("env") && machine.os && machine.os !== machine.name && <small>{machine.os}</small>}</div></div></td>
     {/* 「來源」欄佔位：群組標題列已標示來源，環境內機器不重複 */}
     {!fit.isFolded("kind") && <td className={styles.td}><span className={styles.muted}>—</span></td>}
     {!fit.isFolded("env") && <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>}
@@ -556,9 +563,8 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
       <td className={styles.td}>
         <div className={styles.nameCell}>
           <button type="button" className={styles.environmentToggle} aria-expanded={expanded} aria-label={t("EnvironmentGroupRows.toggleAria", { name: group.title })} onClick={() => setExpanded((value) => !value)}><MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} /></button>
-          <div><strong>{group.title}</strong><small>{joinMeta(t("EnvironmentGroupRows.machineCount", { count: group.machines.length }), fit.isFolded("env") && envLabel, fit.isFolded("node") && group.nodeLabel)}</small>
-            {group.publicationPending && <small className={styles.publicationPending}><MIcon name="schedule" size={12} />{t("EnvironmentGroupRows.publicationPending")}</small>}
-            {fit.isFolded("kind") && <div className={styles.foldedKind}>{kindBadge}</div>}</div>
+          <div><NameLine badge={fit.isFolded("kind") && kindBadge}><strong>{group.title}</strong></NameLine><small>{joinMeta(t("EnvironmentGroupRows.machineCount", { count: group.machines.length }), fit.isFolded("env") && envLabel, fit.isFolded("node") && group.nodeLabel)}</small>
+            {group.publicationPending && <small className={styles.publicationPending}><MIcon name="schedule" size={12} />{t("EnvironmentGroupRows.publicationPending")}</small>}</div>
         </div>
       </td>
       {!fit.isFolded("kind") && <td className={styles.td}>{kindBadge}</td>}
@@ -608,10 +614,11 @@ function ResourceNameCell({ rowState }) {
       <span className={styles.nameIcon}><MIcon name={type.icon} size={18} /></span>
       <div>
         {/* 導覽的 performSelector 會點這裡；點擊沿用整列點擊的 openDetail */}
-        <strong data-guide="resource-open-detail">{resource.name}</strong>
+        <NameLine badge={fit.isFolded("kind") && <ResourceKindCell rowState={rowState} />}>
+          <strong data-guide="resource-open-detail">{resource.name}</strong>
+        </NameLine>
         <small>{joinMeta(typeLabel, fit.isFolded("node") && resource.node)}</small>
         {fit.isFolded("env") && <small>{joinMeta(resource.environment_type || "Custom", resource.os_info)}</small>}
-        {fit.isFolded("kind") && <div className={styles.foldedKind}><ResourceKindCell rowState={rowState} /></div>}
       </div>
     </div>
   );
