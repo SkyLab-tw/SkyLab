@@ -1274,9 +1274,57 @@ describe("proposalToolCallLines", () => {
     };
 
     expect(proposalToolCallLines(message)).toEqual([
-      { icon: "check_circle", text: "已建立提案：檢查 Python 版本" },
-      { icon: "check_circle", text: "已送出修改提案：既有 Port 檢查" },
+      { icon: "check_circle", text: "已建立 1 項提案" },
+      { icon: "check_circle", text: "已送出 1 項修改提案" },
       { icon: "cancel", text: "提案未建立：未讀取項目" },
+    ]);
+  });
+
+  test("多個成功新增合併成一行，修改另計，失敗維持逐項", () => {
+    const staged = (title, operation = "add") => ({
+      tool: operation === "update" ? "edit_checklist_item" : "create_checklist_item",
+      status: "staged",
+      operation,
+      title,
+    });
+    const message = {
+      metadata_json: {
+        tool_calls: [
+          staged("檢查 A"),
+          staged("檢查 B"),
+          staged("檢查 C"),
+          staged("檢查 D"),
+          staged("檢查 E"),
+          staged("既有 F", "update"),
+          staged("既有 G", "update"),
+          { tool: "create_checklist_item", status: "rejected", title: "缺路徑項目" },
+          { tool: "edit_checklist_item", status: "no_change", title: "Port 檢查" },
+        ],
+      },
+    };
+
+    expect(proposalToolCallLines(message)).toEqual([
+      { icon: "check_circle", text: "已建立 5 項提案" },
+      { icon: "check_circle", text: "已送出 2 項修改提案" },
+      { icon: "cancel", text: "提案未建立：缺路徑項目" },
+      { icon: "info", text: "內容未變更，未建立提案：Port 檢查" },
+    ]);
+  });
+
+  test("同標題重試只算一次，已 resolved 的 staged 不計數", () => {
+    const message = {
+      metadata_json: {
+        tool_calls: [
+          { status: "staged", operation: "add", title: "檢查 A" },
+          { status: "staged", operation: "add", title: "檢查 A" },
+          { status: "staged", operation: "add", title: "檢查 B", resolved: true },
+          { status: "staged", operation: "add", title: "檢查 C" },
+        ],
+      },
+    };
+
+    expect(proposalToolCallLines(message)).toEqual([
+      { icon: "check_circle", text: "已建立 2 項提案" },
     ]);
   });
 
@@ -1292,7 +1340,7 @@ describe("proposalToolCallLines", () => {
       { status: "error", title: "套件檢查" },
       { status: "error", title: "套件檢查" },
     ] } })).toEqual([
-      { icon: "check_circle", text: "已送出修改提案：Python 版本" },
+      { icon: "check_circle", text: "已送出 1 項修改提案" },
       { icon: "cancel", text: "提案未建立：套件檢查" },
     ]);
   });

@@ -1383,31 +1383,102 @@ def _title_covered_by_reply(reply_text: str, title: str) -> bool:
     return matched_short >= 2
 
 
-def _partial_failure_note(
+def _titles_overlap(left: str, right: str) -> bool:
+    left_key = _normalized_title_key(left)
+    right_key = _normalized_title_key(right)
+    return bool(left_key and right_key and (left_key in right_key or right_key in left_key))
+
+
+def _proposal_summary_reply(
+    reply_text: str,
+    *,
+    staged_ops: list[dict[str, Any]],
     rejected_ops: list[tuple[TeacherJudgeRubricItem, dict[str, Any], str]],
-    staged_titles: set[str],
+    conversation_focus: dict[str, Any] | None,
     template_commands: list[TeacherJudgeTemplateCommand] | None,
-    reply_text: str = "",
+    error_titles: list[str] | None = None,
 ) -> str:
-    """Summarize unresolved rejections when other proposals staged successfully."""
-    deduped = _dedupe_rejected_ops_keep_latest(rejected_ops)
+    """Add a server-owned proposal count and the items the teacher must look at.
+
+    Counts come from staged tool outcomes, never from model prose. A single clean
+    proposal keeps the model's own sentence untouched.
+    """
+    created: set[str] = set()
+    updated: set[str] = set()
+    teacher_review: dict[str, str] = {}
+    for entry in staged_ops:
+        item = entry["item"]
+        key = _normalized_title_key(item.title)
+        (updated if entry["operation"] == "update" else created).add(key)
+        if item.judgement_mode == "teacher":
+            teacher_review[key] = item.title
+    staged_keys = created | updated
+    if not staged_keys:
+        return reply_text
+
     unresolved = [
-        (item, raw) for item, raw, _reason in deduped if item.title not in staged_titles
+        (item, raw)
+        for item, raw, _reason in _dedupe_rejected_ops_keep_latest(rejected_ops)
+        if _normalized_title_key(item.title) not in staged_keys
     ]
-    if reply_text.strip():
-        unresolved = [
-            (item, raw)
-            for item, raw in unresolved
-            if not _title_covered_by_reply(reply_text, item.title)
-        ]
-    if not unresolved:
-        return ""
-    detail = _proposal_unavailable_reply(
-        [item for item, _raw in unresolved],
-        [raw for _item, raw in unresolved],
-        template_commands,
-    )
-    return f"另外，{detail}"
+    # Unresolved tool errors (already explained by the server-owned error reply)
+    # still count as items that need follow-up; skip titles that later staged.
+    unresolved_keys = {_normalized_title_key(item.title) for item, _raw in unresolved}
+    error_keys = {
+        key
+        for key in (_normalized_title_key(title) for title in error_titles or [])
+        if key and key not in staged_keys and key not in unresolved_keys
+    }
+    known_titles = [*staged_keys, *unresolved_keys, *error_keys]
+    focus_gaps = [
+        (label, requirement)
+        for requirement in (conversation_focus or {}).get("requirements") or []
+        if requirement.get("status") in {"needs_information", "unsupported"}
+        and (label := str(requirement.get("focus_key") or "").strip())
+        and not any(_titles_overlap(label, title) for title in known_titles)
+    ]
+    needs_follow_up = len(unresolved) + len(error_keys) + len(focus_gaps)
+
+    attention = [
+        f"「{title}」交給老師核查：執行後會顯示結果供你判斷。"
+        for title in teacher_review.values()
+        if not _title_covered_by_reply(reply_text, title)
+    ]
+    for item, raw in unresolved:
+        if not _title_covered_by_reply(reply_text, item.title):
+            attention.append(
+                _proposal_unavailable_reply([item], [raw], template_commands).strip()
+            )
+    for label, requirement in focus_gaps:
+        if _title_covered_by_reply(reply_text, label):
+            continue
+        missing = "、".join(
+            str(value) for value in requirement.get("missing_information") or []
+        )
+        attention.append(
+            f"「{label}」還缺少：{missing}。" if missing else f"「{label}」目前無法安全取證。"
+        )
+    if len(staged_keys) == 1 and not needs_follow_up and not attention:
+        return reply_text
+
+    counts = []
+    if created:
+        counts.append(f"已建立 {len(created)} 項提案")
+    if updated:
+        counts.append(f"已送出 {len(updated)} 項修改提案")
+    lines = ["、".join(counts) + "，請在下方提案清單確認後套用。"]
+    if needs_follow_up or teacher_review:
+        summary = f"摘要：共 {len(staged_keys) + needs_follow_up} 項需求，{len(staged_keys)} 項已建立提案"
+        if teacher_review:
+            summary += f"（其中 {len(teacher_review)} 項交給老師核查）"
+        if needs_follow_up:
+            summary += f"，{needs_follow_up} 項需要補資訊或調整"
+        lines.append(summary + "。")
+    lines.append(reply_text)
+    if attention:
+        lines.append("需要你注意：")
+        lines.extend(f"- {line}" for line in attention)
+    return "\n".join(lines)
 
 
 def _merge_vllm_metrics(first: VLLMMetrics, second: VLLMMetrics) -> VLLMMetrics:
@@ -2946,22 +3017,6 @@ async def chat_with_rubric(
         else:
             reply_text = _proposal_unavailable_reply([], [], template_commands)
 
-    # Partial success: when some proposals staged but others were rejected,
-    # the teacher must see why; the model's own reply often claims full success.
-    # Deduplicate retries (keep latest) and skip titles the model reply already
-    # explains, so one retry does not produce one extra error line + one extra
-    # reply sentence.
-    if not is_refine and updated_items is not None and rejected_ops:
-        rejected_ops = _dedupe_rejected_ops_keep_latest(rejected_ops)
-        failure_note = _partial_failure_note(
-            rejected_ops,
-            {entry["item"].title for entry in staged_ops},
-            template_commands,
-            reply_text,
-        )
-        if failure_note:
-            reply_text = f"{reply_text}\n{failure_note}"
-
     # Tools are the only proposal channel: a ready or prose creation claim
     # without any server-side staged/rejected outcome is false by definition,
     # so the teacher reply is replaced with the actual outcome explanation.
@@ -3036,6 +3091,7 @@ async def chat_with_rubric(
     conversation_focus = _conversation_focus_from_content(
         content, proposal=updated_items,
     )
+    model_focus = conversation_focus
     # Missing execution locations are server facts. Preserve their question
     # even when the model returns logs, an empty reply, or an adherence fallback.
     staged_titles = {entry["item"].title for entry in staged_ops}
@@ -3047,13 +3103,7 @@ async def chat_with_rubric(
     ]
     if location_rejections:
         questions = "\n".join(_teacher_missing_gap_reply(item) for item in location_rejections)
-        ready_summary = (
-            "已整理可套用的提案："
-            + "、".join(f"「{title}」" for title in dict.fromkeys(entry["item"].title for entry in staged_ops))
-            + "。請確認後套用。\n"
-            if staged_ops else ""
-        )
-        reply_text = ready_summary + questions
+        reply_text = questions
         proposal_status = "needs_information"
         conversation_focus = {
             "turn_kind": "follow_up",
@@ -3115,6 +3165,23 @@ async def chat_with_rubric(
                 for key, error in list(unresolved_errors.items())[:8]
             ],
         }
+
+    if not is_refine:
+        # Counts and attention items are server facts; compose them last so the
+        # teacher sees them whichever branch produced the model-facing text.
+        reply_text = _proposal_summary_reply(
+            reply_text,
+            staged_ops=staged_ops,
+            rejected_ops=rejected_ops,
+            conversation_focus=model_focus,
+            template_commands=template_commands,
+            error_titles=[
+                str(error.get("title") or "")
+                for error in unresolved_errors.values()
+                if error.get("tool")
+                in (_CREATE_CHECKLIST_ITEM_TOOL_NAME, _EDIT_CHECKLIST_ITEM_TOOL_NAME)
+            ],
+        )
 
     return TeacherJudgeChatResult(
         reply=reply_text,
@@ -3346,26 +3413,40 @@ def _itemwise_error_result(source: dict[str, Any], exc: Exception) -> dict[str, 
 
 
 def _itemwise_reply(item_results: list[dict[str, Any]], total: int) -> str:
-    lines = [f"已逐項核查附件中的 {total} 個項目："]
-    for result in item_results:
+    review = [row for row in item_results if row["status"] == "teacher_review"]
+    attention = [row for row in item_results if row["status"] != "ready"]
+    created = sum(1 for row in item_results if row["status"] == "ready") + len(review)
+    needs_follow_up = len(attention) - len(review)
+    lines: list[str] = []
+    if created:
+        lines.append(f"已建立 {created} 項提案，請在下方提案清單確認後套用。")
+    summary = f"摘要：共 {total} 項需求，" + (
+        f"{created} 項已建立提案" if created else "沒有建立提案"
+    )
+    if review:
+        summary += f"（其中 {len(review)} 項交給老師核查）"
+    if needs_follow_up:
+        summary += f"，{needs_follow_up} 項需要補資訊或調整"
+    lines.append(summary + "。")
+    if attention:
+        lines.append("需要你注意：")
+    for result in attention:
         label = f"{result['source_label']}「{result['title']}」"
         status = result["status"]
-        if status == "ready":
-            lines.append(f"{label}已整理成提案，請在下方提案清單確認後套用。")
-        elif status == "teacher_review":
-            lines.append(f"{label}會收集檢查結果供你自行判斷，請在提案清單確認後套用。")
+        if status == "teacher_review":
+            lines.append(f"- {label}交給老師核查：執行後會顯示結果供你判斷。")
         elif status == "needs_information":
             missing = result["missing_information"]
             gap = (
                 "、".join(missing) if missing else (result["detail"] or "缺少必要資訊")
             )
-            lines.append(f"{label}還缺少資訊：{gap}")
+            lines.append(f"- {label}還缺少資訊：{gap}")
         elif status == "unsupported":
             lines.append(
-                f"{label}目前無法安全取證：{result['detail'] or '沒有合適的檢查方式'}"
+                f"- {label}目前無法安全取證：{result['detail'] or '沒有合適的檢查方式'}"
             )
         else:
-            lines.append(f"{label}這項分析沒有成功，請稍後針對此項重新送出。")
+            lines.append(f"- {label}這項分析沒有成功，請稍後針對此項重新送出。")
     return "\n".join(lines)
 
 

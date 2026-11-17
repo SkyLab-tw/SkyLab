@@ -34,3 +34,17 @@ models:
     response_formats: ["json_object", "json_schema"]
     native_tool_calls: true
     tool_choice_modes: ["auto", "none", "required", "named"]
+
+  # BIRC-LLM serves Qwen3.8-Flash-Next. The official card lists reasoning_effort
+  # xhigh/medium/low and enable_thinking via chat_template_kwargs, but this
+  # deployment keeps thinking on under json_schema (the adherence check then
+  # truncates at 128 tokens and fails closed) regardless of enable_thinking=false
+  # or effort=low. A top-level reasoning_effort="none" turns it off (verified live).
+  # vLLM recipe: --reasoning-parser qwen3 --enable-auto-tool-choice
+  # --tool-call-parser qwen3_coder, so native tool calls are available.
+  "BIRC-LLM":
+    thinking: "none"
+    thinking_parameter: reasoning_effort
+    response_formats: ["json_object", "json_schema"]
+    native_tool_calls: true
+    tool_choice_modes: ["auto", "none", "required", "named"]
