@@ -42,6 +42,7 @@ import {
   formatTokens,
   isOkStatus,
   presetToBucket,
+  usageEvidence,
 } from "../aiFormat";
 
 const EMPTY = Object.freeze([]);
@@ -532,10 +533,6 @@ function callTypeText(call) {
   return call.request_type ?? call.call_type ?? "—";
 }
 
-function usageLabelKey(call) {
-  return call.usage_reported ? "AiMonitoringPage.usageReported" : "AiMonitoringPage.usageMissing";
-}
-
 /* 時間＋Request ID；窄版收起的使用者、模型、類型依欄位順序接在底下 */
 function CallTimeCell({ row }) {
   useTranslation("ai");
@@ -567,15 +564,27 @@ function CallTypeCell({ row }) {
   return <span className={styles.truncate} title={type}>{type}</span>;
 }
 
-function CallUsageCell({ row }) {
+/* Token 證據：失敗列顯示 log 錯誤代碼（原始 error_message 在 title），成功列依上游是否回報用量 */
+function UsageEvidence({ call }) {
   const { t } = useTranslation("ai");
-  return t(usageLabelKey(row.original));
+  const evidence = usageEvidence(call);
+  if (evidence === null) return t("AiMonitoringPage.usageMissing");
+  const ok = evidence === "success";
+  return (
+    <span className={`${styles.badge} ${ok ? styles.badge_success : styles.badge_danger}`} title={ok ? undefined : call.error_message ?? undefined}>
+      <span className={styles.dot} />
+      {evidence}
+    </span>
+  );
 }
 
-/* 收起的 Token 證據：值本身（上游已回報／未回報），緊接在 Token 數字底下才看得懂是在說 Token */
+function CallUsageCell({ row }) {
+  return <UsageEvidence call={row.original} />;
+}
+
+/* 收起的 Token 證據：值本身，緊接在 Token 數字底下才看得懂是在說 Token */
 function FoldedUsageLine({ call }) {
-  const { t } = useTranslation("ai");
-  return <div className={styles.foldedLine}>{t(usageLabelKey(call))}</div>;
+  return <div className={styles.foldedLine}><UsageEvidence call={call} /></div>;
 }
 
 /* 輸入 Token；窄版收起的輸出、Token 證據接在底下（Token 一組排在一起） */

@@ -390,7 +390,7 @@ async def test_teacher_judge_session_proposal_keeps_only_ready_changes(monkeypat
     assert proposal is not None
     assert proposal[0]["id"].startswith("item-")
     assert proposal[0]["operation"] == "add"
-    assert "多條需求可以分次呼叫工具" in captured["messages"][0][
+    assert "有多條完整需求時，在同一輪一起呼叫工具" in captured["messages"][0][
         "content"
     ]
 

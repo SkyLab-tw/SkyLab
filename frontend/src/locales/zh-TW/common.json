@@ -521,7 +521,7 @@
   "UserGuide.aiMonitoring.models.title": "模型分頁看運行狀態",
   "UserGuide.aiMonitoring.models.text": "列出各模型的 Runtime 狀態（線上／部分異常／離線）、健康與異常的部署數，以及期間內的呼叫次數、Tokens、失敗率與平均延遲。有呼叫紀錄的模型名稱可以點，會帶你看它的金鑰 API 呼叫。",
   "UserGuide.aiMonitoring.proxy.title": "金鑰 API 呼叫明細",
-  "UserGuide.aiMonitoring.proxy.text": "使用者用自己的金鑰發出的每筆呼叫，可用「全部／成功／失敗」篩選。「首 Token」是收到第一個 token 的時間；「Token 證據」顯示「上游未回報」時，代表模型沒回報用量，token 會記為 0、也不計算輸出速度。明細只載入期間內最新 100 筆，搜尋也只在這些資料裡找。",
+  "UserGuide.aiMonitoring.proxy.text": "使用者用自己的金鑰發出的每筆呼叫，可用「全部／成功／失敗」篩選。「首 Token」是收到第一個 token 的時間；「Token 證據」在成功的呼叫顯示 success；顯示「上游未回報」時，代表模型沒回報用量，token 會記為 0、也不計算輸出速度；失敗的呼叫則顯示記錄的錯誤代碼（例如 429 rate_limit、HTTP 404、timeout），滑鼠移上去可看原始錯誤。明細只載入期間內最新 100 筆，搜尋也只在這些資料裡找。",
   "UserGuide.aiMonitoring.template.title": "平台內建 AI 與使用者用量",
   "UserGuide.aiMonitoring.template.text": "「Template 呼叫」是平台內建 AI 功能（範本推薦、AI 導覽、Teacher Judge）的呼叫紀錄；旁邊的「使用者用量」把兩種來源合計，方便找出用量最大的使用者。",
   "UserGuide.courseCms.title": "課程管理",

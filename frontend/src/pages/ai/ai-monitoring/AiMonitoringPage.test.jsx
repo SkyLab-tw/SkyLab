@@ -320,7 +320,7 @@ describe("AiMonitoringPage 窄版收欄", () => {
     expect(time).toContain("chat_completion");
     expect(input).toContain("1.2K");
     expect(input).toContain("AiMonitoringPage.colOutput 345");
-    expect(input).toContain("AiMonitoringPage.usageReported");
+    expect(input).toContain("success");
     expect(duration).toContain("AiMonitoringPage.colFirstToken 350ms");
     expect(duration).toContain("12.35 tok/s");
     expect(status).not.toContain("AiMonitoringPage.colInput");
@@ -335,7 +335,7 @@ describe("AiMonitoringPage 窄版收欄", () => {
     expect(headers()).not.toContain("AiMonitoringPage.colInput");
     const status = cells().at(-1);
     expect(status).toContain("AiMonitoringPage.colInput 1.2K · AiMonitoringPage.colOutput 345");
-    expect(status.indexOf("AiMonitoringPage.usageReported")).toBeGreaterThan(status.indexOf("AiMonitoringPage.colOutput"));
+    expect(status.lastIndexOf("success")).toBeGreaterThan(status.indexOf("AiMonitoringPage.colOutput"));
   });
 
   test("呼叫紀錄在手機（約 400px）只剩時間與狀態：誰、呼叫什麼在時間底下，耗時與速度在狀態底下", async () => {
