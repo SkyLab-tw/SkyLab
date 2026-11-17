@@ -312,7 +312,6 @@
   "AiMonitoringPage.colFirstToken": "First token",
   "AiMonitoringPage.colOutputRate": "E2E output rate",
   "AiMonitoringPage.colUsageEvidence": "Token evidence",
-  "AiMonitoringPage.usageReported": "Reported upstream",
   "AiMonitoringPage.usageMissing": "Missing upstream",
   "AiMonitoringPage.colStatus": "Status",
   "AiMonitoringPage.colCallType": "Call Type",

@@ -37,6 +37,7 @@ import {
   formatTokens,
   isOkStatus,
   presetToBucket,
+  usageEvidence,
 } from "../aiFormat";
 
 const EMPTY = Object.freeze([]);
@@ -422,7 +423,16 @@ function CallModelCell({ row }) {
 
 function CallUsageCell({ row }) {
   const { t } = useTranslation("ai");
-  return t(row.original.usage_reported ? "AiMonitoringPage.usageReported" : "AiMonitoringPage.usageMissing");
+  const call = row.original;
+  const evidence = usageEvidence(call);
+  if (evidence === null) return t("AiMonitoringPage.usageMissing");
+  const ok = evidence === "success";
+  return (
+    <span className={`${styles.badge} ${ok ? styles.badge_success : styles.badge_danger}`} title={ok ? undefined : call.error_message ?? undefined}>
+      <span className={styles.dot} />
+      {evidence}
+    </span>
+  );
 }
 
 const callColumns = columnHelper.columns([

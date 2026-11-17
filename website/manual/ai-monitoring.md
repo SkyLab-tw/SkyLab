@@ -70,7 +70,7 @@ A model that only appears in past usage and is not known to the gateway shows "â
 3. Type in the search box to filter by user, model, call type or request ID.
 4. Read the row: **Time** (with the start of the request ID), **User**, **Model** (shown as "requested â†’ answered" when the upstream answered with a different model), **Type**, **Input** and **Output** tokens, **Duration**, **First token** (time until the first token arrived), **E2E output rate**, **Token evidence** and **Status**.
 
-When **Token evidence** says **Missing upstream**, the model did not report its token usage: tokens are recorded as 0 and no output rate is computed.
+**Token evidence** shows **success** for successful calls. When it says **Missing upstream**, the model did not report its token usage: tokens are recorded as 0 and no output rate is computed. Failed calls show the logged error code instead, such as **429 rate_limit**, **HTTP 404**, **timeout** or **server_busy**; hover it to see the original error message.
 
 ![Inspect individual calls (numbers match the steps above)](/manual-shots/en/ai-monitoring/s06.webp)
 

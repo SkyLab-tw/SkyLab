@@ -520,7 +520,7 @@
   "UserGuide.aiMonitoring.models.title": "モデルタブで稼働状態を確認",
   "UserGuide.aiMonitoring.models.text": "各モデルの Runtime状態（オンライン／一部異常／オフライン）、正常と異常のデプロイ数、期間内の呼び出し回数、Tokens、失敗率、平均レイテンシを一覧します。呼び出し記録のあるモデル名はクリックでき、そのモデルの APIキー呼び出しを表示します。",
   "UserGuide.aiMonitoring.proxy.title": "APIキー呼び出しの詳細",
-  "UserGuide.aiMonitoring.proxy.text": "使用者が自分のキーで行った呼び出しを 1 件ずつ表示し、「すべて／成功／失敗」で絞り込めます。「最初のToken」は最初の token を受け取るまでの時間です。「Token証拠」が「上流から未報告」の場合はモデルが利用量を報告しておらず、token は 0 として記録され、出力速度も計算されません。詳細は期間内の最新 100 件だけを読み込み、検索もその範囲内で行われます。",
+  "UserGuide.aiMonitoring.proxy.text": "使用者が自分のキーで行った呼び出しを 1 件ずつ表示し、「すべて／成功／失敗」で絞り込めます。「最初のToken」は最初の token を受け取るまでの時間です。「Token証拠」は成功した呼び出しでは success を表示します。「上流から未報告」の場合はモデルが利用量を報告しておらず、token は 0 として記録され、出力速度も計算されません。失敗した呼び出しには記録されたエラーコード（429 rate_limit、HTTP 404、timeout など）が表示され、マウスを重ねると元のエラーを確認できます。詳細は期間内の最新 100 件だけを読み込み、検索もその範囲内で行われます。",
   "UserGuide.aiMonitoring.template.title": "内蔵 AI と使用者ごとの利用量",
   "UserGuide.aiMonitoring.template.text": "「Template呼び出し」はプラットフォーム内蔵の AI 機能（テンプレート推薦、AI ナビゲーション、Teacher Judge）の呼び出し記録です。隣の「使用者の使用状況」は両方の利用元を合算しているので、利用量の多い使用者を見つけやすくなります。",
   "UserGuide.courseCms.title": "コース管理",

@@ -7,6 +7,7 @@ import {
   formatTokens,
   isOkStatus,
   presetToBucket,
+  usageEvidence,
 } from "../aiFormat";
 
 const t = (key, values = {}) => `${key}:${JSON.stringify(values)}`;
@@ -37,6 +38,25 @@ describe("AiMonitoringPage formatting", () => {
     expect(isOkStatus("success")).toBe(true);
     expect(isOkStatus(200)).toBe(true);
     expect(isOkStatus("upstream_http_503")).toBe(false);
+  });
+
+  test("Token 證據：成功看用量回報，失敗顯示 log 錯誤代碼", () => {
+    const evidence = (status, error_message, usage_reported = false) => usageEvidence({ status, error_message, usage_reported });
+    expect(evidence("success", null, true)).toBe("success");
+    expect(evidence("success", null, false)).toBeNull();
+    /* 失敗列即使已回報用量也不標 success */
+    expect(evidence("error", "generation_timeout", true)).toBe("timeout");
+    expect(evidence("error", "upstream_http_429")).toBe("429 rate_limit");
+    expect(evidence("error", "upstream_http_404")).toBe("HTTP 404");
+    expect(evidence("error", "upstream_http_502")).toBe("HTTP 502");
+    expect(evidence("error", "queue_timeout")).toBe("server_busy");
+    expect(evidence("error", "queue_full")).toBe("server_busy");
+    expect(evidence("error", "request_timeout")).toBe("timeout");
+    expect(evidence("error", "upstream_unavailable")).toBe("upstream_unavailable");
+    expect(evidence("error", "incomplete_stream")).toBe("incomplete_stream");
+    expect(evidence("cancelled", "client_disconnected")).toBe("cancelled");
+    expect(evidence("error", "Connection reset by peer")).toBe("error");
+    expect(evidence("error", null)).toBe("error");
   });
 });
 
