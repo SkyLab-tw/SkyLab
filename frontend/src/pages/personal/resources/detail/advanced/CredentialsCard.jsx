@@ -95,7 +95,7 @@ function PasswordModal({ closing, loading, willReboot, isWindows, onClose, onSub
         <SegmentedControl
           fullWidth
           options={[
-            { value: "generate", label: t("CredentialsCard.modeGenerate"), icon: "auto_awesome" },
+            { value: "generate", label: t("CredentialsCard.modeGenerate"), icon: "casino" },
             { value: "custom", label: t("CredentialsCard.modeCustom"), icon: "edit" },
           ]}
           value={mode}

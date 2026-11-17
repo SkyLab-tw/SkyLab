@@ -559,6 +559,9 @@ def test_auto_approved_immediate_request_returns_400_when_rebuild_fails(
     )
 
     session = _FakeSession()
+    monkeypatch.setattr(
+        vm_request_service.pending_capacity, "lock_allocation", lambda _s: None
+    )
     with pytest.raises(BadRequestError) as exc_info:
         vm_request_service.create(
             session=session,  # type: ignore[arg-type]

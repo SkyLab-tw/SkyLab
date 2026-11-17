@@ -19,6 +19,7 @@ import {
   applyProposalOperations,
   attachStudentReports,
   checkOutcome,
+  studentHasSavedReview,
   studentMachineChips,
   machinePowerState,
   checkpointBadge,
@@ -1959,6 +1960,71 @@ describe("teacher review run-once（整組檢查點）", () => {
     container.remove();
   });
 
+  test("已存的核查（判定或評語）才算核查過；空白評語、沒有結果都不算", () => {
+    const row = (review) => ({ target: { teacher_review: review } });
+    expect(studentHasSavedReview({ machines: [row({ feedback: "", decisions: {} })] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [row({ feedback: "  ", decisions: {} })] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [{ target: null }] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [] })).toBe(false);
+    expect(studentHasSavedReview({ machines: [row({ feedback: "", decisions: { "check-db": "pass" } })] })).toBe(true);
+    expect(studentHasSavedReview({ machines: [{ target: null }, row({ feedback: "舊留言", decisions: {} })] })).toBe(true);
+  });
+
+  test("重新檢查已核查過的學生要先確認；取消就不執行", async () => {
+    vi.spyOn(AiJudgeService, "listSessionRuns").mockResolvedValue([
+      { id: "run-1", artifact_id: "artifact-1", run_batch_id: "batch-1", status: "completed" },
+    ]);
+    vi.spyOn(AiJudgeService, "listSessionScriptSets").mockResolvedValue([{ artifact_set_id: "set-1", is_active: true, status: "approved", children: [] }]);
+    vi.spyOn(AiJudgeService, "getSessionRunBatch").mockResolvedValue(batchPayload);
+    const createRun = vi.spyOn(AiJudgeService, "createSessionScriptSetRun").mockResolvedValue({
+      run_batch_id: "batch-2", status: "pending", summary: {}, nodes: [], students: [],
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(withQueryClient(<ConfirmProvider><TeacherReviewTab classId="class-1" sessionId="session-1" members={members} /></ConfirmProvider>, queryClient));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    await act(async () => {
+      [...container.querySelectorAll("button")].find((button) => button.textContent.includes("王小明")).click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const runStudent = () => [...container.querySelectorAll("button")]
+      .find((button) => button.textContent.includes(i18n.t("AiJudgePanel.runStudentBtn", { ns: "teaching" })));
+    const dialogButton = (label) => [...document.querySelectorAll('[role="alertdialog"] button')]
+      .find((button) => button.textContent === label);
+
+    // 王小明已經留過評語：按「檢查這位學生」先跳確認，取消就不建立新的一批
+    await act(async () => {
+      runStudent().click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(document.querySelector('[role="alertdialog"]').textContent)
+      .toContain(i18n.t("AiJudgePanel.rerunReviewedOne", { ns: "teaching" }));
+    await act(async () => {
+      dialogButton(i18n.t("ConfirmProvider.cancel", { ns: "common" })).click();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(createRun).not.toHaveBeenCalled();
+
+    await act(async () => {
+      runStudent().click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await act(async () => {
+      dialogButton(i18n.t("AiJudgePanel.rerunReviewedConfirm", { ns: "teaching" })).click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(createRun).toHaveBeenCalledExactlyOnceWith("class-1", "session-1", "set-1", {
+      userIds: ["user-1"], runBatchId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   test.each([false, true])("一個學生共用儲存按鈕：跨機器判定與回覆一起存，回覆失敗可重試（%s）", async (failReplyOnce) => {
     const batch = structuredClone(batchPayload);
     batch.students[0].nodes.push({
@@ -2503,6 +2569,10 @@ describe("導師核查：全班當週回報與指定檢查", () => {
     // 回報狀態是 20px 圖示：完成＝實心綠勾，未回報＝小空心點（不畫數字、不像勾選框）
     const ticks = [...container.querySelectorAll('[class*="reportTick"]')];
     expect(ticks.map((tick) => tick.textContent)).toEqual(["check_circle", ""]);
+    // 回報狀態一律中性灰，狀態色只留給右側的檢查結果
+    const reportBadge = [...container.querySelectorAll("span")]
+      .find((node) => node.textContent === i18n.t("AiJudgePanel.reportReady", { ns: "teaching" }));
+    expect(reportBadge.className).toMatch(/muted/);
 
     const runReady = [...container.querySelectorAll("button")]
       .find((button) => button.textContent.includes(i18n.t("AiJudgePanel.runReadyBtn", { ns: "teaching", count: 1 })));

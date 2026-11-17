@@ -26,7 +26,7 @@ import { useFirewallCacheUpdater, useFirewallTopologyQuery } from "../../../quer
 import RulesPanel       from "../../../components/RulesPanel/RulesPanel";
 import EmptyState       from "../../../components/EmptyState/EmptyState";
 import ConnectionDialog from "../../../components/ConnectionDialog/ConnectionDialog";
-import { canManageNode, toDialogNodes } from "../../../components/ConnectionDialog/topologyNodes";
+import { canManageNode, readOnlyNodeMessageKey, toDialogNodes } from "../../../components/ConnectionDialog/topologyNodes";
 import GatewayNode      from "./nodes/GatewayNode";
 import VMNode           from "./nodes/VMNode";
 import GroupNode        from "./nodes/GroupNode";
@@ -395,7 +395,7 @@ export default function FirewallPage() {
       .map((id) => byId.get(id))
       .find((n) => n && !canManageNode(n));
     if (readOnly) {
-      toast.error(t("FirewallPage.readOnlyNode", { name: readOnly.name }));
+      toast.error(t(readOnlyNodeMessageKey(readOnly), { name: readOnly.name }));
       return;
     }
     setDialogPreset({ source: toDialogKey(conn.source), target: toDialogKey(conn.target) });

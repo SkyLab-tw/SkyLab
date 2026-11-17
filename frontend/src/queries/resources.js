@@ -6,6 +6,8 @@ import { LIST_REFRESH_INTERVAL } from "./queryClient";
 
 /** 有機器開機中時追 5 秒一次（原 resourceRows.BOOTING_POLL_INTERVAL） */
 export const BOOTING_POLL_INTERVAL = 5_000;
+/** 有核准後還在開通中的申請（清單上的佔位列）時 10 秒一次：機器建好就會換成真的那一列 */
+export const PROVISIONING_POLL_INTERVAL = 10_000;
 
 export const resourceKeys = Object.freeze({
   all: ["resources"],
@@ -25,10 +27,12 @@ async function fetchMyResources({ signal }) {
   return { resources: resources ?? [], sessions: sessions ?? [] };
 }
 
-export function bootingPollInterval(data) {
-  return (data?.resources ?? []).some((r) => r.status === "starting")
-    ? BOOTING_POLL_INTERVAL
-    : LIST_REFRESH_INTERVAL;
+/** 機器清單的輪詢間隔：開機中最快，其次是開通中，平常 30 秒 */
+export function resourcePollInterval(data) {
+  const resources = data?.resources ?? [];
+  if (resources.some((r) => r.status === "starting")) return BOOTING_POLL_INTERVAL;
+  if (resources.some((r) => r.status === "provisioning")) return PROVISIONING_POLL_INTERVAL;
+  return LIST_REFRESH_INTERVAL;
 }
 
 /**
@@ -44,7 +48,7 @@ export function useMyResourcesQuery({ enabled = true } = {}) {
   return useQuery({
     ...myResourcesQueryOptions(),
     enabled,
-    refetchInterval: (query) => bootingPollInterval(query.state.data),
+    refetchInterval: (query) => resourcePollInterval(query.state.data),
   });
 }
 
@@ -62,7 +66,7 @@ export function useAllResourcesQuery({ enabled = true } = {}) {
     queryKey: resourceKeys.everyone,
     queryFn: fetchAllResources,
     enabled,
-    refetchInterval: (query) => bootingPollInterval(query.state.data),
+    refetchInterval: (query) => resourcePollInterval(query.state.data),
   });
 }
 

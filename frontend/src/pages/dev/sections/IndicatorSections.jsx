@@ -15,11 +15,11 @@ export function IndicatorsSection() {
       intro="頁面專屬的小元件也要跟規範對齊：狀態色五款、徽章不加框、hover 帶過渡、圓角與字級走 token。這一區是逐值重抄的對照，不是共用元件；要在第二頁重用時先抽成共用。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="回報打勾 reportTick" refs={["AiJudgePanel .reportTick", "reportTick_ready / _partial"]} note="32px 圓；已完成＝綠底白勾、做到一半＝橙框橙字 n/m（待確認語意）、還沒回報＝灰框空心；JSX 帶 role=img＋aria-label。">
+        <Demo label="回報打勾 reportTick" refs={["AiJudgePanel .reportTick", "reportTick_none"]} note="20px 狀態圖示，一律中性灰（整列只有右側檢查結果帶狀態色）：已完成＝實心勾、做到一半＝進行中（n/m 寫在姓名旁的灰色徽章）、還沒回報＝小空心點；JSX 帶 role=img＋aria-label。">
           <div className={styles.row}>
-            <span className={`${styles.reportTick} ${styles.reportTickReady}`} role="img" aria-label="已完成回報"><MIcon name="check" size={18} /></span>
-            <span className={`${styles.reportTick} ${styles.reportTickPartial}`} role="img" aria-label="回報 2 / 5"><small>2/5</small></span>
-            <span className={styles.reportTick} role="img" aria-label="尚未回報" />
+            <span className={styles.reportTick} role="img" aria-label="已回報完成"><MIcon name="check_circle" size={20} filled /></span>
+            <span className={styles.reportTick} role="img" aria-label="回報 2/5"><MIcon name="timelapse" size={20} /></span>
+            <span className={`${styles.reportTick} ${styles.reportTickNone}`} role="img" aria-label="未回報" />
           </div>
         </Demo>
         <Demo label="堆疊進度條 reviewStackBar" refs={["AiJudgePanel .reviewStackBar", "role=img + aria-label"]} note="8px 高、pill 圓角、neutral 16% 底；段落依序通過（success）／未通過（danger）／待確認（pending），剩下是尚未檢查；寬度變化帶 transition。">
@@ -46,7 +46,7 @@ export function IndicatorsSection() {
             </div>
           </div>
         </Demo>
-        <Demo label="開機燈號 powerDot" refs={["AiJudgePanel .powerDot", "powerDotOn / Off / Unknown"]} note="8px 圓點放在機器晶片最前面：綠＝開著、灰＝關著、空心＝查不到狀態；顏色不是唯一線索，title 與 aria-label 補文字。">
+        <Demo label="開機燈號 powerDot" refs={["AiJudgePanel .powerDot", "powerDotOn / Off / Unknown"]} note="8px 圓點放在機器晶片最前面：綠＝開著、灰＝關著、空心＝查不到狀態；顏色不是唯一線索，title 與 aria-label 補文字。晶片本身一律中性灰，不跟著檢查結果上色（結果只放學生條右側徽章，每台的結果寫在 title）。">
           <div className={styles.row}>
             <span className={styles.machineChip}><span className={`${styles.powerDot} ${styles.powerDotOn}`} role="img" aria-label="開機中" />web-01</span>
             <span className={styles.machineChip}><span className={`${styles.powerDot} ${styles.powerDotOff}`} role="img" aria-label="已關機" />db-02</span>

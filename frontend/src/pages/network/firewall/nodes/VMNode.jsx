@@ -6,15 +6,23 @@ import MachineKindBadge from "../../../../components/MachineKindBadge/MachineKin
 
 const STATUS_COLOR = { running: "var(--color-success)", stopped: "var(--color-danger)" };
 
-/* 歸屬徽章的說明：老師看學生機器、學生看自己的課堂機、管理員看別人的個人機 */
-function originHint(t, data) {
+/* 歸屬徽章的說明：老師看學生機器、學生看自己的課堂機、管理員看別人的個人機。
+   快速練習機一律唯讀（掛鎖），說明直接講原因 */
+function originHint(t, data, readOnly) {
+  if (data.machine_kind === "quick_practice") {
+    return data.owner_name
+      ? t("VMNode.originQuickPracticeOwner", { owner: data.owner_name })
+      : t("VMNode.originQuickPractice");
+  }
   if (data.teaching_class_name && data.owner_name) {
     return t("VMNode.originStudent", { owner: data.owner_name, cls: data.teaching_class_name });
   }
   if (data.teaching_class_name) {
     return t("VMNode.originClassReadOnly", { cls: data.teaching_class_name });
   }
-  return t("VMNode.originOwner", { owner: data.owner_name });
+  if (data.owner_name) return t("VMNode.originOwner", { owner: data.owner_name });
+  /* 自己的機器沒有擁有者名：唯讀就講沒有管理權，否則交回徽章自己的說明，不要出現空白的「擁有者：」 */
+  return readOnly ? t("VMNode.originNoPermission") : undefined;
 }
 
 export default function VMNode({ data, selected }) {
@@ -40,7 +48,7 @@ export default function VMNode({ data, selected }) {
         readOnly={readOnly}
         solid
         className={styles.originBadge}
-        title={originHint(t, data)}
+        title={originHint(t, data, readOnly)}
       />}
 
       <div className={styles.vmStatus} style={{ background: statusColor }} />

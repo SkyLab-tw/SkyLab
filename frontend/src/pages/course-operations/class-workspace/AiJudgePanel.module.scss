@@ -46,9 +46,10 @@
   align-items: center;
   gap: $spacing-8;
 
-  > span { min-width: 0; color: var(--color-text-primary); font-size: $font-size-12; font-weight: $font-weight-700; }
   > small { color: var(--color-text-muted); font-size: $font-size-12; }
 }
+
+.runOnceMachine { min-width: 0; color: var(--color-text-primary); font-size: $font-size-12; font-weight: $font-weight-700; }
 
 /* 檢查點一組：標題列（可收合）＋底下縮排的檢查項 */
 .reviewCheckGroup {
@@ -154,6 +155,9 @@
   line-height: 1.6;
 }
 
+/* 補充說明裡的提醒（例如重新檢查會換掉已存的核查）：只有圖示上警示色，文字維持次要色 */
+.dialogWarnIcon { color: var(--color-pending); }
+
 .reviewSort {
   display: inline-flex;
   align-items: center;
@@ -181,10 +185,13 @@
   padding: 0 2px;
 }
 
-/* 總覽兩條橫列：全班打勾完成的比例；檢查結果（通過／未通過／待確認，剩下是尚未檢查） */
+/* 總覽兩條橫列：全班打勾完成的比例；檢查結果（通過／未通過／待確認，剩下是尚未檢查）。
+   兩列共用同一組欄（subgrid）：右邊數字欄取兩列中較寬的，兩條長條才會一樣長、左右對齊 */
 .reviewStats {
   display: grid;
-  gap: 6px;
+  grid-template-columns: 132px minmax(80px, 1fr) minmax(0, auto);
+  column-gap: $spacing-16;
+  row-gap: 6px;
   padding: $spacing-8 $spacing-16;
   border: 1px solid var(--color-divider);
   border-radius: $radius-8;
@@ -193,10 +200,10 @@
 
 .reviewStatLine {
   display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   min-height: 28px;
   align-items: center;
-  grid-template-columns: 132px minmax(80px, 1fr) minmax(0, auto);
-  gap: $spacing-16;
 }
 
 .reviewStatLabel {
@@ -315,16 +322,24 @@ strong.reviewStatValue { font-size: $font-size-14; }
   gap: $spacing-8;
 }
 
-/* 姓名、打勾狀態、email、機器排成一條；太窄時機器換到下一行，email 先被截斷 */
+/* 固定兩行，每列一樣高：第一行姓名＋回報＋已回覆，第二行 email＋機器。
+   第二行不換行，放不下時 email 和機器名稱一起截斷（完整名稱在 title） */
 .reviewStudentMain {
-  display: flex;
+  display: grid;
   min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px $spacing-16;
+  gap: 2px;
 
   strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+.reviewStudentMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: $spacing-16;
+
   > small {
+    flex: 0 1 auto;
     min-width: 0;
     max-width: 260px;
     overflow: hidden;
@@ -335,30 +350,36 @@ strong.reviewStatValue { font-size: $font-size-14; }
   }
 }
 
-/* 學生的每台機器：標準徽章（12% 淡底、不加框），有檢查結果時換成那台結果的狀態色 */
+/* 學生的每台機器：中性灰徽章（12% 淡底、不加框）。檢查結果只放右側徽章，
+   晶片不再跟著上色，每台的結果寫在 title */
 .machineChips {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
+  min-width: 0;
   gap: 4px;
 }
 
 .machineChip,
 .machineChipEmpty {
   @include badge-base;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 220px;
   gap: 4px;
   padding: 2px 8px;
   color: var(--color-text-secondary);
   background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent);
   font-style: normal;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .machineChipEmpty { color: var(--color-status-neutral); }
-.machineChipPass { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
-.machineChipFail { background: color-mix(in srgb, var(--color-danger) 12%, transparent); color: var(--color-danger); }
-.machineChipPending { background: color-mix(in srgb, var(--color-pending) 12%, transparent); color: var(--color-pending); }
+
+.machineChipLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* 機器標籤最前面的開機燈號：綠＝開著、灰＝關著、空心＝查不到狀態 */
 .powerDot {
@@ -379,7 +400,8 @@ strong.reviewStatValue { font-size: $font-size-14; }
 }
 
 /* 學生條最前面的打勾狀態：20px 狀態圖示，不做成像勾選框的大圓圈。
-   已完成＝綠色實心勾、做到一半＝橘色進行中、還沒回報＝小空心點（n/m 寫在姓名旁的文字） */
+   已完成＝實心勾、做到一半＝進行中、還沒回報＝小空心點（n/m 寫在姓名旁的徽章）。
+   一律中性灰：整列只有右側的檢查結果帶狀態色，綠勾配紅色「未通過」會被誤讀成通過 */
 .reportTick {
   display: inline-flex;
   width: 20px;
@@ -387,11 +409,8 @@ strong.reviewStatValue { font-size: $font-size-14; }
   flex: 0 0 20px;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-muted);
+  color: var(--color-status-neutral);
 }
-
-.reportTick_ready { color: var(--color-success); }
-.reportTick_partial { color: var(--color-pending); }
 
 .reportTick_none::before {
   content: "";
@@ -406,14 +425,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
   min-width: 0;
   align-items: baseline;
   gap: $spacing-8;
-
-  em { flex: 0 0 auto; font-size: $font-size-12; font-style: normal; font-weight: $font-weight-700; }
 }
-
-.reportText_ready { color: var(--color-success); }
-.reportText_partial { color: var(--color-pending); }
-.reportText_none { color: var(--color-text-muted); }
-.replyMark { display: inline-flex; align-items: center; gap: 3px; color: var(--color-primary-on-surface); }
 
 /* 本週回覆放在全部檢查結果之後，與判定共用學生的儲存按鈕。 */
 .replyBar {
@@ -564,7 +576,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
 }
 
 @container judge-content (max-width: 900px) {
-  .reviewStatLine { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .reviewStatLine { grid-template-columns: minmax(0, 1fr) auto; column-gap: $spacing-16; row-gap: 4px; }
   .reviewStatLabel { grid-column: 1; grid-row: 1; }
   .reviewStatValue { grid-column: 2; grid-row: 1; }
   .reviewStackBar { grid-column: 1 / -1; grid-row: 2; }
@@ -625,9 +637,16 @@ strong.reviewStatValue { font-size: $font-size-14; }
   @include btn-icon($danger: true);
 }
 
-/* 列上的動作選單鈕（⋮） */
+/* 週次列上的動作選單鈕（⋮）：列本身已有選中淡底，鈕不再疊白底細框方塊（像框中框）；
+   平常無底色，滑過或選單開著時才浮出淡底 */
 .menuBtn {
-  @include btn-icon-secondary;
+  @include btn-icon;
+  background: transparent;
+
+  &[aria-expanded="true"] {
+    color: var(--color-text-primary);
+    background: var(--color-row-hover);
+  }
 }
 
 /* ── 卡片 ── */
@@ -1633,22 +1652,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
   background: var(--color-surface);
 }
 
-/* ── Badge ── */
-.badge {
-  @include badge-base;
-  justify-content: center;
-  gap: 4px;
-  min-height: 24px;
-  padding: 2px 10px;
-  white-space: nowrap;
-}
-
-.badge_success { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
-.badge_info { background: color-mix(in srgb, var(--color-info) 12%, transparent); color: var(--color-info); }
-.badge_pending { background: color-mix(in srgb, var(--color-pending) 12%, transparent); color: var(--color-pending); }
-.badge_danger { background: color-mix(in srgb, var(--color-danger) 12%, transparent); color: var(--color-danger); }
-.badge_muted { background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent); color: var(--color-status-neutral); }
-
 /* ── Teacher workspace ── */
 .sessionList {
   @include flex-column;
@@ -1711,23 +1714,32 @@ strong.reviewStatValue { font-size: $font-size-14; }
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px;
   align-items: stretch;
-  border: 1px solid transparent;
   border-radius: $radius-8;
-  transition: background $transition-base, border-color $transition-base;
+  transition: background $transition-base;
 }
 
+.sessionRow:hover { background: var(--color-hover); }
+
+/* 目前這週：內容清單的「目前項目」樣式（淡底＋左側主色條、不圍框）；
+   寫在 .sessionRow:hover 後面，滑過目前這週時是淡底加深，不是換成一般 hover 的淺藍 */
 .sessionRowActive {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  @include item-current;
 }
 
-/* 選中的底色、框線由整列（.sessionRowActive）負責；列內按鈕再疊一層底色，
+/* 選中的底色由整列（.sessionRowActive）負責；列內按鈕再疊一層底色，
    標題那塊會比動作鈕那側深一階，看起來像框中框 */
 .sessionRow .sessionItem,
 .sessionRow .sessionItemActive {
   border: 0;
   background: transparent;
   min-width: 0;
+}
+
+/* 鍵盤焦點畫在按鈕框內：清單會捲動，全域規則畫在外面 2px 的外框，左緣與第一週上緣會被裁掉 */
+.sessionRow .sessionItem:focus-visible,
+.sessionRow .sessionItemActive:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
 }
 
 .sessionWeekLabel {
@@ -1769,8 +1781,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
 .weekDotReady {
   background: var(--color-success);
 }
-
-.sessionRow:hover { background: var(--color-hover); }
 
 .sessionRowActions {
   display: flex;
@@ -1931,9 +1941,8 @@ strong.reviewStatValue { font-size: $font-size-14; }
 
 .sourceRailHead h3 { margin: 0; font-size: $font-size-16; }
 .sourceRailHead p { margin: 3px 0 0; color: var(--color-text-muted); font-size: $font-size-12; }
-.sourceRow { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px; align-items: start; padding: 4px; border: 1px solid transparent; border-radius: $radius-8; transition: background $transition-base, border-color $transition-base; }
-.sourceRow:hover { background: var(--color-hover); }
-.sourceRowSelected { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 7%, transparent); }
+/* 只有一份來源、整列不能點（只有下載鈕能按）：不給 hover 淡底，也不掛選中樣式 */
+.sourceRow { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px; align-items: start; padding: 4px; border-radius: $radius-8; }
 .sourceSelect { display: flex; min-width: 0; gap: $spacing-8; padding: 7px; border: 0; color: var(--color-text-primary); background: transparent; text-align: left; }
 .sourceIndicator { color: var(--color-primary); }
 .sourceText { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
@@ -2108,6 +2117,13 @@ strong.reviewStatValue { font-size: $font-size-14; }
     height: calc(100dvh - 240px);
     min-height: 520px;
   }
+}
+
+/* 檢查表空狀態的「詢問 AI 導師檢查」鈕：助理欄並排在旁邊時多餘（輸入框就在右邊），
+   只在助理欄掉到檢查表下方時出現，按了捲過去並聚焦輸入框。斷點跟 .rubricsGrid 分兩欄同一個；
+   連 EmptyState 包按鈕的那層一起藏，說明下方才不會留一截空白 */
+@container judge-content (min-width: 780px) {
+  .noItemsEmpty > div:has(> .askAssistantStacked) { display: none; }
 }
 
 /* 看過的分頁保持掛著、只是隱藏（草稿才不會消失）；.card 等 display 會蓋掉 hidden，這裡補回 */
@@ -2549,7 +2565,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
   .reviewStudentBody { padding-inline: $spacing-8; }
   .reviewCheckGroupBody { padding-left: 0; }
   .reviewCheckGroupHead { grid-template-columns: 20px minmax(0, 1fr) 18px; }
-  .reviewCheckGroupHead > .badge { grid-column: 2; grid-row: 2; justify-self: start; }
+  .reviewCheckGroupHead > .checkpointBadge { grid-column: 2; grid-row: 2; justify-self: start; }
   .reviewCheckGroupChevron { grid-column: 3; grid-row: 1; }
 }
 

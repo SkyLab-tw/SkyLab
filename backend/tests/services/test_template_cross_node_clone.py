@@ -451,6 +451,92 @@ def test_storage_check_requires_shared_storage_off_the_template_node(
     assert len(issues) == 1 and "pve2" in issues[0]
 
 
+def _allocate_one(session, machine, *, fits_storage):
+    """pve2 比範本節點 pve1 閒得多：只看 CPU／RAM 一定選 pve2。"""
+    return class_capacity_service.allocate_class_placements(
+        nodes=[machine],
+        student_ids=[uuid.uuid4()],
+        connection_id=1,
+        eligibility={machine.id: {"pve1", "pve2"}},
+        capacities={"pve1": _node("pve1", memory_gb=8), "pve2": _node("pve2")},
+        fits_storage=fits_storage,
+    )[machine.id]
+
+
+def test_allocation_falls_back_to_template_node_when_shared_storage_is_full(
+    session, monkeypatch
+):
+    """最閒的節點只能放共享儲存，共享儲存滿了就改放範本節點的本機儲存。
+
+    之前選點只看 CPU／RAM，會挑最閒的 pve2，接著儲存區檢查回報「pve2 上沒有
+    任何一個儲存區放得下」，明明範本節點的 local-lvm 還放得下。
+    """
+    template = _template(session)
+    machine = _class_machine(template)
+    ceph = _pool("ceph", shared=True, avail_gb=1)
+    _class_storage(
+        monkeypatch,
+        {"pve1": [_pool("local-lvm", shared=False), ceph], "pve2": [ceph]},
+    )
+    placer = class_capacity_service._storage_placer(
+        session, node_names=["pve1", "pve2"]
+    )
+
+    placed = _allocate_one(session, machine, fits_storage=placer)
+
+    assert set(placed.values()) == {"pve1"}
+    assert (
+        class_capacity_service._storage_pool_issues(
+            session,
+            nodes=[machine],
+            placements={machine.id: placed},
+            storage_nodes=["pve1", "pve2"],
+        )
+        == []
+    )
+
+
+def test_allocation_still_prefers_the_idle_node_when_its_storage_fits(
+    session, monkeypatch
+):
+    template = _template(session)
+    machine = _class_machine(template)
+    ceph = _pool("ceph", shared=True)
+    _class_storage(
+        monkeypatch,
+        {"pve1": [_pool("local-lvm", shared=False), ceph], "pve2": [ceph]},
+    )
+    placer = class_capacity_service._storage_placer(
+        session, node_names=["pve1", "pve2"]
+    )
+
+    assert set(_allocate_one(session, machine, fits_storage=placer).values()) == {
+        "pve2"
+    }
+
+
+def test_allocation_keeps_the_idle_node_when_nothing_fits(session, monkeypatch):
+    """哪裡都放不下時照舊給最閒的節點，由儲存區檢查回報不足。"""
+    template = _template(session)
+    machine = _class_machine(template)
+    ceph = _pool("ceph", shared=True, avail_gb=1)
+    _class_storage(
+        monkeypatch,
+        {"pve1": [_pool("local-lvm", shared=False, avail_gb=1), ceph], "pve2": [ceph]},
+    )
+    placer = class_capacity_service._storage_placer(
+        session, node_names=["pve1", "pve2"]
+    )
+
+    placed = _allocate_one(session, machine, fits_storage=placer)
+
+    assert set(placed.values()) == {"pve2"}
+    issues = class_capacity_service._storage_pool_issues(
+        session, nodes=[machine], placements={machine.id: placed}
+    )
+    assert len(issues) == 1 and "pve2" in issues[0]
+
+
 def test_batch_clone_placement_picks_shared_storage_for_other_nodes(
     session, monkeypatch
 ):

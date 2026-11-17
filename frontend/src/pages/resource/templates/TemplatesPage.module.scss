@@ -297,9 +297,7 @@
 
 .visibilityOptionActive,
 .visibilityOptionActive:hover {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
-  color: var(--color-primary);
+  @include option-selected;
 }
 
 .tripleGrid {

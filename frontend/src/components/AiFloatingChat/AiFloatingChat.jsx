@@ -283,7 +283,7 @@ function StepList({ steps, currentPath, floor = 0, onNavigate, onRecommend }) {
           >
             <MIcon
               name={step.action === "recommend" && statuses[index] !== "done"
-                ? "auto_fix_high"
+                ? "tune"
                 : (STEP_ICON[statuses[index]] ?? STEP_ICON.todo)}
               size={17}
             />
@@ -414,20 +414,24 @@ function Message({ message, live = false, currentPath, onNavigate, onRecommend, 
    對話框擠不進去，寧可讓面板蓋著 */
 const MIN_DIALOG_AREA_PX = 480;
 
-export default function AiFloatingChat({ open = false, onOpenChange = () => {} }) {
+/**
+ * forceOverlay：頁面自己有對話欄時（版面 context 的 setAssistantOverlay），寬螢幕也用覆蓋層開啟，不並排。
+ */
+export default function AiFloatingChat({ open = false, onOpenChange = () => {}, forceOverlay = false }) {
   // 關閉時先播放離場動畫再卸載面板
   const presence = useDialogPresence(open, 180);
   /* <1440px 時面板是覆蓋層（fixed + backdrop），開啟期間鎖住底下頁面捲動；
-     寬螢幕的並排停靠模式不鎖 */
-  const [overlayMode, setOverlayMode] = useState(
+     寬螢幕的並排停靠模式不鎖。頁面要求覆蓋（forceOverlay）時寬螢幕也一樣 */
+  const [narrowViewport, setNarrowViewport] = useState(
     () => window.matchMedia(OVERLAY_QUERY).matches,
   );
   useEffect(() => {
     const mq = window.matchMedia(OVERLAY_QUERY);
-    const onChange = (event) => setOverlayMode(event.matches);
+    const onChange = (event) => setNarrowViewport(event.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+  const overlayMode = narrowViewport || forceOverlay;
   useBodyScrollLock(presence.open && overlayMode);
   /* 面板佔掉的右側寬度寫進 --ai-panel-inset，對話框遮罩（dialog-overlay-avoid-ai）
      據此改在左側剩餘空間置中。量 root 而非 panel：panel 有 translateX 進場動畫，
@@ -1093,7 +1097,7 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {} }
   return (
     <div
       ref={rootRef}
-      className={`${styles.root} ${presence.open ? styles.rootOpen : ""}`}
+      className={[styles.root, presence.open ? styles.rootOpen : "", forceOverlay ? styles.rootOverlay : ""].filter(Boolean).join(" ")}
       /* 助手浮在對話框之上時，在這裡按的鍵（Esc、Enter…）只屬於助手：
          對話框的 Esc 關閉監聽掛在 window/document，不擋會把底下的對話框一起關掉 */
       onKeyDown={(e) => e.stopPropagation()}
@@ -1110,9 +1114,9 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {} }
       {presence.open && (
         <aside className={`${styles.panel} ${presence.closing ? styles.panelOut : ""}`} aria-label={t("AiFloatingChat.assistantName")} data-guide="request-ai-helper-panel">
           <header className={styles.header}>
+            {/* 標頭只放名稱：原本的副標「SkyLab 智慧協作」只是標語，不帶資訊 */}
             <div className={styles.headerText}>
               <strong>{t("AiFloatingChat.assistantName")}</strong>
-              <span>{t("AiFloatingChat.headerSubtitle")}</span>
             </div>
             <button type="button" onClick={clearChat} disabled={loading} title={t("AiFloatingChat.newChatLabel")} aria-label={t("AiFloatingChat.newChatLabel")}>
               <MIcon name="refresh" size={19} />
@@ -1126,7 +1130,7 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {} }
             <div className={styles.contextBar}>
               {intake ? (
                 <>
-                  <MIcon name="auto_fix_high" size={16} />
+                  <MIcon name="tune" size={16} />
                   <span>{t("AiFloatingChat.contextIntakeStatus", { answered: intake.answered, total: intake.total })}</span>
                 </>
               ) : (

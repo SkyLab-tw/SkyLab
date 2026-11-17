@@ -133,7 +133,18 @@ For the darker hover state of destructive actions use `--color-danger-dark` (`#b
 
 #### The standard way to write a status badge
 
-The pill shape and text come from `@include badge-base;` (inline-flex, pill radius, 12px / 500, no wrapping); add the padding and one of these colour pairs:
+New code always uses the shared `components/StatusBadge` component; do not copy the tone classes into page SCSS again:
+
+```jsx
+<StatusBadge tone="success" icon="check_circle">Passed</StatusBadge>
+```
+
+- `tone`: `success` / `danger` / `info` / `pending` / `muted`, plus `primary` (for non-status marks in the primary colour, such as "Teacher replied").
+- `icon` is optional and sits before the text; leave it out when a status icon with the same meaning is already next to it (such as the tick at the start of a row, or the icon in a checkpoint header).
+- `className` is for placement only (grid column, alignment); do not override colours with it.
+- The same status must look the same on every page: the teacher side of the AI tutor check (tutor review) and the student side (week page, course page) share one set of tones and icons, e.g. "Waiting for teacher" is `pending` + `person_search` on both sides.
+
+Older pages that have not moved to the component yet still use the hand-written form below (the pill shape and text come from `@include badge-base;`: inline-flex, pill radius, 12px / 500, no wrapping; add the padding and one of these colour pairs); they will be migrated in batches:
 
 ```scss
 .badge_success { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
@@ -342,6 +353,12 @@ The standard form:
 ```
 
 - A clickable card's hover only gets a light tint (`background: var(--color-hover)`) or a shadow / lift, with a `transition` for fade-in and fade-out; **do not change the border colour** — a blue border is reserved for the "selected / current" state (such as an active tab or the current step of a flow)
+- "Selected / current" comes in two tiers; do not mix them:
+  - **Navigation** (sidebar, class tabs, `SegmentedControl`): solid primary with white text. One per level, short labels
+  - **Current item of a content list** (the row in a master–detail list whose details are shown on the right, such as the week list in AI Check): `@include item-current;` — an 8% primary tint plus a 3px primary bar on the left, **no border**. The tint alone is indistinguishable from the hover tint, so the bar is the marker; it is deliberately one step lighter than navigation so it does not compete with the page's primary button. Covers the AI Check week list, the request review list and the environment picked when setting up a class; when the row itself is a white card pass `item-current(var(--color-surface))`
+- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons
+- Option buttons that carry a swatch, a description or their own border (appearance settings, template visibility): the selected one uses `@include option-selected;` — primary border, 8% tint, primary text. These are options, not the current item of a list, so a border is fine
+- Expanded is not selected: an expanded card only gets a deeper shadow (`var(--shadow-md)`) and keeps its border colour; an info row that is the only item and cannot be chosen gets no selected style
 - Do not build the tint with a `linear-gradient` layer: gradients cannot transition, so the hover colour would jump instantly
 - Content blocks inside a glass card (info fields, note boxes, `pre` blocks for code / logs / keys, list rows, stat cells) always use `background: var(--color-surface)` (white) plus `1px solid var(--color-border)`; do not fill them with primary-tinted light blues such as `--color-hover` or `--color-bg-base`. Those follow the primary colour, so when the user changes the background colour they blur into the glass that lets the background through. Light blue is reserved for hover / selected states, buttons, badges and callout boxes
 - A warning notice (in a dialog or card, saying what will happen when you press the button — the machine reboots, unsaved work is lost) uses `@include warn-notice;`: white background + `1px solid var(--color-border)`, **red only on the `warning` icon**, with the text in the normal colour. Orange is reserved for pending/awaiting-review and is never used for warnings; don't add a red tint or a red border either, so the notice doesn't outshout the primary button next to it. Markup: `<p><MIcon name="warning" size={16} /><span>text</span></p>`
@@ -378,6 +395,7 @@ const presence = useDialogPresence(show);
 - Height: a `Modal` card is at most `90vh` tall; the screen dialogs (VNC / terminal console, classroom watch) fix their own height at `88vh`
 - Fullscreen: the dialog that can go fullscreen styles the `:fullscreen` pseudo-class with `max-width: 100%; height: 100%; border-radius: 0` (see `ConsoleDialog.module.scss`)
 - Backdrop: `var(--color-overlay)` with `backdrop-filter: blur(4px)` at `z-index: 300`, portalled to `document.body`: when an ancestor has `backdrop-filter` / `transform`, `position: fixed` gets trapped inside that layer and cannot cover the whole screen. While the AI assistant panel is open the backdrop leaves the panel's width free (`dialog-overlay-avoid-ai`) and centres the dialog in the remaining space
+- The AI assistant sits beside the page at ≥1440 and overlays it below 1440. A page with its own chat column (such as the check assistant on the AI tutor check page) calls the layout context's `setAssistantOverlay(true)` while mounted and resets it on unmount: the assistant then opens as an overlay instead of squeezing the page or putting two chat inputs side by side
 - Card shadow: the compact card uses the default `glass-surface` shadow; the `closeButton` layout uses `var(--shadow-lg)` so it stands out more against the backdrop
 - Destructive confirmations pass `role="alertdialog"` (`useConfirm` does this)
 

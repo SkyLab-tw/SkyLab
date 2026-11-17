@@ -10,6 +10,7 @@ import Switch from "../../../components/Switch/Switch";
 import Stepper from "../../../components/Stepper/Stepper";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
 import MachineKindBadge from "../../../components/MachineKindBadge/MachineKindBadge";
+import StatusBadge from "../../../components/StatusBadge/StatusBadge";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import { useToast } from "../../../hooks/useToast";
 import { Demo, RuleList, Section } from "../DevSection";
@@ -436,11 +437,12 @@ export function StepperSection() {
 }
 
 const STATUS_BADGES = [
-  ["badge_success", "運行中", "--color-success"],
-  ["badge_info", "進行中", "--color-info"],
-  ["badge_pending", "待審核", "--color-pending"],
-  ["badge_danger", "失敗", "--color-danger"],
-  ["badge_muted", "已停止", "--color-status-neutral"],
+  ["success", "運行中", "--color-success", "check_circle"],
+  ["info", "進行中", "--color-info", "sync"],
+  ["pending", "待審核", "--color-pending", "person_search"],
+  ["danger", "失敗", "--color-danger", "error"],
+  ["muted", "已停止", "--color-status-neutral", "hourglass_empty"],
+  ["primary", "老師有回覆", "--color-primary", "forum"],
 ];
 
 export function BadgesSection() {
@@ -448,15 +450,22 @@ export function BadgesSection() {
     <Section
       id="badges"
       title="徽章 Badges"
-      refs={["@include badge-base", ".badge_success / _info / _pending / _danger / _muted", "components/MachineKindBadge/MachineKindBadge.jsx"]}
+      refs={["components/StatusBadge/StatusBadge.jsx", "@include badge-base", "components/MachineKindBadge/MachineKindBadge.jsx"]}
       intro="徽章一律「狀態色 12% 淡底＋狀態色文字」，不加外框；疊在會透出底圖的畫布上時淡底改混 var(--color-surface)。機器來源徽章只用兩群色：我的（info）／別人的（kind-shared），類別交給圖示＋文字。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="狀態徽章五款" refs={["color-mix(in srgb, var(--color-*) 12%, transparent)"]}>
-          <div className={styles.row}>
-            {STATUS_BADGES.map(([cls, label, token]) => (
-              <span key={cls} className={`${styles.badge} ${styles[cls]}`} title={token}>{label}</span>
-            ))}
+        <Demo label="狀態徽章 StatusBadge" refs={["tone", "icon（選填）", "className 只放位置"]} note="狀態色五款＋primary（非狀態的主色標記）；旁邊已有同義圖示時不帶 icon。">
+          <div className={styles.stack}>
+            <div className={styles.row}>
+              {STATUS_BADGES.map(([tone, label, token]) => (
+                <StatusBadge key={tone} tone={tone} title={token}>{label}</StatusBadge>
+              ))}
+            </div>
+            <div className={styles.row}>
+              {STATUS_BADGES.map(([tone, label, token, icon]) => (
+                <StatusBadge key={tone} tone={tone} icon={icon} title={token}>{label}</StatusBadge>
+              ))}
+            </div>
           </div>
         </Demo>
         <Demo label="機器來源 MachineKindBadge" refs={["kind", "classRelation", "ownerName", "readOnly"]} note="有擁有者名一律歸「別人的」紫群；淡底 8%。">
