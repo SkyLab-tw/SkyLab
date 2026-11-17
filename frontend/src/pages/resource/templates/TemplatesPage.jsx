@@ -7,6 +7,8 @@ import styles from "./TemplatesPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import Modal from "../../../components/Modal/Modal";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import { TemplatesService } from "../../../services/templates";
@@ -241,8 +243,38 @@ function ColumnTitle({ index }) {
   return useColumns()[index];
 }
 
+/* ── 窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起版本、類型、VMID、可見範圍：前三樣收進名稱下面一行小字，可見範圍收到狀態底下。
+   欄寬只寫在這裡：可見範圍只有「全部可見／私人」兩種，110px 放得下（英文 Visible to Everyone 折兩行），
+   英文的 Actions 表頭要 80px；狀態徽章不換行，英文的 Update cycle in progress 放不下時在欄內截斷（title 看全文）。
+   全部欄 830px，1366 筆電（表格區約 944px）不用捲；收掉 VMID、類型、版本後 560px，
+   1440 開著 AI 助手（約 567px）、窄視窗（約 600px）都還放得下可見範圍這一欄 */
+/* 類型是分類、不是狀態，寫純文字不做膠囊（整張表只留狀態一種膠囊）。
+   qemu 是 Proxmox 內部名稱，對使用者寫 VM，跟「我的資源」的「虛擬機 (VM)」同一個說法；縮寫各語系通用 */
+const TEMPLATE_TYPE_LABELS = Object.freeze({ qemu: "VM", lxc: "LXC" });
+
+function templateTypeLabel(type) {
+  return TEMPLATE_TYPE_LABELS[type] ?? type;
+}
+
+const TEMPLATE_FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 230 },
+  { id: "pve_vmid", width: 90, fold: 3 },
+  { id: "resource_type", width: 100, fold: 2 },
+  { id: "status", width: 140 },
+  { id: "visibility", width: 110, fold: 4 },
+  { id: "version", width: 80, fold: 1 },
+  { id: "actions", width: 80 },
+]);
+
 function TemplateNameCell({ template }) {
   const { t } = useTranslation("resource");
+  const fit = useTableFitContext();
+  const foldedMeta = [
+    fit.isFolded("pve_vmid") && template.pve_vmid,
+    fit.isFolded("resource_type") && templateTypeLabel(template.resource_type),
+    fit.isFolded("version") && t("TemplatesPage.versionLabel", { version: template.version }),
+  ].filter(Boolean).join(" · ");
   return (
     <>
       <div className={styles.nameCell}>
@@ -263,6 +295,7 @@ function TemplateNameCell({ template }) {
           </span>
         )}
       </div>
+      {foldedMeta && <p className={`${styles.nameDesc} ${styles.monoMeta}`}>{foldedMeta}</p>}
       {template.description && (
         <p className={styles.nameDesc}>{template.description}</p>
       )}
@@ -276,6 +309,16 @@ function TemplateNameCell({ template }) {
 function VisibilityCell({ template }) {
   const { t } = useTranslation("resource");
   return visibilityLabel(template, t);
+}
+
+/* 窄版收起可見範圍時，改寫在狀態徽章底下 */
+function TemplateStatusCell({ template }) {
+  const { t } = useTranslation("resource");
+  const fit = useTableFitContext();
+  return <>
+    <TemplateStatusBadge status={template.status} />
+    {fit.isFolded("visibility") && <p className={styles.foldedLine}>{visibilityLabel(template, t)}</p>}
+  </>;
 }
 
 function VersionCell({ version }) {
@@ -346,12 +389,12 @@ const templateColumns = columnHelper.columns([
   }),
   columnHelper.accessor("resource_type", {
     header: () => <ColumnTitle index={2} />,
-    cell: ({ row }) => <span className={styles.typeChip}>{row.original.resource_type}</span>,
-    meta: { thClassName: styles.th, tdClassName: styles.td },
+    cell: ({ row }) => templateTypeLabel(row.original.resource_type),
+    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.mutedCell}` },
   }),
   columnHelper.accessor("status", {
     header: () => <ColumnTitle index={3} />,
-    cell: ({ row }) => <TemplateStatusBadge status={row.original.status} />,
+    cell: ({ row }) => <TemplateStatusCell template={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td, tdProps: { "data-guide": "templates-status" } },
   }),
   columnHelper.accessor("visibility", {
@@ -368,7 +411,7 @@ const templateColumns = columnHelper.columns([
     id: "actions",
     header: () => <ColumnTitle index={6} />,
     cell: ({ row, rowState }) => <TemplateMenuCell template={row.original} {...rowState} />,
-    meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.tdMenu}` },
+    meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
 ]);
 
@@ -512,6 +555,7 @@ export default function TemplatesPage() {
     data: list,
     getRowId: (template) => String(template.id),
   });
+  const fit = useTableFit(TEMPLATE_FIT_COLUMNS);
 
   return (
     <div className={styles.page}>
@@ -543,10 +587,11 @@ export default function TemplatesPage() {
         />
       ) : (
         <div className={styles.card} data-guide="templates-table">
-          <div className={styles.tableScroll}>
+          <div ref={fit.ref} className={styles.tableScroll}>
           <DataTable
             table={table}
             className={styles.table}
+            fit={fit}
             renderRow={(row) => (
               <ManagementRow
                 key={row.id}

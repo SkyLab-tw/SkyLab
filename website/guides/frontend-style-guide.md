@@ -519,7 +519,7 @@ List-page tables always use the table mixin family from `_mixins.scss`; **do not
 ```
 
 - Page-specific differences such as column widths, alignment and special cells (`.thRight`, `.tdNowrap`, …) go after the `@include`
-- The responsive behaviour is uniformly **horizontal scrolling of the container** (`table-wrap` has `overflow-x: auto` built in); tables are not turned into cards
+- Responsive behaviour: when the table area gets narrow, **fold secondary columns first, and only scroll the container horizontally once even the folded table does not fit** (see Rule 4); tables are not turned into cards
 - When a table is embedded inside an existing card you may use only `table-base` / `table-th` / `table-tr` / `table-td` and omit the outer `table-wrap`
 - The `<table>` itself is rendered by `components/DataTable` (TanStack Table, see the [development guide](/guides/development)), and the classes still come from the page's SCSS Module: `className` for the table, `rowClassName(row)` for rows, and `meta.thClassName` / `meta.tdClassName` on each column
 
@@ -559,6 +559,40 @@ The default `table-layout: auto` computes column widths from **the content of ev
 
 `MIcon` is always `aria-hidden`, so screen readers cannot read it. If the information the icon encodes
 is already written in the adjacent text (type, category), it is just layout habit — remove it and let the text speak.
+
+#### Rule 4: fold columns first when narrow; scroll and pin the first and last columns only as a last resort
+
+On a 1366-wide laptop the table area is about 944px; at 1440 with the AI assistant open it is only about 567px. When a wide table scrolls as a whole,
+the first column (which row this is) scrolls out of view. So when the table area gets narrow:
+
+1. **Fold columns by importance**: secondary columns are hidden and their content is drawn as small lines inside a main column (the second line of the name column, under the status badge)
+2. **Only when even the folded table does not fit**, scroll horizontally and pin the first column (you can always see which row it is); the last column (actions) is pinned too when the middle still keeps 160px to scroll
+
+```jsx
+// Column widths and fold order live only here (a module-level constant); lower fold folds first, columns without fold always show
+const FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 230 },
+  { id: "node", width: 85, fold: 1 },
+  { id: "status", width: 150 },
+  { id: "actions", width: 180 },
+]);
+
+const fit = useTableFit(FIT_COLUMNS);             // hooks/useTableFit
+<div ref={fit.ref} className={styles.tableWrap}>  // measure the element that scrolls
+  <DataTable table={table} fit={fit} className={styles.table} />
+</div>
+
+// Main cells (and rows that draw their own <td>) read which columns are folded from context
+const fit = useTableFitContext();                 // components/DataTable/TableFitContext
+{fit.isFolded("node") && <small>{resource.node}</small>}
+```
+
+- With `fit`, `DataTable` draws the `<colgroup>` and `min-width` itself and skips the header and cells of folded columns; the SCSS keeps only `table-layout: fixed` — **no more column width classes or min-width**
+- Rows that draw their own `<td>` (group rows, rows still being created) must skip folded columns with `useTableFitContext()` so the column count lines up
+- Put folded content in the main column closest in meaning: identity (node, environment, source, VMID) goes into the name column, state (IP, expiry, visibility) goes under the status; add the column name when the value alone is unclear ("Expiry 2026/12/31")
+- Check at least two widths: a 1366 laptop (944px) does not scroll; 1440 with the AI assistant open (567px) fits once folded down to the main columns
+- Pinning is built into `table-base` (it only applies with `data-overflow="start|both"`). Rows with their own background (group rows, hover) set it with `@include table-row-bg(colour)` so the pinned cells match the rest of the row
+- Currently used on: My resources, Machine templates
 
 ### List toolbar and batch actions (DataToolbar)
 

@@ -520,7 +520,7 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
 ```
 
 - 欄寬、對齊、特殊儲存格（`.thRight`、`.tdNowrap`…）等頁面差異寫在 `@include` 之後
-- RWD 行為統一為 **容器橫向卷動**（`table-wrap` 內建 `overflow-x: auto`），不做表格轉卡片
+- RWD：表格區變窄時**先收次要欄位，收到底仍放不下才容器橫向卷動**（見規則四）；不做表格轉卡片
 - 表格嵌在既有卡片內時可只用 `table-base` / `table-th` / `table-tr` / `table-td`，省略外層 `table-wrap`
 - `<table>` 本身由 `components/DataTable`（TanStack Table，見[開發指南](/zh-TW/guides/development)）輸出，class 仍來自頁面自己的 SCSS Module：表格用 `className`、列用 `rowClassName(row)`、各欄在欄位定義的 `meta.thClassName`／`meta.tdClassName`
 
@@ -560,6 +560,40 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
 
 `MIcon` 一律 `aria-hidden`，螢幕閱讀器讀不到。若圖示編碼的資訊
 就寫在緊鄰的文字裡（型別、分類），它只是版面慣性，拿掉讓文字說話即可。
+
+#### 規則四：窄版先收欄，收到底才橫捲並固定首尾欄
+
+筆電（1366 寬）的表格區約 944px，1440 寬開著 AI 助手時只剩約 567px。欄位多的表格整張橫捲時，
+第一欄（這一列是誰）會被捲出畫面。所以表格區變窄時：
+
+1. **依重要度收欄**：次要欄位收起，內容改畫在主欄裡的小字行（名稱欄第二行、狀態徽章底下）
+2. **收到底仍放不下才橫捲**，並固定第一欄（捲到哪都看得到是哪一列）；中間還留得下 160px 捲動空間時連最後一欄（操作）也固定
+
+```jsx
+// 欄寬與收合順序只寫在這裡（模組層級常數）；fold 小的先收，沒有 fold 的欄永遠顯示
+const FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 230 },
+  { id: "node", width: 85, fold: 1 },
+  { id: "status", width: 150 },
+  { id: "actions", width: 180 },
+]);
+
+const fit = useTableFit(FIT_COLUMNS);             // hooks/useTableFit
+<div ref={fit.ref} className={styles.tableWrap}>  // 量會橫捲的那一層
+  <DataTable table={table} fit={fit} className={styles.table} />
+</div>
+
+// 主欄（或自己畫 <td> 的列）用 context 判斷哪些欄收起了
+const fit = useTableFitContext();                 // components/DataTable/TableFitContext
+{fit.isFolded("node") && <small>{resource.node}</small>}
+```
+
+- `DataTable` 收到 `fit` 時自己畫 `<colgroup>` 與 `min-width`，跳過收起欄的表頭與儲存格；SCSS 只留 `table-layout: fixed`，**不再寫欄寬 class 與 min-width**
+- 自己畫 `<td>` 的列（群組列、建立中的列）要用 `useTableFitContext()` 跳過收起的欄，欄數才會對齊
+- 收起的內容放進「意思最近」的主欄：身分類（節點、環境、來源、VMID）進名稱欄，狀態類（IP、到期日、可見範圍）進狀態欄；光看值看不出是什麼的加欄名（「到期日 2026/12/31」）
+- 至少算到兩個寬度：1366 筆電（944px）不用捲；1440 開著 AI 助手（567px）收到只剩主要欄也放得下
+- 固定欄由 `table-base` 內建（`data-overflow="start|both"` 時才生效）。有自己底色的列（群組列、hover）用 `@include table-row-bg(色)` 設底色，固定欄才會跟同一列同色
+- 目前用在：我的資源、機器範本
 
 ### 清單工具列與批量操作（DataToolbar）
 

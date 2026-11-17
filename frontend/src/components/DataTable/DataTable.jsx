@@ -1,5 +1,6 @@
 import { flexRender } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
+import { TableFitContext, useTableFitContext } from "./TableFitContext";
 
 /**
  * TanStack Table 的共用渲染：表頭與列都從 table 實例來，樣式仍是各頁自己的 SCSS Module class
@@ -21,11 +22,18 @@ import { useTranslation } from "react-i18next";
  *
  * `children` 會放在 `<tbody>` 最前面（例如群組列）；`colgroup` 原樣放在表頭前；
  * `bodyProps` 給 `<tbody>`（虛擬化的 ref、data-* 屬性）；`before`／`after` 放在列的前後（虛擬化的空白列）。
+ *
+ * 窄版收欄：傳 `fit`（hooks/useTableFit 的結果）時，`<colgroup>` 與 min-width 由 fit 的欄寬畫，
+ * 收起的欄不畫表頭與儲存格；fit 也經 TableFitContext 交給列與儲存格（useTableFitContext）。
+ * 收起的欄寫在 `data-folded`（空白分隔，SCSS 用 `[data-folded~="id"]`）；
+ * 收到底仍放不下時標 `data-overflow="start|both"`，table-base 會固定第一欄（both 連最後一欄）。
  */
 export default function DataTable({
   table,
   className,
   colgroup = null,
+  fit = null,
+  style,
   headerRowClassName,
   rowClassName,
   rowProps,
@@ -41,9 +49,15 @@ export default function DataTable({
   /* 同 DataTableCells：rows 陣列只在 data 變時換，Compiler 依它快取的話，只改 meta／columns 時整段列不會重畫 */
   "use no memo";
   const bodyRows = rows ?? table.getRowModel().rows;
-  return (
-    <table className={className} {...rest}>
-      {colgroup}
+  const content = (
+    <table
+      className={className}
+      style={fit ? { ...style, minWidth: fit.minWidth } : style}
+      data-overflow={fit?.overflow ?? undefined}
+      data-folded={fit?.foldedIds.length ? fit.foldedIds.join(" ") : undefined}
+      {...rest}
+    >
+      {fit ? <FitColgroup table={table} fit={fit} /> : colgroup}
       {!hideHeader && <DataTableHead table={table} rowClassName={headerRowClassName} />}
       <tbody {...bodyProps}>
         {children}
@@ -59,6 +73,18 @@ export default function DataTable({
       </tbody>
     </table>
   );
+  return fit ? <TableFitContext.Provider value={fit}>{content}</TableFitContext.Provider> : content;
+}
+
+/* 收欄表格的欄寬：每個顯示中的欄一個 <col>，寬度取 fit（欄寬只寫在 useTableFit 的欄位表一處） */
+function FitColgroup({ table, fit }) {
+  return (
+    <colgroup>
+      {table.getAllLeafColumns()
+        .filter((column) => !fit.isFolded(column.id))
+        .map((column) => <col key={column.id} style={{ width: fit.widthOf(column.id) }} />)}
+    </colgroup>
+  );
 }
 
 /** 表頭：每個 header group 一列，`th` 的 class 取 columnDef.meta.thClassName；同 DataTableCells 訂閱語系 */
@@ -66,11 +92,12 @@ export function DataTableHead({ table, rowClassName }) {
   "use no memo"; // 同 DataTableCells：header 物件跨 render 不變，快取後 meta／columns 改了表頭不會更新
   const { i18n } = useTranslation();
   const lang = i18n?.language;
+  const fit = useTableFitContext();
   return (
     <thead>
       {table.getHeaderGroups().map((headerGroup) => (
         <tr key={headerGroup.id} className={rowClassName}>
-          {headerGroup.headers.map((header) => {
+          {headerGroup.headers.filter((header) => !fit.isFolded(header.column.id)).map((header) => {
             const meta = header.column.columnDef.meta ?? {};
             return (
               <th
@@ -103,7 +130,9 @@ export function DataTableCells({ row, rowState }) {
   "use no memo";
   const { i18n } = useTranslation();
   const lang = i18n?.language;
-  return row.getAllCells().map((cell) => {
+  /* 收欄時跳過收起的欄；訂閱 context，視窗變寬變窄時即使列元件被快取，儲存格也會重畫 */
+  const fit = useTableFitContext();
+  return row.getAllCells().filter((cell) => !fit.isFolded(cell.column.id)).map((cell) => {
     const meta = cell.column.columnDef.meta ?? {};
     const tdClassName = typeof meta.tdClassName === "function" ? meta.tdClassName(row) : meta.tdClassName;
     const tdProps = typeof meta.tdProps === "function" ? meta.tdProps(row) : meta.tdProps;
