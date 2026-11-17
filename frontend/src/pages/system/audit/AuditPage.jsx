@@ -426,9 +426,7 @@ export default function AuditPage() {
             <Pagination
               page={page}
               totalPages={totalPages}
-              info={t("AuditPage.paginationInfo", { count, page: page + 1, totalPages })}
-              prevLabel={t("AuditPage.prevPage")}
-              nextLabel={t("AuditPage.nextPage")}
+              info={t("AuditPage.paginationInfo", { count })}
               onChange={setPage}
             />
           </>

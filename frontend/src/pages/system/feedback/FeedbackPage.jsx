@@ -257,9 +257,7 @@ export default function FeedbackPage() {
             <Pagination
               page={page}
               totalPages={totalPages}
-              info={t("FeedbackPage.paginationInfo", { count, page: page + 1, totalPages })}
-              prevLabel={t("FeedbackPage.prevPage")}
-              nextLabel={t("FeedbackPage.nextPage")}
+              info={t("FeedbackPage.paginationInfo", { count })}
               onChange={setPage}
             />
           </>

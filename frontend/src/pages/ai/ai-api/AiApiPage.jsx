@@ -6,6 +6,7 @@ import styles from "./AiApiPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import Disclosure from "../../../components/Disclosure/Disclosure";
 import DisclosureToggle from "../../../components/Disclosure/DisclosureToggle";
+import Pagination from "../../../components/Pagination/Pagination";
 import Modal from "../../../components/Modal/Modal";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
@@ -28,7 +29,7 @@ import {
   useMyAiCredentialsQuery,
   useMyAiRequestsQuery,
   useMyAiUsageQuery,
-  useMyAiUsageRecordsInfiniteQuery,
+  useMyAiUsageRecordsQuery,
 } from "../../../queries/aiApi";
 import { LIST_REFRESH_INTERVAL } from "../../../queries/queryClient";
 import { focusInvalidField } from "../../../utils/focusField";
@@ -1064,15 +1065,28 @@ function UsageRecordRow({ item }) {
         })}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span className={styles.usageRecordPrimary}>{createdAt}</span>
-        <span className={`${styles.usageRecordPrimary} ${styles.usageRecordModel}`} title={model}>{model}</span>
+        {/* 容器變窄時依序收欄（見 .usageRecordScroll 的 @container）：收起的欄改畫在主欄底下（.usageRecordFold*） */}
         <span className={styles.usageRecordCell}>
+          <span className={styles.usageRecordPrimary}>{createdAt}</span>
+          <span className={`${styles.usageRecordMeta} ${styles.usageRecordFoldModel}`} title={model}>{model}</span>
+          <span className={`${styles.usageRecordSub} ${styles.usageRecordFoldKey}`} title={item.api_key_name || undefined}>
+            {item.api_key_name || "—"}{item.api_key_prefix ? ` · ${item.api_key_prefix}…` : ""}
+          </span>
+          <span className={`${styles.usageRecordSub} ${styles.usageRecordFoldTokens}`}>
+            {formatTokens(item.input_tokens)} / {formatTokens(item.output_tokens)} Tokens
+          </span>
+        </span>
+        <span className={`${styles.usageRecordPrimary} ${styles.usageRecordModel} ${styles.usageRecordColModel}`} title={model}>{model}</span>
+        <span className={`${styles.usageRecordCell} ${styles.usageRecordColKey}`}>
           <span className={styles.usageRecordPrimary} title={item.api_key_name || undefined}>{item.api_key_name || "—"}</span>
           {item.api_key_prefix && <span className={styles.usageRecordMeta}>{item.api_key_prefix}…</span>}
         </span>
-        <span className={styles.usageRecordToken}>{formatTokens(item.input_tokens)}</span>
-        <span className={styles.usageRecordToken}>{formatTokens(item.output_tokens)}</span>
-        <span>
+        <span className={`${styles.usageRecordCell} ${styles.usageRecordColInput}`}>
+          <span className={styles.usageRecordToken}>{formatTokens(item.input_tokens)}</span>
+          <span className={`${styles.usageRecordSub} ${styles.usageRecordFoldOutput}`}>{t("AiApiPage.recordOutputTokens")} {formatTokens(item.output_tokens)}</span>
+        </span>
+        <span className={`${styles.usageRecordToken} ${styles.usageRecordColOutput}`}>{formatTokens(item.output_tokens)}</span>
+        <span className={`${styles.usageRecordCell} ${styles.usageRecordStatusCell}`}>
           <span className={`${styles.badge} ${succeeded ? styles.badge_success : styles.badge_danger}`}>
             <span className={styles.dot} />
             {succeeded ? t("AiApiPage.recordStatusSuccess") : t("AiApiPage.recordStatusError")}
@@ -1118,22 +1132,27 @@ function UsageRecordRow({ item }) {
 }
 
 /* ── My Usage Tab ── */
-const USAGE_RECORD_PAGE_SIZE = 20;
+/* 細項紀錄分頁：每頁 50 筆，跟稽核日誌等管理清單一樣（表格規則五） */
+const USAGE_RECORD_PAGE_SIZE = 50;
+const NO_RECORDS = Object.freeze([]);
 
 function MyUsageTab() {
   const { t } = useTranslation("ai");
-  const toast = useToast();
   const [preset, setPreset] = useState("30d");
+  const [recordPage, setRecordPage] = useState(0);
+  const recordsPanelRef = useRef(null);
 
   const { startDate: start, endDate: end } = useMemo(() => presetToRange(preset), [preset]);
 
-  /* 統計與明細走 TanStack Query，以區間為 key：快速切換區間時較慢的舊區間回應只會進舊 key，
-     不會蓋掉新區間；明細的「載入更多」是 infinite query，換區間後舊區間的下一頁也不會接到新清單後面。
-     換區間時先沿用上一個區間的資料（不閃回載入動畫），背景刷新失敗保留畫面上的資料。 */
+  /* 統計與明細走 TanStack Query，以區間（明細再加頁碼）為 key：快速切換時較慢的舊回應只會進舊 key，
+     不會蓋掉新的。換區間或換頁時先沿用上一份資料（不閃回載入動畫），背景刷新失敗保留畫面上的資料。 */
   const range = useMemo(() => ({ start_date: start, end_date: end }), [start, end]);
-  const recordParams = useMemo(() => ({ ...range, limit: USAGE_RECORD_PAGE_SIZE }), [range]);
+  const recordParams = useMemo(
+    () => ({ ...range, skip: recordPage * USAGE_RECORD_PAGE_SIZE, limit: USAGE_RECORD_PAGE_SIZE }),
+    [range, recordPage],
+  );
   const usageQuery = useMyAiUsageQuery(range);
-  const recordsQuery = useMyAiUsageRecordsInfiniteQuery(recordParams);
+  const recordsQuery = useMyAiUsageRecordsQuery(recordParams);
 
   const usageData = usageQuery.data;
   /* 錯誤畫面在背景重試期間不閃回載入動畫，按重試才回到載入中（見 useLoadError）。
@@ -1142,14 +1161,14 @@ function MyUsageTab() {
   const usageLoad = useLoadError(usageQuery);
   const usageError = Boolean(usageLoad.error);
   const usageLoading = usageData === undefined && !usageError && (usageQuery.isPending || usageQuery.isFetching);
-  const recordPages = recordsQuery.data?.pages;
+  const recordsData = recordsQuery.data;
   const recordsLoad = useLoadError(recordsQuery);
   const recordsError = Boolean(recordsLoad.error);
-  const recordsLoading = recordPages === undefined && !recordsError && (recordsQuery.isPending || recordsQuery.isFetching);
-  const records = useMemo(() => (recordPages ?? []).flatMap((page) => page?.data ?? []), [recordPages]);
-  const recordsCount = recordPages?.length ? recordPages[recordPages.length - 1]?.count ?? 0 : 0;
+  const recordsLoading = recordsData === undefined && !recordsError && (recordsQuery.isPending || recordsQuery.isFetching);
+  const records = recordsData?.data ?? NO_RECORDS;
+  const recordsCount = recordsData?.count ?? 0;
+  const recordTotalPages = Math.max(Math.ceil(recordsCount / USAGE_RECORD_PAGE_SIZE), 1);
   const loading = usageLoading || recordsLoading;
-  const loadingMore = recordsQuery.isFetchingNextPage;
 
   /* 重試：兩份一起重抓（與原本相同），沒資料的回到載入中 */
   function retryLoad() {
@@ -1157,13 +1176,17 @@ function MyUsageTab() {
     recordsLoad.retry();
   }
 
-  const hasMoreRecords = !recordsError && records.length > 0 && records.length < recordsCount;
+  /* 換頁：清單捲回細項紀錄的開頭（分頁列在清單底下，不捲回去會停在下一頁的最後面） */
+  function changeRecordPage(next) {
+    setRecordPage(next);
+    recordsPanelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
 
-  const loadMore = async () => {
-    const result = await recordsQuery.fetchNextPage();
-    /* 維持現有清單，不覆蓋成功資料；但要讓使用者知道沒載到 */
-    if (result.isFetchNextPageError) toast.error(result.error?.message ?? t("AiApiPage.recordsLoadMoreError"));
-  };
+  /* 換區間回到第一頁：新區間的筆數不同，舊頁碼可能已經超出範圍 */
+  function changePreset(next) {
+    setPreset(next);
+    setRecordPage(0);
+  }
 
   const PRESETS = [
     { value: "7d", label: t("AiApiPage.preset7d") },
@@ -1177,7 +1200,7 @@ function MyUsageTab() {
         <SegmentedControl
           options={PRESETS}
           value={preset}
-          onChange={setPreset}
+          onChange={changePreset}
           ariaLabel={t("AiApiPage.usageRangeLabel")}
         />
         {/* 用本地日期顯示；toISOString 是 UTC，台灣凌晨會差一天 */}
@@ -1212,7 +1235,7 @@ function MyUsageTab() {
           </div>
 
           {/* ── 細項呼叫紀錄：沒有資料時只在這裡說一次 ── */}
-          <div className={styles.usagePanel} data-guide="ai-usage-records">
+          <div ref={recordsPanelRef} className={styles.usagePanel} data-guide="ai-usage-records">
             <div className={styles.usagePanelHeader}>
               <h3 className={styles.usagePanelTitle}>{t("AiApiPage.usageRecordsTitle")}</h3>
             </div>
@@ -1226,15 +1249,15 @@ function MyUsageTab() {
               />
             ) : (
               <>
-                {/* 窄螢幕維持表格、容器橫向捲動（表格規範不轉卡片） */}
+                {/* 窄版先收次要欄進主欄（輸出→輸入、模型與金鑰→日期，最窄時 Tokens 也→日期），不橫捲（表格規則四） */}
                 <div className={styles.usageRecordScroll}>
                   <div className={styles.usageRecordList}>
                     <div className={styles.usageRecordHeader} aria-hidden="true">
                       <span>{t("AiApiPage.recordDate")}</span>
-                      <span>{t("AiApiPage.recordModel")}</span>
-                      <span>{t("AiApiPage.recordKey")}</span>
-                      <span>{t("AiApiPage.recordInputTokens")}</span>
-                      <span>{t("AiApiPage.recordOutputTokens")}</span>
+                      <span className={styles.usageRecordColModel}>{t("AiApiPage.recordModel")}</span>
+                      <span className={styles.usageRecordColKey}>{t("AiApiPage.recordKey")}</span>
+                      <span className={styles.usageRecordColInput}>{t("AiApiPage.recordInputTokens")}</span>
+                      <span className={styles.usageRecordColOutput}>{t("AiApiPage.recordOutputTokens")}</span>
                       <span>{t("AiApiPage.recordStatus")}</span>
                       <span />
                     </div>
@@ -1243,28 +1266,14 @@ function MyUsageTab() {
                     ))}
                   </div>
                 </div>
-                {hasMoreRecords && (
-                  <div className={styles.usageRecordsMoreRow}>
-                    <button type="button" className={styles.btnSecondary} onClick={loadMore} disabled={loadingMore || recordsQuery.isPlaceholderData}>
-                      {loadingMore ? (
-                        <>
-                          <MIcon name="hourglass_empty" size={16} spin />
-                          {t("AiApiPage.recordsLoadingMore")}
-                        </>
-                      ) : (
-                        <>
-                          <MIcon name="expand_more" size={16} />
-                          {t("AiApiPage.recordsLoadMore")}
-                        </>
-                      )}
-                    </button>
-                    <span className={styles.usageDateRange}>
-                      {t("AiApiPage.recordsShownCount", {
-                        shown: records.length,
-                        total: recordsCount,
-                      })}
-                    </span>
-                  </div>
+                {/* 共用分頁列（表格規則五）；只有一頁時不畫 */}
+                {recordTotalPages > 1 && (
+                  <Pagination
+                    page={recordPage}
+                    totalPages={recordTotalPages}
+                    info={t("AiApiPage.recordsPaginationInfo", { total: recordsCount })}
+                    onChange={changeRecordPage}
+                  />
                 )}
               </>
             )}

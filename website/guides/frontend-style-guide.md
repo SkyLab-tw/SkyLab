@@ -605,12 +605,15 @@ const fit = useTableFitContext();                 // components/DataTable/TableF
 
 | Approach | When | Used on |
 |---|---|---|
-| Pagination: `components/Pagination` (50 per page, "N total · Page x of y" plus previous / next) | Admins looking at all the data, often hundreds or thousands of rows, together with search and filters | User management, audit logs, IP management, feedback, AI key management |
+| Pagination: `components/Pagination` (50 per page, "N total" plus arrows, page numbers and "Go to page __") | Often hundreds or thousands of rows that people page back through, together with search and filters | User management, audit logs, IP management, feedback, AI key management, AI API usage details |
 | Virtual scrolling: `hooks/useVirtualRows` (kicks in from 60 rows) | Everything needs to be seen at once and compared by scrolling, without switching pages | Resource management |
-| Load more (20 at a time) | Records ordered by time, where usually only the recent ones matter | AI API usage details |
+| Load more (20 at a time) | Records ordered by time where almost only the latest few matter | None at the moment (AI API usage details used it until 2026-11; with hundreds of calls over 90 days people page back, so it switched to pagination) |
 
 - A user's own small set of data (their keys, their machines) is simply listed in full, with secondary items (expired) collapsed
-- Pagination bars always use `components/Pagination`, never a hand-written copy in the page; the info text follows "N total · Page x of y"
+- Pagination bars always use `components/Pagination`, never a hand-written copy in the page. Pages pass only "N total" (`info`); the current page is shown by the page numbers, so don't write "Page x of y". The component translates the arrow and page-number labels itself
+- Page numbers always take 7 slots (first and last, plus one on each side of the current page; near either end, five in a row), so the bar doesn't change width when you switch pages. The current page is solid primary with white text; other page numbers have no fill or border and get a light fill on hover
+- "Go to page __" appears only past 7 pages: digits only, jumps on Enter or when the field loses focus, and values out of range snap to the first or last page
+- When the container is narrower than 520px (AI assistant open, phones) the page numbers collapse to "5 / 16" and the go-to field always shows; with a single page only "N total" remains
 
 ### Tabs
 

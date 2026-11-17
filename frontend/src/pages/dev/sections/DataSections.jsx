@@ -10,6 +10,7 @@ import PowerMenu from "../../../components/PowerMenu/PowerMenu";
 import FileDropzone from "../../../components/FileDropzone/FileDropzone";
 import FileDropOverlay from "../../../components/FileDropzone/FileDropOverlay";
 import Switch from "../../../components/Switch/Switch";
+import Pagination from "../../../components/Pagination/Pagination";
 import useRowSelection from "../../../hooks/useRowSelection";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
@@ -46,6 +47,8 @@ export function TablesSection() {
   const [query, setQuery] = useState("");
   const [progress, setProgress] = useState(null);
   const [menu, setMenu] = useState(null); // { row, anchorRef }
+  const [longPage, setLongPage] = useState(4);
+  const [shortPage, setShortPage] = useState(1);
   const menuPresence = useDialogPresence(menu);
   const timerRef = useRef(null);
 
@@ -219,6 +222,25 @@ export function TablesSection() {
             onDeleteClick={() => { closeMenu(); toast.info("示範：刪除入口（會先進 useConfirm）"); }}
           />
         )}
+      </Demo>
+      <Demo
+        label="分頁列 Pagination：頁數多"
+        refs={["components/Pagination", "info＝共 N 筆"]}
+        note="頁碼固定 7 格（頭尾各一、目前頁前後各一），換頁時寬度不跳；超過 7 頁才有「前往 __ 頁」，Enter 或離開欄位就跳，超出範圍夾到頭尾。"
+        wide
+      >
+        <Pagination page={longPage} totalPages={16} info="共 794 筆" onChange={setLongPage} />
+      </Demo>
+      <Demo
+        label="頁數少（7 頁內）／窄容器"
+        refs={["容器 < 520px 收成「5 / 16」"]}
+        note="7 頁內頁碼全畫、沒有前往欄。容器窄於 520px（手機、開著 AI 助手）頁碼收成「目前 / 總頁數」，前往欄一律出現；只有一頁時只剩「共 N 筆」。"
+        wide
+      >
+        <Pagination page={shortPage} totalPages={5} info="共 212 筆" onChange={setShortPage} />
+        <div className={styles.paginationNarrowBox}>
+          <Pagination page={longPage} totalPages={16} info="共 794 筆" onChange={setLongPage} />
+        </div>
       </Demo>
       <RuleList
         items={[

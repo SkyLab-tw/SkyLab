@@ -660,16 +660,16 @@
   color: var(--color-text-primary);
 }
 
-/* ── 細項呼叫紀錄：窄螢幕維持表格欄位，容器橫向捲動（表格規範不轉卡片） ── */
+/* ── 細項呼叫紀錄：容器變窄時依序收欄，收起的欄畫在主欄底下（表格規則四：先收欄、不轉卡片、不橫捲） ──
+   寬度看容器（卡片會被側欄、AI 助手擠窄），不看視窗。各階段的欄位最小寬加間距、內距剛好是下一個斷點：
+   862 以上全部欄；以下輸出 Tokens 收進輸入；782 以下模型收進日期；628 以下 API Key 來源也收進日期；460 以下 Tokens 也收進日期。
+   每一列各自是一個 grid：欄寬只能用固定值或 fr，不能用 auto（會依各列內容算出不同寬，上下列對不齊） */
 .usageRecordScroll {
-  overflow-x: auto;
+  container: usage-records / inline-size;
+  overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: $radius-12;
   background: var(--color-surface);
-}
-
-.usageRecordList {
-  min-width: 880px;
 }
 
 .usageRecordHeader,
@@ -732,6 +732,81 @@
   @include flex-column;
   gap: 2px;
   min-width: 0;
+}
+
+/* 狀態欄：徽章照內容寬，不被直排撐滿 */
+.usageRecordStatusCell {
+  align-items: flex-start;
+}
+
+/* 收欄時才出現的第二行（模型、金鑰、最窄時的 Tokens 在日期底下；輸出在輸入底下） */
+.usageRecordFoldModel,
+.usageRecordFoldKey,
+.usageRecordFoldOutput,
+.usageRecordFoldTokens {
+  display: none;
+}
+
+.usageRecordSub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container usage-records (max-width: 861px) {
+  .usageRecordHeader,
+  .usageRecordSummary {
+    grid-template-columns:
+      minmax(148px, 1fr)
+      minmax(150px, 1fr)
+      minmax(176px, 1.2fr)
+      minmax(80px, 0.6fr)
+      minmax(92px, 0.6fr)
+      24px;
+  }
+
+  .usageRecordColOutput { display: none; }
+  .usageRecordFoldOutput { display: block; }
+}
+
+@container usage-records (max-width: 781px) {
+  .usageRecordHeader,
+  .usageRecordSummary {
+    grid-template-columns:
+      minmax(160px, 1fr)
+      minmax(176px, 1.2fr)
+      minmax(80px, 0.6fr)
+      minmax(92px, 0.6fr)
+      24px;
+  }
+
+  .usageRecordColModel { display: none; }
+  .usageRecordFoldModel { display: block; }
+}
+
+@container usage-records (max-width: 627px) {
+  .usageRecordHeader,
+  .usageRecordSummary {
+    grid-template-columns: minmax(160px, 1fr) 104px 92px 24px;
+  }
+
+  .usageRecordColKey { display: none; }
+  .usageRecordFoldKey { display: block; }
+}
+
+@container usage-records (max-width: 459px) {
+  .usageRecordHeader,
+  .usageRecordSummary {
+    grid-template-columns: minmax(0, 1fr) 72px 20px;
+    gap: 12px;
+  }
+
+  .usageRecordColInput { display: none; }
+  .usageRecordFoldTokens { display: block; }
 }
 
 .usageRecordPrimary,
@@ -824,14 +899,6 @@
   font-size: $font-size-12;
   overflow-wrap: anywhere;
   margin-top: $spacing-16;
-}
-
-.usageRecordsMoreRow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: $spacing-8;
 }
 
 /* 按模型統計：白底細框的小表，第一列是欄位標題 */

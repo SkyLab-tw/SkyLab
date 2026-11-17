@@ -866,9 +866,7 @@ export default function AdminPage() {
               <Pagination
                 page={safePage}
                 totalPages={totalPages}
-                info={t("AdminPage.paginationInfo", { count: visibleUsers.length, page: safePage + 1, totalPages })}
-                prevLabel={t("AdminPage.prevPage")}
-                nextLabel={t("AdminPage.nextPage")}
+                info={t("AdminPage.paginationInfo", { count: visibleUsers.length })}
                 onChange={setPage}
               />
             )}

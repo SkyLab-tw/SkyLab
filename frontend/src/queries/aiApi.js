@@ -1,4 +1,4 @@
-import { isCancelledError, keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isCancelledError, keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { AiApiService } from "../services/aiApi";
@@ -82,24 +82,15 @@ export function useMyAiUsageQuery(range, { enabled = true } = {}) {
   });
 }
 
-/** 已載入筆數還不到總數就再抓下一頁；回傳下一頁的 skip，沒有下一頁時回 undefined */
-export function nextUsageRecordsSkip(lastPage, allPages) {
-  const loaded = allPages.reduce((sum, page) => sum + (page?.data?.length ?? 0), 0);
-  const lastCount = lastPage?.data?.length ?? 0;
-  return lastCount > 0 && loaded < (lastPage?.count ?? 0) ? loaded : undefined;
-}
-
 /**
- * 我的用量明細（「載入更多」）；params = { start_date, end_date, limit }，skip 由頁數決定。
- * 用 infinite query 而不是單頁 query＋自己接陣列：背景重抓時所有已載入的頁會依序重抓，
- * 第一頁多了新紀錄也不會跟後面自己接上去的頁重複或漏掉；換區間時舊區間的「載入更多」也不會接到新清單後面。
+ * 我的用量明細（分頁）；params = { start_date, end_date, skip, limit }，回傳 { data, count }。
+ * 區間與頁碼都在 key 裡：換頁或換區間時先沿用上一頁的資料（keepPreviousData），畫面不閃回載入動畫，
+ * 較慢的舊頁回應也只會進舊 key，不會蓋掉新頁。
  */
-export function useMyAiUsageRecordsInfiniteQuery(params, { enabled = true } = {}) {
-  return useInfiniteQuery({
+export function useMyAiUsageRecordsQuery(params, { enabled = true } = {}) {
+  return useQuery({
     queryKey: aiApiKeys.myUsageRecords(params),
-    queryFn: ({ pageParam }) => AiApiService.getMyUsageRecords({ ...params, skip: pageParam }),
-    initialPageParam: 0,
-    getNextPageParam: nextUsageRecordsSkip,
+    queryFn: () => AiApiService.getMyUsageRecords(params),
     enabled,
     placeholderData: keepPreviousData,
   });

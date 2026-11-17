@@ -476,9 +476,7 @@ export default function AiApiKeysPage() {
                 <Pagination
                   page={page}
                   totalPages={totalPages}
-                  info={t("AiApiKeysPage.paginationInfo", { page: page + 1, totalPages, total })}
-                  prevLabel={t("AiApiKeysPage.prevPage")}
-                  nextLabel={t("AiApiKeysPage.nextPage")}
+                  info={t("AiApiKeysPage.paginationInfo", { total })}
                   onChange={setPage}
                 />
               )}
