@@ -728,7 +728,9 @@ export default function UserGuide() {
     const activate = current.activateSelector
       ? document.querySelector(current.activateSelector)
       : null;
-    if (activate && activate.getAttribute("aria-selected") !== "true") activate.click();
+    /* 分頁是共用 Tabs（aria-selected），也可能是共用 SegmentedControl（aria-pressed），已選中就不再點 */
+    const alreadyActive = activate?.getAttribute("aria-selected") === "true" || activate?.getAttribute("aria-pressed") === "true";
+    if (activate && !alreadyActive) activate.click();
 
     const attachTarget = () => {
       target = document.querySelector(current.selector);
@@ -796,8 +798,8 @@ export default function UserGuide() {
 
   const start = () => {
     if (guide.id === "ai-api") {
-      /* 分頁已改用共用 SegmentedControl（aria-pressed），不再是 tablist 的 aria-selected */
-      originalAiTab.current = document.querySelector('[data-guide-tab][aria-pressed="true"]')?.dataset.guideTab ?? null;
+      /* 分頁是共用 Tabs（role="tab"＋aria-selected） */
+      originalAiTab.current = document.querySelector('[role="tab"][data-guide-tab][aria-selected="true"]')?.dataset.guideTab ?? null;
     }
     // 先關再開：availableSteps 以 open 為 memo 依賴，重開才會用當下 DOM 重算，
     // 也讓 auto-start 搶跑失敗後（open 已為 true）的點擊仍能生效

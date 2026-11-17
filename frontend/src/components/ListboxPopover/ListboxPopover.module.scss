@@ -3,7 +3,7 @@
 
 /* ── 單選清單浮層 ──
    位置與寬度由 ListboxPopover.jsx 經 useAnchoredMenu 算好寫進 inline style，這裡只管外觀。
-   跟 PowerMenu 同一套：不套 glass-surface（半透明會讓底下的內容透出來）、z-index 150。 */
+   跟 PowerMenu、ActionMenu 同一套：popover-glass（隨介面風格與主題色變，白底／黑底風格是實色）、z-index 150。 */
 .listbox {
   position: fixed;
   z-index: 150; // 高於 sticky header(100)，低於 Dialog / Modal(200+)
@@ -14,18 +14,11 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: $spacing-8;
-  border: 1px solid var(--color-border);
   border-radius: $radius-12;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
+  @include popover-glass;
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.13s ease, transform 0.13s ease;
-}
-
-/* 側欄的語言選單：跟側欄同一套玻璃（見 popover-glass） */
-.listboxGlass {
-  @include popover-glass;
 }
 
 /* 進場方向跟著展開方向：往下展開就由上滑入，往上展開就由下滑入 */

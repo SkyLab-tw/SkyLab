@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import MIcon from "../../../components/MIcon";
+import Disclosure from "../../../components/Disclosure/Disclosure";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import Stepper from "../../../components/Stepper/Stepper";
 import EmptyState from "../../../components/EmptyState/EmptyState";
@@ -118,10 +119,12 @@ function formatClassDay(value) {
 function SummaryLine({ done, optional = false, label, value, onOpen }) {
   const { t } = useTranslation("teaching");
   const status = done ? t("ClassSetupPage.summaryDone") : optional ? t("ClassSetupPage.summaryOptional") : t("ClassSetupPage.summaryPending");
+  /* 完成的列左邊綠勾已經說了「完成」，右邊不再重複寫；「選填」「未完成」這類補充才寫出來。
+     完成的狀態改由勾的 aria-label 唸給螢幕閱讀器 */
   return <button type="button" className={done ? styles.summaryDone : styles.summaryPending} onClick={onOpen}>
-    <span><MIcon name={done ? "check" : "radio_button_unchecked"} size={17} /></span>
+    <span role="img" aria-label={status}><MIcon name={done ? "check" : "radio_button_unchecked"} size={17} /></span>
     <div><strong>{label}</strong><small>{value}</small></div>
-    <em>{status}</em>
+    {!done && <em>{status}</em>}
     <MIcon name="chevron_right" size={18} className={styles.summaryArrow} />
   </button>;
 }
@@ -153,6 +156,19 @@ export default function ClassSetupPage() {
   const emailsRef = useRef(null);
   const fileRef = useRef(null);
   const classCache = useTeachingClassCacheUpdater();
+
+  /* 按鈕列貼在畫面底部、蓋著內容時才鋪玻璃底與分隔線；在卡片底部原位時透明，跟卡片融成一塊。
+     卡片最底下放 1px 哨兵：看得到＝按鈕列在原位；看不到＝按鈕列正貼著畫面底部 */
+  const [footerStuck, setFooterStuck] = useState(false);
+  const footerObserverRef = useRef(null);
+  const footerSentinelRef = useCallback((node) => {
+    footerObserverRef.current?.disconnect();
+    footerObserverRef.current = null;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setFooterStuck(!entry.isIntersecting));
+    observer.observe(node);
+    footerObserverRef.current = observer;
+  }, []);
 
   /* 班級草稿走 TanStack Query：進頁向伺服器拿最新的一份，回來後初始化表單一次；之後畫面上的班級只來自
      本頁寫入的回應，背景資料不會蓋掉打到一半的表單。第一步剛建好班級時網址才補上 classId，
@@ -468,10 +484,12 @@ export default function ClassSetupPage() {
   // 預估機器跟著第三步目前選的環境即時變動，還沒選就用已存的環境
   const estimateNodes = selectedTemplate?.nodes.length ?? item?.nodes.length ?? 0;
   const estimatedMachines = (item?.students.length ?? 0) * estimateNodes;
+  const unsavedTemplate = selectedTemplate && templateId !== savedTemplateId ? selectedTemplate : null;
   const draftRows = [
     { step: 1, value: scheduleShort },
     { step: 2, value: studentsReady ? t("ClassSetupPage.studentsCountLabel", { count: item.students.length }) : t("ClassSetupPage.draftStudentsPending") },
-    { step: 3, value: item?.course_environment?.name ?? t("ClassSetupPage.notSelectedYet") },
+    /* 第三步選了環境還沒存：跟「預估機器」一樣即時反映，標「未儲存」，存了才拿掉 */
+    { step: 3, value: unsavedTemplate ? t("ClassSetupPage.draftEnvUnsaved", { name: unsavedTemplate.name }) : item?.course_environment?.name ?? t("ClassSetupPage.notSelectedYet") },
     { step: 4, value: savedTaskCount ? t("ClassSetupPage.weeksConfiguredCount", { done: savedTaskCount, total: item.weeks.length }) : t("ClassSetupPage.summaryOptional") },
   ];
   const progressText = `${t("ClassSetupPage.progressLabel")} ${t("ClassSetupPage.progressCount", { count: provisionReady })}`;
@@ -483,7 +501,7 @@ export default function ClassSetupPage() {
       <MIcon name={draftOpen ? "expand_less" : "expand_more"} size={20} />
     </button>
     <div className={`${styles.draftBody} ${draftOpen ? styles.draftBodyOpen : ""}`}>
-      <div className={styles.draftHeading}><strong>{t("ClassSetupPage.draftTitle")}</strong><small>{item?.name || t("ClassSetupPage.notCreatedYet")}</small></div>
+      <div className={styles.draftHeading}><strong>{t("ClassSetupPage.draftTitle")}</strong><small>{item?.name || form.name.trim() || t("ClassSetupPage.draftNameEmpty")}</small></div>
       <ul className={styles.draftList}>
         {draftRows.map(({ step: number, value }) => {
           const done = doneSteps[number - 1];
@@ -501,16 +519,19 @@ export default function ClassSetupPage() {
     </div>
   </aside>;
 
+  /* 第二步標題列右側的計數：貼了 Email 才顯示，0 個不顯示 */
+  const pendingEmailCount = parseStudentEmails(emails).length;
+
   // 每一步都是同一張卡片：標題、內容、底部按鈕列。按鈕列在內容比畫面長時會貼住畫面底部
-  const footer = <footer className={`${styles.cardFooter} ${step === 5 ? styles.cardFooterStatic : ""}`}>
+  const footer = <footer className={`${styles.cardFooter} ${step === 5 ? styles.cardFooterStatic : footerStuck ? styles.cardFooterStuck : ""}`}>
     <button type="button" className={`${styles.btnSecondary} ${styles.footerPrev} ${step === 1 ? styles.keepSpace : ""}`} disabled={busy} onClick={() => switchStep(step - 1)}>{t("ClassSetupPage.prevStepBtn")}</button>
     <div className={styles.footerEnd}>
       {step === 3 && !templateId && <em className={styles.footerHint}><MIcon name="info" size={16} />{templates.length === 0 ? t("ClassSetupPage.needCreateTemplateHint") : t("ClassSetupPage.selectTemplateHint")}</em>}
       {step < 5 && <button type="button" className={`${styles.btnPrimary} ${styles.footerNext}`} data-guide="class-setup-next" disabled={busy || (step === 3 && !templateId)} onClick={next}>{busy ? t("ClassSetupPage.savingBtn") : t("ClassSetupPage.saveAndNextBtn")}<MIcon name="arrow_forward" size={16} /></button>}
       {step === 5 && <>
         {missingSteps.length > 0
-          ? <button type="button" className={styles.btnSecondary} onClick={() => switchStep(missingSteps[0])}>{t("ClassSetupPage.goToStepBtn", { step: stepLabel(missingSteps[0]) })}</button>
-          : <button type="button" className={styles.btnSecondary} onClick={() => leaveTo(`/class-management/${classId}`)}>{t("ClassSetupPage.saveDraftLaterBtn")}</button>}
+          ? <button type="button" className={`${styles.btnSecondary} ${styles.footerNext}`} onClick={() => switchStep(missingSteps[0])}>{t("ClassSetupPage.goToStepBtn", { step: stepLabel(missingSteps[0]) })}</button>
+          : <button type="button" className={`${styles.btnSecondary} ${styles.footerNext}`} onClick={() => leaveTo(`/class-management/${classId}`)}>{t("ClassSetupPage.saveDraftLaterBtn")}</button>}
         <button type="button" className={`${styles.btnPrimary} ${styles.footerNext}`} data-guide="class-setup-provision" disabled={!capacity?.ready || busy} onClick={provision}><MIcon name="rocket_launch" size={17} />{busy ? t("ClassSetupPage.submittingBtn") : t("ClassSetupPage.finishAndSubmitBtn")}</button>
       </>}
     </div>
@@ -538,20 +559,20 @@ export default function ClassSetupPage() {
             <label className={styles.full}><span>{t("ClassSetupPage.fieldLocation")}</span><input value={form.location} onChange={(event) => updateForm("location", event.target.value)} placeholder={t("ClassSetupPage.locationPlaceholder")} /></label>
             <label><span>{t("ClassSetupPage.fieldStartDate")}</span><input type="date" value={form.startDate} onChange={(event) => updateForm("startDate", event.target.value)} /></label>
             <label><span>{t("ClassSetupPage.fieldEndDate")}</span><input type="date" value={form.endDate} onChange={(event) => updateForm("endDate", event.target.value)} /></label>
-            <label><span>{t("ClassSetupPage.fieldWeekday")}</span><select value={form.weekday} onChange={(event) => updateForm("weekday", Number(event.target.value))}>{WEEKDAY_FULL_KEYS.map((labelKey, index) => <option key={labelKey} value={index}>{t(labelKey)}</option>)}</select></label>
-            <label><span>{t("ClassSetupPage.fieldClassTime")}</span><div className={styles.timePair}><input type="time" value={form.startTime} onChange={(event) => updateForm("startTime", event.target.value)} /><i>{t("ClassSetupPage.timeRangeSeparator")}</i><input type="time" value={form.endTime} onChange={(event) => updateForm("endTime", event.target.value)} /></div></label>
-            <details className={styles.advanced} data-guide="class-setup-advanced"><summary>{t("ClassSetupPage.advancedSettings")}</summary><div className={styles.advancedGrid}><label><span>{t("ClassSetupPage.fieldTerm")}</span><input value={form.term} onChange={(event) => updateForm("term", event.target.value)} /></label><label><span>{t("ClassSetupPage.fieldBootLead")}</span><select value={form.bootLeadMinutes} onChange={(event) => updateForm("bootLeadMinutes", Number(event.target.value))}>{BOOT_LEAD_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.bootLeadOnTime") : t("ClassSetupPage.bootLeadMinutesOption", { minutes })}</option>)}</select></label><label><span>{t("ClassSetupPage.fieldShutdownGrace")}</span><select value={form.shutdownGraceMinutes} onChange={(event) => updateForm("shutdownGraceMinutes", Number(event.target.value))}>{SHUTDOWN_GRACE_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.shutdownGraceImmediate") : t("ClassSetupPage.shutdownGraceMinutesOption", { minutes })}</option>)}</select></label></div></details>
+            <label className={styles.scheduleField}><span>{t("ClassSetupPage.fieldWeekday")}</span><select value={form.weekday} onChange={(event) => updateForm("weekday", Number(event.target.value))}>{WEEKDAY_FULL_KEYS.map((labelKey, index) => <option key={labelKey} value={index}>{t(labelKey)}</option>)}</select></label>
+            <label className={styles.scheduleField}><span>{t("ClassSetupPage.fieldClassTime")}</span><div className={styles.timePair}><input type="time" value={form.startTime} onChange={(event) => updateForm("startTime", event.target.value)} /><i>{t("ClassSetupPage.timeRangeSeparator")}</i><input type="time" value={form.endTime} onChange={(event) => updateForm("endTime", event.target.value)} /></div></label>
+            <Disclosure className={styles.advanced} bodyClassName={styles.advancedGrid} data-guide="class-setup-advanced" icon="tune" label={t("ClassSetupPage.advancedSettings")}><label><span>{t("ClassSetupPage.fieldTerm")}</span><input value={form.term} onChange={(event) => updateForm("term", event.target.value)} /></label><label><span>{t("ClassSetupPage.fieldBootLead")}</span><select value={form.bootLeadMinutes} onChange={(event) => updateForm("bootLeadMinutes", Number(event.target.value))}>{BOOT_LEAD_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.bootLeadOnTime") : t("ClassSetupPage.bootLeadMinutesOption", { minutes })}</option>)}</select></label><label><span>{t("ClassSetupPage.fieldShutdownGrace")}</span><select value={form.shutdownGraceMinutes} onChange={(event) => updateForm("shutdownGraceMinutes", Number(event.target.value))}>{SHUTDOWN_GRACE_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.shutdownGraceImmediate") : t("ClassSetupPage.shutdownGraceMinutesOption", { minutes })}</option>)}</select></label></Disclosure>
           </div>
         </>}
 
         {step === 2 && <>
           <div className={styles.sectionHeader}><div><h2>{t("ClassSetupPage.step2Title")}</h2><p>{t("ClassSetupPage.step2Desc")}</p></div></div>
           <div className={styles.studentBody}>
-            <label data-guide="class-setup-emails"><span className={styles.fieldLabelRow}>{t("ClassSetupPage.fieldStudentEmails")}<small>{t("ClassSetupPage.pendingEmailsCount", { count: parseStudentEmails(emails).length })}</small></span><textarea ref={emailsRef} className={invalidField === "emails" ? styles.fieldInvalid : undefined} aria-invalid={invalidField === "emails"} rows={8} value={emails} onChange={(event) => { setEmails(event.target.value); clearInvalid("emails"); }} placeholder={"student01@example.edu\nstudent02@example.edu"} autoFocus /></label>
+            <label data-guide="class-setup-emails"><span className={styles.fieldLabelRow}>{t("ClassSetupPage.fieldStudentEmails")}{pendingEmailCount > 0 && <small>{t("ClassSetupPage.pendingEmailsCount", { count: pendingEmailCount })}</small>}</span><textarea ref={emailsRef} className={invalidField === "emails" ? styles.fieldInvalid : undefined} aria-invalid={invalidField === "emails"} rows={8} value={emails} onChange={(event) => { setEmails(event.target.value); clearInvalid("emails"); }} placeholder={"student01@example.edu\nstudent02@example.edu"} autoFocus /></label>
             <div className={styles.studentTools}>
               <input ref={fileRef} className={styles.hiddenFileInput} type="file" accept=".csv,text/csv" onChange={importCsv} tabIndex={-1} aria-hidden="true" />
-              <button type="button" className={styles.btnGhost} data-guide="class-setup-csv" disabled={busy} onClick={() => fileRef.current?.click()}><MIcon name="upload" size={16} />{t("ClassSetupPage.importCsvBtn")}</button>
-              <button type="button" className={styles.btnGhost} data-guide="class-setup-group-import" disabled={busy} onClick={() => setShowGroupImport(true)}><MIcon name="groups" size={16} />{t("ClassSetupPage.importGroupBtn")}</button>
+              <button type="button" className={styles.btnSecondary} data-guide="class-setup-csv" disabled={busy} onClick={() => fileRef.current?.click()}><MIcon name="upload" size={16} />{t("ClassSetupPage.importCsvBtn")}</button>
+              <button type="button" className={styles.btnSecondary} data-guide="class-setup-group-import" disabled={busy} onClick={() => setShowGroupImport(true)}><MIcon name="groups" size={16} />{t("ClassSetupPage.importGroupBtn")}</button>
             </div>
             <div className={styles.roster} data-guide="class-setup-roster">
               <div className={styles.rosterHead}><strong>{t("ClassSetupPage.currentStudentsLabel")}</strong><span>{t("ClassSetupPage.studentsCountLabel", { count: item?.students.length ?? 0 })}</span></div>
@@ -595,22 +616,16 @@ export default function ClassSetupPage() {
             />
           )}
 
-          {/* 找不到合適範本是例外，放在清單後面當出口，不要擋在選擇之前；
-              一個模板都沒有時上面的空狀態已經給了建立入口，這張卡就不重複出現 */}
-          {templates.length > 0 && <div className={styles.templatePauseCard} data-guide="class-setup-template-pause">
-            <div>
-              <strong>{t("ClassSetupPage.noSuitableTemplateTitle")}</strong>
-              <p>{t("ClassSetupPage.templatePauseDesc")}</p>
-              <small><MIcon name="cloud_done" size={14} />{t("ClassSetupPage.noDataLossHint")}</small>
-            </div>
-            <div className={styles.templatePauseActions}>
-              <button type="button" className={styles.btnSecondary} onClick={createTemplate}>
-                <MIcon name="add" size={16} />{t("ClassSetupPage.createNewTemplateBtn")}
-              </button>
-              <button type="button" className={styles.btnGhost} onClick={pauseSetup}>
-                {t("ClassSetupPage.saveForLaterBtn")}
-              </button>
-            </div>
+          {/* 找不到合適範本是例外，放在清單後面當出口，不要擋在選擇之前：只佔一行（問句＋兩個文字連結），
+              右側淡色註明離開不會遺失資料。一個模板都沒有時上面的空狀態已經給了建立入口，這行就不出現 */}
+          {templates.length > 0 && <div className={styles.templatePause} data-guide="class-setup-template-pause">
+            <span>{t("ClassSetupPage.noSuitableTemplateTitle")}</span>
+            <button type="button" className={styles.linkBtn} disabled={busy} onClick={createTemplate}>
+              <MIcon name="add" size={16} />{t("ClassSetupPage.createNewTemplateBtn")}
+            </button>
+            <span className={styles.templatePauseDot} aria-hidden="true">·</span>
+            <button type="button" className={styles.linkBtn} disabled={busy} onClick={pauseSetup}>{t("ClassSetupPage.saveForLaterBtn")}</button>
+            <small><MIcon name="cloud_done" size={14} />{t("ClassSetupPage.noDataLossHint")}</small>
           </div>}
         </>}
 
@@ -627,7 +642,7 @@ export default function ClassSetupPage() {
         {step === 5 && <>
           <div className={styles.sectionHeader}><div><h2>{t("ClassSetupPage.step5Title")}</h2><p>{t("ClassSetupPage.step5Desc")}</p></div></div>
           <div className={styles.readiness} data-guide="class-setup-readiness">
-            <span className={`${styles.readyIcon} ${!missingSteps.length && !capacity ? styles.readyIconBusy : ""}`}><MIcon name={missingSteps.length ? "pending_actions" : capacity?.ready ? "check" : "hourglass_top"} size={22} /></span>
+            <span className={`${styles.readyIcon} ${!missingSteps.length && capacity?.ready ? styles.readyIconOk : ""} ${!missingSteps.length && !capacity ? styles.readyIconBusy : ""}`}><MIcon name={missingSteps.length ? "pending_actions" : capacity?.ready ? "check" : "hourglass_top"} size={22} /></span>
             <div>
               <span>{progressText}</span>
               <h3>{missingSteps.length ? t("ClassSetupPage.capacityMissingTitle") : capacity ? capacity.ready ? t("ClassSetupPage.capacityReady") : t("ClassSetupPage.capacityNotReady") : t("ClassSetupPage.capacityChecking")}</h3>
@@ -639,7 +654,7 @@ export default function ClassSetupPage() {
               <div><span>{t("ClassSetupPage.capacityFactMachines")}</span><strong>{capacity.machine_count}</strong></div>
               <div><span>CPU</span><strong>{capacity.cpu_cores}</strong></div>
               <div><span>RAM</span><strong>{mbToGb(capacity.memory_mb)} GB</strong></div>
-              <div><span>Disk</span><strong>{capacity.disk_gb} GB</strong></div>
+              <div><span>{t("ClassSetupPage.capacityFactDisk")}</span><strong>{capacity.disk_gb} GB</strong></div>
               <div><span>{t("ClassSetupPage.capacityFactIps")}</span><strong>{capacity.ip_count}</strong></div>
             </div>}
             {/* 判定是逐節點比的：只看全班合計會覺得「明明夠」，所以列出每台的需要／可用 */}
@@ -662,6 +677,7 @@ export default function ClassSetupPage() {
         </>}
 
         {footer}
+        <div ref={footerSentinelRef} className={styles.footerSentinel} aria-hidden="true" />
       </section>
 
       {step < 5 && draftPanel}

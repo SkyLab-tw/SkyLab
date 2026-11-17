@@ -1167,6 +1167,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                 <h2 className={styles.sectionTitle}>{t("RequestFormPage.requestModeTitle")}</h2>
                 {/* 預約／立即二選一：互斥切換一律用共用 SegmentedControl */}
                 <SegmentedControl
+                  className={styles.modeSwitch}
                   ariaLabel={t("RequestFormPage.requestModeTitle")}
                   value={mode}
                   onChange={setMode}

@@ -79,6 +79,32 @@
   }
 }
 
+/* 清除鈕（clearable）：24px，往右吃掉一半內距，貼近框的右緣 */
+.searchClear {
+  @include flex-center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: $radius-8;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background $transition-base, color $transition-base;
+
+  &:hover {
+    color: var(--color-text-primary);
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+}
+
 /* ── 批量列：數量與清除在左、動作靠右 ── */
 .batchBar {
   display: flex;

@@ -41,6 +41,45 @@ describe("ConnectionDetailPanel managed topology", () => {
   });
 });
 
+describe("ConnectionDetailPanel ports", () => {
+  /* 標籤換成 |，看得出哪幾段字是分開的兩行 */
+  const text = (html) => html.replace(/(<[^>]+>)+/g, "|");
+  const inbound = (ports) => renderToStaticMarkup(
+    <ConnectionDetailPanel
+      edge={{ source_vmid: null, target_vmid: 150, direction: "one_way", ports }}
+      resolveName={(vmid) => (vmid === null ? "internet" : `vm-${vmid}`)}
+      onClose={() => {}}
+    />,
+  );
+
+  it("shows which port a published URL forwards to, not just the domain", () => {
+    const html = text(inbound([{ port: 5678, protocol: "tcp", domain: "n8n.example.com" }]));
+
+    expect(html).toContain("|n8n.example.com|");
+    expect(html).toContain("|ConnectionPanel.modeDomain · 5678/tcp|");
+  });
+
+  it("does the same for a course template URL, which only has an explicit mode", () => {
+    const html = text(inbound([{ port: 5678, protocol: "tcp", mode: "domain", domain: "n8nai-xxxx.example.com" }]));
+
+    expect(html).toContain("|ConnectionPanel.modeDomain · 5678/tcp|");
+  });
+
+  it("keeps the port on the first line for port forwarding and firewall-only rules", () => {
+    const html = text(inbound([
+      { port: 22, protocol: "tcp", external_port: 30022 },
+      { port: 5678, protocol: "tcp", mode: "port_forward" },
+      { port: 9999, protocol: "udp" },
+      { port: 0, protocol: "icmp" },
+    ]));
+
+    expect(html).toContain("|30022 → 22|ConnectionPanel.modePortForward · tcp|");
+    expect(html).toContain("|5678/tcp|ConnectionPanel.modePortForward · tcp|");
+    expect(html).toContain("|9999/udp|ConnectionPanel.modeFirewallOnly · udp|");
+    expect(html).toContain("|ICMP|ConnectionPanel.modeFirewallOnly · icmp|");
+  });
+});
+
 describe("ConnectionDetailPanel search indexing switch", () => {
   const inbound = {
     source_vmid: null,

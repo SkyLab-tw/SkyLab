@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import JobsPage from "./JobsPage";
 import { createTestQueryClient, withQueryClient } from "../../../queries/testing";
 import { jobKeys } from "../../../queries/jobs";
@@ -49,6 +49,15 @@ function job(id, kind) {
 
 let host;
 let root;
+const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+
+/* happy-dom 沒有版面：指定表格區（data-guide="jobs-table"）的寬度，useTableFit 才會收欄 */
+function setTableWidth(width) {
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get() { return this.getAttribute("data-guide") === "jobs-table" ? width : 0; },
+  });
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -61,6 +70,8 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+  else delete HTMLElement.prototype.clientWidth;
 });
 
 async function flush() {
@@ -141,6 +152,46 @@ test("換篩選失敗時跳 toast 並顯示錯誤狀態；背景重試又失敗�
   await flush();
   expect(mocks.list).toHaveBeenCalledTimes(3);
   expect(mocks.toast.error).toHaveBeenCalledTimes(1);
+});
+
+describe("窄版收欄", () => {
+  const detailed = {
+    ...job("vm_request:1", "vm_request"),
+    user_email: "a@campus.edu.tw",
+    created_at: "2026-11-17T06:30:00Z",
+    updated_at: "2026-11-17T06:35:00Z",
+  };
+  const headers = () => [...host.querySelectorAll("thead th")].map((th) => th.textContent);
+  const cells = () => [...host.querySelectorAll("tbody td")].map((td) => td.textContent);
+
+  test("約 800px：類型、申請人收進任務欄，更新時間接在建立時間底下", async () => {
+    mocks.list.mockResolvedValue({ items: [detailed] });
+    setTableWidth(800);
+    await act(async () => root.render(withQueryClient(<JobsPage />)));
+    await flush();
+
+    expect(headers()).toEqual(["JobsPage.colTask", "JobsPage.colStatus", "JobsPage.colProgress", "JobsPage.colCreatedAt"]);
+    const [name, status, , created] = cells();
+    expect(name).toContain("JobsPage.kindVmRequest · vm_request:1");
+    expect(name).toContain("a@campus.edu.tw");
+    expect(created).toContain("JobsPage.colUpdatedAt");
+    expect(status).not.toContain("JobsPage.colCreatedAt");
+  });
+
+  test("約 500px：只剩任務、狀態，進度與兩個時間依先後排在狀態徽章底下", async () => {
+    mocks.list.mockResolvedValue({ items: [detailed] });
+    setTableWidth(500);
+    await act(async () => root.render(withQueryClient(<JobsPage />)));
+    await flush();
+
+    expect(headers()).toEqual(["JobsPage.colTask", "JobsPage.colStatus"]);
+    const status = cells()[1];
+    expect(status).toContain("JobsPage.statusCompleted");
+    expect(status).toContain("100%");
+    expect(status.indexOf("JobsPage.colCreatedAt")).toBeGreaterThan(-1);
+    expect(status.indexOf("JobsPage.colUpdatedAt")).toBeGreaterThan(status.indexOf("JobsPage.colCreatedAt"));
+    expect(host.querySelector("table").hasAttribute("data-overflow")).toBe(false);
+  });
 });
 
 test("背景刷新失敗沿用現有清單、不跳 toast", async () => {

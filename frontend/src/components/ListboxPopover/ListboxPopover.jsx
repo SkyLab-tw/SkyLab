@@ -15,7 +15,8 @@ const OPTION_SELECTOR = '[role="option"]:not(:disabled)';
 const SELECTED_SELECTOR = `${OPTION_SELECTOR}[aria-selected="true"]`;
 
 /**
- * 從觸發鈕往下（放不下就往上）展開的單選清單，例如「換週」；側欄底部的語言選單傳 placement="side"，貼著側欄外緣彈出，glass 換成跟側欄同一套玻璃。
+ * 從觸發鈕往下（放不下就往上）展開的單選清單，例如「換週」；側欄底部的語言選單傳 placement="side"，貼著側欄外緣彈出。
+ * 底色一律是 popover-glass（跟側欄彈出、ActionMenu 同一套玻璃，隨介面風格與主題色變）。
  * 跟原生 <select> 的差別是每個選項可以有第二行說明（狀態、日期），選項多時在清單內捲動。
  *
  * - 定位、外點與 Esc 關閉、portal 到 body 共用 useAnchoredMenu，鍵盤操作共用 useMenuKeyboard（同 ActionMenu、PowerMenu）。
@@ -35,7 +36,6 @@ export default function ListboxPopover({
   onClose,
   closing = false,
   placement,
-  glass = false,
 }) {
   const anchorWidth = anchorRef?.current?.offsetWidth ?? 0;
   const width = Math.min(LISTBOX_MAX_WIDTH, Math.max(LISTBOX_MIN_WIDTH, anchorWidth));
@@ -69,7 +69,6 @@ export default function ListboxPopover({
 
   const className = [
     styles.listbox,
-    glass ? styles.listboxGlass : "",
     pos?.openUp ? styles.listboxUp : styles.listboxDown,
     closing ? styles.listboxOut : "",
   ].filter(Boolean).join(" ");

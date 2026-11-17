@@ -19,7 +19,7 @@ import AuditLogsTab from "./AuditLogsTab";
 import AdvancedSettingsTab from "./AdvancedSettingsTab";
 import ResourceDetailGuideDemo from "./ResourceDetailGuideDemo";
 import PageHeader from "../../../../components/PageHeader/PageHeader";
-import SegmentedControl from "../../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../../components/Tabs/Tabs";
 
 /* sharedOnly=false 的分頁只有擁有者／管理員看得到；被分享的使用者只能看總覽、監控與進階設定裡的唯讀卡片 */
 const TABS = [
@@ -153,8 +153,8 @@ export default function ResourceDetailPage({ backTo = "/my-resources" }) {
       )}
 
       <div className={styles.tabsRow} data-guide="resource-detail-tabs">
-        <SegmentedControl
-          className={styles.tabs}
+        <Tabs
+          page
           options={visibleTabs.map((tabDef) => ({
             value: tabDef.key,
             label: t(tabDef.labelKey),

@@ -12,6 +12,11 @@
   }
 }
 
+/* 頁面分頁（<Tabs page>）：分頁到下方內容收成 12px */
+.pageTabs {
+  @include page-tabs-row;
+}
+
 .stateText {
   padding: $spacing-32 $spacing-16;
   text-align: center;

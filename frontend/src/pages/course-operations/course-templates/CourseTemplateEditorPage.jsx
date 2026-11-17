@@ -955,7 +955,7 @@ export default function CourseTemplateEditorPage() {
       activeKey={tab}
       onSelect={changeTab}
     />
-    {tab === "basic" && <section className={styles.card}><div className={styles.formGrid}><label className={styles.field} data-guide="course-tpl-editor-name"><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input ref={nameRef} className={invalidField === "name" ? styles.fieldInvalid : undefined} aria-invalid={invalidField === "name"} aria-errormessage={invalidField === "name" ? "env-name-error" : undefined} disabled={saving} value={template.name} onChange={(event) => { updateBasics({ name: event.target.value }); if (invalidField === "name") setInvalidField(""); }} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} />{invalidField === "name" && <em id="env-name-error" className={styles.fieldError}>{t("CourseTemplateEditorPage.nameRequiredError")}</em>}</label><label className={styles.field} data-guide="course-tpl-editor-usage"><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={saving} value={template.usageScope ?? "course"} onChange={(event) => updateBasics({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label><label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={saving} rows={3} value={template.description ?? ""} onChange={(event) => updateBasics({ description: event.target.value })} /></label>
+    {tab === "basic" && <section className={styles.card}><div className={styles.formGrid}><label className={styles.field} data-guide="course-tpl-editor-name"><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input ref={nameRef} className={invalidField === "name" ? styles.fieldInvalid : undefined} aria-invalid={invalidField === "name"} aria-errormessage={invalidField === "name" ? "env-name-error" : undefined} disabled={saving} value={template.name} onChange={(event) => { updateBasics({ name: event.target.value }); if (invalidField === "name") setInvalidField(""); }} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} />{invalidField === "name" && <em id="env-name-error" className={styles.fieldError}>{t("CourseTemplateEditorPage.nameRequiredError")}</em>}</label><label className={styles.field} data-guide="course-tpl-editor-usage"><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={saving} value={template.usageScope ?? "course"} onChange={(event) => updateBasics({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label><label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={saving} rows={6} value={template.description ?? ""} onChange={(event) => updateBasics({ description: event.target.value })} /></label>
 
       {/* 說明文件是基本資訊的一個滿寬欄位：放在 formGrid 裡才吃得到卡片內距、跟上面的欄位對齊 */}
       <div className={`${styles.fileSection} ${styles.fieldFull}`} data-guide="course-tpl-editor-files">
@@ -968,9 +968,11 @@ export default function CourseTemplateEditorPage() {
             <button type="button" className={styles.fileRemove} disabled={saving} aria-label={t("CourseTemplateEditorPage.removeFileAria", { name: file.filename })} onClick={() => removeFile(file)}><MIcon name="close" size={15} /></button>
           </li>)}
         </ul>}
-        {/* 環境還沒建立時整塊停用，說明直接寫在上傳區塊裡 */}
+        {/* 環境還沒建立時整塊停用，說明直接寫在上傳區塊裡。
+            用單行精簡版：說明文件是選填附件，不該比上面的環境用途還搶版面 */}
         <FileDropzone
           multiple
+          compact
           disabled={saving || !hasEnvironmentId}
           uploading={uploadProgress !== null}
           progress={uploadProgress}

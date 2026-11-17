@@ -26,6 +26,7 @@ Administrators only. Other roles do not see the page in the sidebar.
 - **Call Count**: total calls in the period. The line below compares it with the previous period of the same length, as a percentage.
 - **Total Tokens**: tokens used in the selected period only.
 - **Error rate**: share of failed calls. The line below shows the change from the previous period in percentage points (pp); a rise is shown in red.
+- **Active users**: number of users with calls in the selected period.
 
 ![Read the summary metrics](/manual-shots/en/ai-monitoring/s02.webp)
 
@@ -92,7 +93,6 @@ Click **View details in Grafana**. The SkyLab AI dashboard opens in a new tab, a
 
 | Item | Meaning | Notes |
 | --- | --- | --- |
-| Successful calls / Failed calls / Active users | Totals for the selected period | Shown above the detail tabs |
 | Detail tabs | **Models**, **API Key Calls**, **Template Calls**, **User Usage** | The number on each tab is its row count |
 | Status filter | **All**, **Success**, **Failed** | Only on **API Key Calls** |
 | Search | Filters the current tab | Placeholder changes per tab |

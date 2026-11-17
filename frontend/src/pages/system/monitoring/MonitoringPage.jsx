@@ -5,6 +5,8 @@ import styles from "./MonitoringPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import RrdChart from "../../../components/RrdChart/RrdChart";
@@ -17,6 +19,7 @@ import { useToast } from "../../../hooks/useToast";
 import { useLoadError } from "../../../hooks/useQueryLoadState";
 import usePveOverview from "../../../hooks/usePveOverview";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import Tabs from "../../../components/Tabs/Tabs";
 import { formatDateTime, formatTime } from "../../../utils/formatDate";
 
 function formatBytes(bytes) {
@@ -249,10 +252,52 @@ function ColTitle({ name }) {
   return t(`MonitoringPage.${name}`);
 }
 
+/* 收起的欄在主欄裡的一行小字；label 給「光看值看不出是什麼」的欄（運行時間、各項用量） */
+function FoldedLine({ label, title, className, children }) {
+  return (
+    <div className={`${styles.foldedLine} ${className ?? ""}`} title={title}>
+      {label && <span className={styles.foldedLabel}>{label}</span>}
+      {children}
+    </div>
+  );
+}
+
 const columnHelper = createColumnHelper();
 
+/* ── Top 5 表窄版收欄（useTableFit） ──
+   兩張排行並排在半寬的卡片裡（卡片至少 440px 才並排，見 .topGrid），依序收起類型、節點，
+   改寫在名稱底下一行小字；VMID、名稱、用量永遠在。全部欄 530px，卡片放得下就不收；
+   1366／1440 並排時（卡片約 440～500px）收掉類型 450px、最窄再收節點 350px。
+   1440 開著 AI 助手（約 567px）、1100 寬視窗已改成上下排、一張佔滿寬，不用收；手機（448px）收掉類型與節點 */
+const TOP_VM_FIT_COLUMNS = Object.freeze([
+  { id: "vmid", width: 80 },
+  { id: "name", width: 170 },
+  { id: "node", width: 100, fold: 2 },
+  { id: "type", width: 80, fold: 1 },
+  { id: "metric", width: 100 },
+]);
+
+/* 類型是分類、不是狀態：收進名稱底下時寫純文字，不做膠囊 */
+function vmTypeLabel(type) {
+  return type === "qemu" ? "VM" : "LXC";
+}
+
+function TopVmNameCell({ vm }) {
+  const fit = useTableFitContext();
+  const foldedMeta = [
+    fit.isFolded("node") && vm.node,
+    fit.isFolded("type") && vmTypeLabel(vm.type),
+  ].filter(Boolean).join(" · ");
+  return (
+    <>
+      <span className={styles.truncateCell} title={vm.name}>{vm.name}</span>
+      {foldedMeta && <FoldedLine>{foldedMeta}</FoldedLine>}
+    </>
+  );
+}
+
 /* 欄位定義放模組層級：FlexRender 把函式型的 header／cell 當元件掛載，render 裡新建會整格重新掛載。
-   CPU 與記憶體兩張排行只差最後一欄，各建一份固定的欄位 */
+   CPU 與記憶體兩張排行只差最後一欄，各建一份固定的欄位（最後一欄的 id 都叫 metric，共用同一份欄寬表） */
 function topVmColumns(metric) {
   return columnHelper.columns([
     columnHelper.accessor("vmid", {
@@ -262,7 +307,7 @@ function topVmColumns(metric) {
     }),
     columnHelper.accessor("name", {
       header: () => <ColTitle name="colName" />,
-      cell: ({ row }) => row.original.name,
+      cell: ({ row }) => <TopVmNameCell vm={row.original} />,
       meta: { thClassName: styles.th, tdClassName: styles.td },
     }),
     columnHelper.accessor("node", {
@@ -274,13 +319,13 @@ function topVmColumns(metric) {
       header: () => <ColTitle name="colType" />,
       cell: ({ row }) => (
         <span className={styles.typeBadge}>
-          {row.original.type === "qemu" ? "VM" : "LXC"}
+          {vmTypeLabel(row.original.type)}
         </span>
       ),
       meta: { thClassName: styles.th, tdClassName: styles.td },
     }),
     columnHelper.display({
-      id: metric,
+      id: "metric",
       header: metric === "cpu" ? "CPU" : () => <ColTitle name="memoryLabel" />,
       cell: ({ row }) => (metric === "cpu" ? `${(row.original.cpu * 100).toFixed(1)}%` : formatBytes(row.original.mem)),
       meta: { thClassName: styles.th, tdClassName: `${styles.td} ${styles.numericCell}` },
@@ -298,6 +343,7 @@ function TopVmTable({ title, entries, metric }) {
     data: entries,
     getRowId: (vm) => String(vm.vmid),
   });
+  const fit = useTableFit(TOP_VM_FIT_COLUMNS);
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
@@ -306,50 +352,117 @@ function TopVmTable({ title, entries, metric }) {
       {entries.length === 0 ? (
         <EmptyState icon="dns" title={t("MonitoringPage.emptyNoRunningResources")} />
       ) : (
-        <div className={styles.tableScroll}>
-        <DataTable table={table} className={styles.topTable} rowClassName={() => styles.tr} />
+        <div ref={fit.ref} className={styles.tableScroll}>
+        <DataTable table={table} className={styles.table} fit={fit} rowClassName={() => styles.tr} />
         </div>
       )}
     </div>
   );
 }
 
+/* ── 節點用量表窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起 VM／LXC 數、運行時間、磁碟、記憶體、CPU；節點、狀態永遠在。
+   VM／LXC 數收到節點名稱底下；運行時間與各項用量是節點的狀態，收到狀態徽章底下
+   （用量只寫百分比、≥ 90% 紅字，跟用量條同一個門檻；已用／總量在 title）。
+   欄寬只寫在這裡：用量欄要放「45.2%　12.3 GB / 64.0 GB」一行。全部欄 1050px，
+   1440（約 1003px）只收 VM／LXC 數，1366 筆電（約 929px）再收運行時間（840px）；
+   1100 寬視窗（約 678px）收到磁碟、1440 開著 AI 助手（約 567px）收到記憶體（500px），
+   手機（448px）連 CPU 都收（350px），一律不用橫捲 */
+const NODE_FIT_COLUMNS = Object.freeze([
+  { id: "node", width: 200 },
+  { id: "status", width: 150 },
+  { id: "cpu", width: 150, fold: 5 },
+  { id: "memory", width: 170, fold: 4 },
+  { id: "disk", width: 170, fold: 3 },
+  { id: "vm_count", width: 90, fold: 1 },
+  { id: "uptime", width: 120, fold: 2 },
+]);
+
 function NodeNameCell({ node, online, expanded }) {
+  const fit = useTableFitContext();
   return (
-    <span className={styles.nodeCell}>
+    <div className={styles.nodeCell}>
       {/* 離線列沒有展開箭頭，補同寬佔位讓圖示與名稱跟其他列對齊 */}
       {online
         ? <MIcon name={expanded ? "expand_more" : "chevron_right"} size={16} />
         : <span className={styles.chevronSpacer} />}
       <MIcon name="dns" size={16} />
-      <strong>{node.node}</strong>
-      {node.connection_name && (
-        <span className={styles.typeBadge}>{node.connection_name}</span>
-      )}
-    </span>
+      <div className={styles.nodeText}>
+        {/* 連線名稱放不下時換到名稱下一行，不撐出欄外 */}
+        <span className={styles.nodeNameLine}>
+          <strong title={node.node}>{node.node}</strong>
+          {node.connection_name && (
+            <span className={styles.typeBadge}>{node.connection_name}</span>
+          )}
+        </span>
+        {fit.isFolded("vm_count") && <FoldedLine label="VM / LXC">{node.vm_count}</FoldedLine>}
+      </div>
+    </div>
   );
 }
 
-function NodeStatusCell({ status }) {
-  const { t } = useTranslation("system");
-  const online = status === "online";
+/* 節點的 CPU、記憶體、磁碟用量百分比（用量欄與收進狀態欄的小字共用） */
+function nodeCpuPct(node) {
+  return node.maxcpu > 0 ? node.cpu * 100 : 0;
+}
+
+function bytesPct(used, max) {
+  return max > 0 ? (used / max) * 100 : 0;
+}
+
+/* 收進狀態欄的一項用量：只寫百分比，跟用量條一樣 ≥ 90% 標紅；已用／總量在 title */
+function FoldedUsageLine({ label, pct, detail }) {
   return (
-    <span
-      className={`${styles.badge} ${online ? styles.badge_success : styles.badge_danger}`}
-    >
-      {online ? t("MonitoringPage.online") : status}
-    </span>
+    <FoldedLine label={label} title={detail}>
+      <span className={pct >= 90 ? styles.foldedDanger : undefined}>{pct.toFixed(1)}%</span>
+    </FoldedLine>
   );
 }
 
-function NodeCpuCell({ cpu, maxcpu }) {
+/* 窄版收欄時狀態欄多畫：CPU、記憶體、磁碟用量（依欄位順序）、運行時間 */
+function NodeStatusCell({ node }) {
   const { t } = useTranslation("system");
-  const nodeCpu = maxcpu > 0 ? cpu * 100 : 0;
+  const fit = useTableFitContext();
+  const online = node.status === "online";
+  return (
+    <>
+      <span
+        className={`${styles.badge} ${online ? styles.badge_success : styles.badge_danger}`}
+      >
+        {online ? t("MonitoringPage.online") : node.status}
+      </span>
+      {fit.isFolded("cpu") && (
+        <FoldedUsageLine label="CPU" pct={nodeCpuPct(node)} detail={t("MonitoringPage.coresLabel", { count: node.maxcpu })} />
+      )}
+      {fit.isFolded("memory") && (
+        <FoldedUsageLine
+          label={t("MonitoringPage.memoryLabel")}
+          pct={bytesPct(node.mem, node.maxmem)}
+          detail={`${formatBytes(node.mem)} / ${formatBytes(node.maxmem)}`}
+        />
+      )}
+      {fit.isFolded("disk") && (
+        <FoldedUsageLine
+          label={t("MonitoringPage.diskLabel")}
+          pct={bytesPct(node.disk, node.maxdisk)}
+          detail={`${formatBytes(node.disk)} / ${formatBytes(node.maxdisk)}`}
+        />
+      )}
+      {fit.isFolded("uptime") && (
+        <FoldedLine label={t("MonitoringPage.colUptime")}>{formatUptime(node.uptime, t)}</FoldedLine>
+      )}
+    </>
+  );
+}
+
+function NodeCpuCell({ node }) {
+  const { t } = useTranslation("system");
+  const nodeCpu = nodeCpuPct(node);
   return (
     <div className={styles.usageCell}>
       <div className={styles.usageMeta}>
         <span>{nodeCpu.toFixed(1)}%</span>
-        <span className={styles.mutedText}>{t("MonitoringPage.coresLabel", { count: maxcpu })}</span>
+        <span className={styles.mutedText}>{t("MonitoringPage.coresLabel", { count: node.maxcpu })}</span>
       </div>
       <UsageBar pct={nodeCpu} />
     </div>
@@ -357,7 +470,7 @@ function NodeCpuCell({ cpu, maxcpu }) {
 }
 
 function NodeBytesCell({ used, max }) {
-  const pct = max > 0 ? (used / max) * 100 : 0;
+  const pct = bytesPct(used, max);
   return (
     <div className={styles.usageCell}>
       <div className={styles.usageMeta}>
@@ -387,26 +500,26 @@ const nodeColumns = columnHelper.columns([
   }),
   columnHelper.accessor("status", {
     header: () => <ColTitle name="colStatus" />,
-    cell: ({ row }) => <NodeStatusCell status={row.original.status} />,
+    cell: ({ row }) => <NodeStatusCell node={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.display({
     id: "cpu",
     header: "CPU",
-    cell: ({ row }) => <NodeCpuCell cpu={row.original.cpu} maxcpu={row.original.maxcpu} />,
-    meta: { thClassName: `${styles.th} ${styles.thWide}`, tdClassName: styles.td },
+    cell: ({ row }) => <NodeCpuCell node={row.original} />,
+    meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.display({
     id: "memory",
     header: () => <ColTitle name="memoryLabel" />,
     cell: ({ row }) => <NodeBytesCell used={row.original.mem} max={row.original.maxmem} />,
-    meta: { thClassName: `${styles.th} ${styles.thWide}`, tdClassName: styles.td },
+    meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.display({
     id: "disk",
     header: () => <ColTitle name="diskLabel" />,
     cell: ({ row }) => <NodeBytesCell used={row.original.disk} max={row.original.maxdisk} />,
-    meta: { thClassName: `${styles.th} ${styles.thWide}`, tdClassName: styles.td },
+    meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   columnHelper.accessor("vm_count", {
     header: "VM / LXC",
@@ -463,6 +576,9 @@ export default function MonitoringPage() {
     data: overview?.nodes ?? EMPTY,
     getRowId: (node) => node.node,
   });
+  const nodeFit = useTableFit(NODE_FIT_COLUMNS);
+  /* 展開列的趨勢圖橫跨目前顯示中的欄（收起的欄不算） */
+  const nodeColSpan = NODE_FIT_COLUMNS.length - nodeFit.foldedIds.length;
 
   return (
     <div className={styles.page}>
@@ -539,30 +655,15 @@ export default function MonitoringPage() {
 
       {/* 警告與挖礦事件收進分頁（#24）；兩個面板保持掛載，輪詢與角標持續更新 */}
       <div className={styles.tabbedPanels} data-guide="monitoring-panels">
-        <div className={styles.panelTabBar} role="tablist" aria-label={t("MonitoringPage.panelTabsAria")}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panelTab === "alerts"}
-            data-guide-tab="monitoring-alerts"
-            className={`${styles.panelTab} ${panelTab === "alerts" ? styles.panelTabActive : ""}`}
-            onClick={() => setPanelTab("alerts")}
-          >
-            {t("MonitoringPage.tabAlerts")}
-            {alertCount != null && <span className={styles.panelTabBadge}>{alertCount}</span>}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panelTab === "mining"}
-            data-guide-tab="monitoring-mining"
-            className={`${styles.panelTab} ${panelTab === "mining" ? styles.panelTabActive : ""}`}
-            onClick={() => setPanelTab("mining")}
-          >
-            {t("MonitoringPage.tabMining")}
-            {miningCount != null && <span className={styles.panelTabBadge}>{miningCount}</span>}
-          </button>
-        </div>
+        <Tabs
+          options={[
+            { value: "alerts", label: t("MonitoringPage.tabAlerts"), badge: alertCount ?? undefined, buttonProps: { "data-guide-tab": "monitoring-alerts" } },
+            { value: "mining", label: t("MonitoringPage.tabMining"), badge: miningCount ?? undefined, buttonProps: { "data-guide-tab": "monitoring-mining" } },
+          ]}
+          value={panelTab}
+          onChange={setPanelTab}
+          ariaLabel={t("MonitoringPage.panelTabsAria")}
+        />
         <div className={panelTab === "alerts" ? undefined : styles.tabHidden}>
           <AlertsCard onCountChange={setAlertCount} />
         </div>
@@ -593,10 +694,11 @@ export default function MonitoringPage() {
           </span>
         </button>
         {nodesOpen && (<>
-        <div className={styles.tableScroll}>
+        <div ref={nodeFit.ref} className={styles.tableScroll}>
         <DataTable
           table={nodeTable}
           className={styles.table}
+          fit={nodeFit}
           renderRow={(row) => {
             const node = row.original;
             const online = node.status === "online";
@@ -612,7 +714,7 @@ export default function MonitoringPage() {
                 </tr>
                 {expanded && (
                   <tr className={styles.trExpand}>
-                    <td colSpan={7} className={styles.tdExpand}>
+                    <td colSpan={nodeColSpan} className={styles.tdExpand}>
                       <NodeTrends node={node.node} />
                     </td>
                   </tr>

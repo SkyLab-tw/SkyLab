@@ -6,6 +6,8 @@ import PasswordInput from "../../../components/PasswordInput/PasswordInput";
 import PasswordRules from "../../../components/PasswordRules/PasswordRules";
 import NumberInput from "../../../components/NumberInput/NumberInput";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
+import Disclosure from "../../../components/Disclosure/Disclosure";
 import Switch from "../../../components/Switch/Switch";
 import Stepper from "../../../components/Stepper/Stepper";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
@@ -187,6 +189,26 @@ export function FormsSection() {
             <Switch checked={enabled} onChange={setEnabled} label="立即生效的開關" />
           </div>
         </Demo>
+        <Demo label="行內收合（補充資訊）" refs={["components/Disclosure", "variant=\"inline\"", "className → font-size"]} note="只有文字＋向下箭頭、沒有框；字級跟著外框，平常淡色、滑過或展開變主色。執行證據、錯誤詳情、工具紀錄、限制與錯誤代碼在用。">
+          <Disclosure variant="inline" label="執行證據">
+            <p className={styles.hint}>stderr：connection refused（port 3306）</p>
+          </Disclosure>
+        </Demo>
+        <Demo label="收合列（進階設定）" refs={["components/Disclosure", "label", "icon?", "meta?", "bodyClassName"]} wide note="表單底部可以不填的設定收進共用收合列：白底細框、14px／500、右側淡色說明＋箭頭（展開轉半圈），內容接在列下方跟上方欄位對齊。不用瀏覽器原生 ▶ 三角形。建班精靈、首次設定精靈在用。">
+          <Disclosure icon="tune" label="進階設定" meta="選填" bodyClassName={styles.formGrid}>
+            <label className={styles.field}>
+              <span>學期</span>
+              <input defaultValue="115-1" />
+            </label>
+            <label className={styles.field}>
+              <span>提前開機</span>
+              <select defaultValue="10">
+                <option value="0">準時</option>
+                <option value="10">10 分鐘</option>
+              </select>
+            </label>
+          </Disclosure>
+        </Demo>
         <Demo label="開關與勾選框" refs={["components/Switch", ".checkRow"]} note="一切換就送出 → Switch；按「儲存」才生效 → 勾選框。表格列裡只放開關本體，不寫「啟用」字樣，用 ariaLabel＋title。">
           <div className={styles.stack}>
             <div className={styles.row}>
@@ -213,12 +235,13 @@ export function SegmentSection() {
     <Section
       id="segment"
       title="分段切換 SegmentedControl"
-      refs={["components/SegmentedControl/SegmentedControl.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]"]}
-      intro="互斥選項的即時切換一律用共用 SegmentedControl；固定 36px、選中段主色實心。超過 4 段在 className 加 max-width:100% + overflow-x:auto。"
+      refs={["components/SegmentedControl/SegmentedControl.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "quiet"]}
+      intro="清單篩選（狀態、類型）、表單選值（申請模式、題型）與檢視選項（時間區間、圖表指標、程式語言）一律用共用 SegmentedControl，固定 36px。清單篩選與表單選值用預設的實心版；檢視選項加 quiet：沒有軌道與陰影、選中段只有主色細框，貼在頁面分頁旁或圖表標頭不搶戲。切換整塊內容的分頁改用 Tabs（下一節）。超過 4 段在 className 加 max-width:100% + overflow-x:auto。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="基本＋圖示" refs={["icon"]}>
+        <Demo label="檢視選項：quiet" refs={["quiet", "icon"]} note="時間區間、圖表指標、API 文件的程式語言。切換「看哪一台」這類主要操作（課堂監看切換機器）仍用實心。">
           <SegmentedControl
+            quiet
             ariaLabel="日期區間"
             value={range}
             onChange={setRange}
@@ -229,7 +252,7 @@ export function SegmentSection() {
             ]}
           />
         </Demo>
-        <Demo label="數量徽章＋停用段" refs={["badge", "buttonProps: { disabled }"]}>
+        <Demo label="清單篩選：數量徽章＋停用段" refs={["badge", "buttonProps: { disabled }"]}>
           <SegmentedControl
             ariaLabel="審核狀態"
             value={status}
@@ -242,32 +265,104 @@ export function SegmentSection() {
             ]}
           />
         </Demo>
-        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="AI 導師檢查頁 220px 側邊欄的分頁：compact 把各段內距收成 8px，fullWidth 撐滿容器、各段平分。兩個都是元件的 prop，頁面 SCSS 不要再覆寫 .segmentBtn。">
+        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="240px 以下的窄容器：compact 把各段內距收成 8px，fullWidth 撐滿容器、各段平分。兩個都是元件的 prop，頁面 SCSS 不要再覆寫 .segmentBtn。">
           <div className={styles.narrowBox}>
             <SegmentedControl
-              ariaLabel="側欄分頁"
+              ariaLabel="檢查結果篩選"
               compact
               fullWidth
               value={status === "approved" ? "approved" : "pending"}
               onChange={setStatus}
               options={[
-                { value: "pending", label: "本週檢查", icon: "fact_check" },
-                { value: "approved", label: "檢查表助理", icon: "support_agent" },
+                { value: "pending", label: "待確認", icon: "pending" },
+                { value: "approved", label: "已通過", icon: "check_circle" },
               ]}
             />
           </div>
         </Demo>
         <Demo label="5 段以上橫向捲動" refs={["className → overflow-x: auto"]} wide>
           <SegmentedControl
-            ariaLabel="分頁"
+            ariaLabel="背景任務類型"
             className={styles.segmentScroll}
             value={many}
             onChange={setMany}
             options={["a", "b", "c", "d", "e", "f"].map((key, index) => ({
               value: key,
-              label: ["基本資料", "學生名單", "上課環境", "課表", "AI 導師檢查", "成績"][index],
+              label: ["全部", "建立", "開關機", "快照", "備份", "還原"][index],
             }))}
           />
+        </Demo>
+      </div>
+    </Section>
+  );
+}
+
+export function TabsSection() {
+  const [detail, setDetail] = useState("proxy");
+  const [status, setStatus] = useState("all");
+  const [page, setPage] = useState("overview");
+  const [side, setSide] = useState("rubrics");
+  return (
+    <Section
+      id="tabs"
+      title="分頁 Tabs"
+      refs={["components/Tabs/Tabs.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "page", "compact", "fullWidth", "@include page-tabs-row"]}
+      intro="切換整塊內容一律用 Tabs，分兩種：頁面分頁（page，標題下方切換整頁內容）圖示放進圓角方塊、選中換主色實心；區塊分頁（預設，卡片／側欄裡）沒有軌道，字下一條 2px 主色短指示條。選中的字都加粗到 600（標籤先依粗體預留寬度，切換時不會左右跳）。篩選與選項用 SegmentedControl。role=tablist／tab＋aria-selected，左右鍵、Home／End 切換；放不下自己橫捲。"
+    >
+      <div className={styles.demoGrid}>
+        <Demo label="區塊分頁＋右側篩選與搜尋" refs={["Tabs", "SegmentedControl", "ToolbarSearch"]} wide note="AI 用量監控的呼叫明細（卡片裡的區塊分頁）：分頁換內容、右邊的分段切換只篩目前分頁的清單。徽章 0 也顯示，載入失敗傳「—」。">
+          <div className={styles.alignRow}>
+            <Tabs
+              ariaLabel="呼叫明細"
+              value={detail}
+              onChange={setDetail}
+              options={[
+                { value: "models", label: "模型", icon: "model_training", badge: 3 },
+                { value: "proxy", label: "金鑰 API 呼叫", icon: "swap_horiz", badge: 128 },
+                { value: "template", label: "Template 呼叫", icon: "smart_toy", badge: 0 },
+                { value: "users", label: "使用者用量", icon: "groups", badge: "—" },
+              ]}
+            />
+            <SegmentedControl
+              ariaLabel="狀態篩選"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: "全部" },
+                { value: "success", label: "成功" },
+                { value: "error", label: "失敗" },
+              ]}
+            />
+          </div>
+        </Demo>
+        <Demo label="頁面分頁：page" refs={["page", "icon"]} wide note="標題下方、切換整頁內容的分頁（AI API、帳號設定、資源詳情、班級頁、Gateway、課程內容）。每個分頁都要給 icon；整列往左拉 12px，第一個方塊對齊標題左緣。放在 PageHeader 下方，分頁列 @include page-tabs-row：分頁到內容 12px、標題到分頁 24px。">
+          <Tabs
+            page
+            ariaLabel="資源詳情"
+            value={page}
+            onChange={setPage}
+            options={[
+              { value: "overview", label: "總覽", icon: "info" },
+              { value: "monitoring", label: "監控", icon: "monitor_heart" },
+              { value: "specifications", label: "規格", icon: "tune" },
+              { value: "snapshots", label: "快照", icon: "photo_camera" },
+            ]}
+          />
+        </Demo>
+        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="AI 導師檢查 220px 側欄：compact 左右內距 8px、fullWidth 平分。放在有底線的標頭列裡時，頁面讓分頁 align-self: stretch，指示條剛好壓在底線上。">
+          <div className={styles.narrowBox}>
+            <Tabs
+              ariaLabel="側欄分頁"
+              compact
+              fullWidth
+              value={side}
+              onChange={setSide}
+              options={[
+                { value: "rubrics", label: "任務設定", icon: "description" },
+                { value: "review", label: "導師核查", icon: "rate_review" },
+              ]}
+            />
+          </div>
         </Demo>
       </div>
     </Section>

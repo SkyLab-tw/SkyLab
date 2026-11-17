@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
+import Disclosure from "../Disclosure/Disclosure";
 import styles from "./CrashState.module.scss";
 
 /**
@@ -103,8 +104,7 @@ export default function CrashState({ error, componentStack, fullPage = false }) 
           </button>
         </div>
 
-        <details className={styles.details}>
-          <summary>{t("ErrorBoundary.details")}</summary>
+        <Disclosure variant="inline" className={styles.details} label={t("ErrorBoundary.details")}>
           {/* 一列：訊息過長時截斷（完整內容在 title 與複製結果裡），右側是純圖示的複製鈕 */}
           <div className={styles.detailsRow}>
             <pre ref={preRef} title={message}>{message}</pre>
@@ -122,7 +122,7 @@ export default function CrashState({ error, componentStack, fullPage = false }) 
               {copyState === "idle" ? "" : copyLabel}
             </span>
           </div>
-        </details>
+        </Disclosure>
       </div>
     </div>
   );

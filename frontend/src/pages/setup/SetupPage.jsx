@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import MIcon from "../../components/MIcon";
+import Disclosure from "../../components/Disclosure/Disclosure";
 import PasswordInput from "../../components/PasswordInput/PasswordInput";
 import PasswordRules from "../../components/PasswordRules/PasswordRules";
 import RotatingWelcome from "../../components/RotatingWelcome/RotatingWelcome";
@@ -766,14 +767,8 @@ export function SubnetStep({ alreadyDone, onSaved, onSkip, onBack, onNext }) {
         </label>
       </div>
 
-      {/* 進階設定：整行可點的收合列（白底細框、與輸入框同寬），右邊標「選填」與箭頭；展開後兩個欄位並排與上方對齊 */}
-      <details className={styles.details}>
-        <summary>
-          <MIcon name="tune" size={18} />
-          <span className={styles.detailsLabel}>{t("SetupPage.advancedToggle")}</span>
-          <span className={styles.detailsOptional}>{t("SetupPage.advancedOptional")}</span>
-          <MIcon name="expand_more" size={20} className={styles.detailsChevron} />
-        </summary>
+      {/* 進階設定：共用收合列（白底細框、與輸入框同寬），右邊標「選填」與箭頭；展開後兩個欄位並排與上方對齊 */}
+      <Disclosure icon="tune" label={t("SetupPage.advancedToggle")} meta={t("SetupPage.advancedOptional")}>
         <div className={styles.formGrid}>
           {/* 起—迄是同一個欄位：一個標籤、一組成對控制項 */}
           <div className={styles.field}>
@@ -810,7 +805,7 @@ export function SubnetStep({ alreadyDone, onSaved, onSkip, onBack, onNext }) {
             />
           </label>
         </div>
-      </details>
+      </Disclosure>
 
       {error && <p className={styles.error}>{error}</p>}
 
