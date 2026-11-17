@@ -5,6 +5,7 @@ import { createColumnHelper, useTable } from "@tanstack/react-table";
 import styles from "./AiApiPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import Disclosure from "../../../components/Disclosure/Disclosure";
+import DisclosureToggle from "../../../components/Disclosure/DisclosureToggle";
 import Modal from "../../../components/Modal/Modal";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
@@ -1684,18 +1685,17 @@ export default function AiApiPage() {
                   />
                 </div>
               )}
+              {/* 失效的金鑰併進上方表格，不是接在下面，所以用行內收合的按鈕版（樣子同 Disclosure inline） */}
               {inactiveCredentials.length > 0 && (
-                <button
-                  type="button"
-                  className={styles.btnGhost}
-                  onClick={() => setShowInactive((value) => !value)}
-                  aria-expanded={showInactive}
+                <DisclosureToggle
+                  className={styles.inactiveToggle}
+                  open={showInactive}
+                  onToggle={() => setShowInactive((value) => !value)}
                 >
-                  <MIcon name={showInactive ? "expand_less" : "expand_more"} size={16} />
                   {showInactive
                     ? t("AiApiPage.hideInactive")
                     : t("AiApiPage.showInactive", { count: inactiveCredentials.length })}
-                </button>
+                </DisclosureToggle>
               )}
             </div>
           )

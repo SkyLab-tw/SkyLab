@@ -75,10 +75,12 @@
   @include btn-secondary;
 }
 
-/* 顯示／收起已失效金鑰：低強調的文字鈕，靠左放在表格下方 */
-.btnGhost {
-  @include btn-ghost;
+/* 顯示／收起已失效金鑰：行內收合的按鈕版（DisclosureToggle），靠左放在表格下方。
+   原本是淡底鈕，直接放在頁面底上時 hover 底色會跟頁面背景混在一起（奶茶等低飽和主題最明顯） */
+.inactiveToggle {
   align-self: flex-start;
+  margin-top: $spacing-4;
+  font-size: $font-size-14;
 }
 
 .iconBtn {

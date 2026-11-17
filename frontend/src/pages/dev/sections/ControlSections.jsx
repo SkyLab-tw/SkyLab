@@ -8,6 +8,7 @@ import NumberInput from "../../../components/NumberInput/NumberInput";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 import Tabs from "../../../components/Tabs/Tabs";
 import Disclosure from "../../../components/Disclosure/Disclosure";
+import DisclosureToggle from "../../../components/Disclosure/DisclosureToggle";
 import Switch from "../../../components/Switch/Switch";
 import Stepper from "../../../components/Stepper/Stepper";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
@@ -119,6 +120,7 @@ export function FormsSection() {
   const [query, setQuery] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [agree, setAgree] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   return (
     <Section
       id="forms"
@@ -193,6 +195,11 @@ export function FormsSection() {
           <Disclosure variant="inline" label="執行證據">
             <p className={styles.hint}>stderr：connection refused（port 3306）</p>
           </Disclosure>
+        </Demo>
+        <Demo label="行內收合（按鈕版）" refs={["components/Disclosure/DisclosureToggle", "open", "onToggle"]} note="展開的內容不接在下面（例如把列併進上方表格）時用，樣子同行內收合。放在頁面底上也不鋪底色：淡底鈕的 hover 色階會跟低飽和主題的頁面背景混在一起。AI API 的「顯示已失效的金鑰」在用。">
+          <DisclosureToggle open={showInactive} onToggle={() => setShowInactive((value) => !value)}>
+            {showInactive ? "隱藏已失效的金鑰" : "顯示已失效的金鑰（2）"}
+          </DisclosureToggle>
         </Demo>
         <Demo label="收合列（進階設定）" refs={["components/Disclosure", "label", "icon?", "meta?", "bodyClassName"]} wide note="表單底部可以不填的設定收進共用收合列：白底細框、14px／500、右側淡色說明＋箭頭（展開轉半圈），內容接在列下方跟上方欄位對齊。不用瀏覽器原生 ▶ 三角形。建班精靈、首次設定精靈在用。">
           <Disclosure icon="tune" label="進階設定" meta="選填" bodyClassName={styles.formGrid}>
