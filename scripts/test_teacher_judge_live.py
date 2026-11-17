@@ -67,12 +67,13 @@ SINGLE_MACHINE = [
         "os": "ubuntu",
     }
 ]
-DUAL_MACHINE = [
+# 兩台角色、名稱都無法分辨的機器：需求沒指定時，AI 不能從上下文推斷要查哪一台。
+TWIN_MACHINES = [
     *SINGLE_MACHINE,
     {
         "display_label": "P2",
-        "node_key": "db",
-        "name": "db-01",
+        "node_key": "web2",
+        "name": "web-02",
         "role": "server",
         "resource_type": "vm",
         "os": "ubuntu",
@@ -138,6 +139,23 @@ def check_stopped(*markers: str) -> Callable[[dict[str, Any]], list[str]]:
         return failures
 
     return check
+
+
+def check_condition(record: dict[str, Any]) -> list[str]:
+    """缺判定條件：停下詢問判定方式，或建立單一「交給老師核查」提案，兩者皆符合。"""
+
+    stopped = check_stopped("預期", "自動", "自己檢查", "老師查看")(record)
+    if not stopped:
+        return []
+    proposal = record.get("proposal") or []
+    if record.get("staged_count") == 1 and len(proposal) == 1:
+        if proposal[0].get("judgement_mode") == "teacher":
+            return []
+        return [
+            "建立的提案不是交給老師核查（judgement_mode 應為 teacher，"
+            f"實際 {proposal[0].get('judgement_mode')!r}）"
+        ]
+    return stopped
 
 
 def _header_count(record: dict[str, Any]) -> int | None:
@@ -241,8 +259,8 @@ CASES: tuple[Case, ...] = (
         ("missing-machine",),
         "追問行為（prompt、機器驗證）",
         "chat",
-        DUAL_MACHINE,
-        "檢查 MySQL 服務有在執行",
+        TWIN_MACHINES,
+        "檢查 nginx 服務有在執行",
         "AI 停下，追問哪一台機器",
         check_stopped("機器", "哪一台", "哪台"),
     ),
@@ -253,8 +271,8 @@ CASES: tuple[Case, ...] = (
         "chat",
         SINGLE_MACHINE,
         "檢查 Python 版本是否正確",
-        "AI 停下，詢問預期版本或交給老師查看",
-        check_stopped("預期", "自動", "自己檢查", "老師查看"),
+        "AI 停下詢問預期版本，或建立 1 項交給老師核查的提案",
+        check_condition,
     ),
     Case(
         "P1-mixed-path",

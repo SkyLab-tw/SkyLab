@@ -266,7 +266,11 @@ _PROPOSAL_FILL_PROPERTIES: dict[str, Any] = {
     "title": {"type": "string", "description": "檢查項目名稱"},
     "target_node_key": {
         "type": ["string", "null"],
-        "description": "班級拓撲中要執行檢查的邏輯機器；可依提示使用 P1/P2，後端會保存為 node_key",
+        "description": (
+            "班級拓撲中要執行檢查的邏輯機器；可依提示使用 P1/P2，後端會保存為 node_key。"
+            "拓撲有兩台以上機器而老師沒有指定、名稱或角色也無法唯一對應時，"
+            "不要猜測任一台、不要呼叫此工具；改在 reply 詢問要檢查哪一台。"
+        ),
     },
     "peer_node_key": {
         "type": ["string", "null"],

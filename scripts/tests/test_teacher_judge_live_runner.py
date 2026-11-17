@@ -110,6 +110,31 @@ def test_stopped_check_allows_future_proposal_wording(runner) -> None:
     assert runner.check_stopped("路徑")(record) == []
 
 
+def test_condition_check_accepts_question_or_teacher_review(runner) -> None:
+    asked = stopped_record(case_id="P1-condition", reply="要由系統自動判定，還是你自己檢查？")
+    assert runner.check_condition(asked) == []
+
+    teacher = stopped_record(
+        case_id="P1-condition",
+        reply="已建立 1 項提案，請在下方提案清單確認後套用。",
+        proposal_status="ready",
+        staged_count=1,
+        created_count=1,
+        proposal=[{"title": "檢查 Python 版本", "judgement_mode": "teacher"}],
+    )
+    assert runner.check_condition(teacher) == []
+
+    guessed = {**teacher, "proposal": [{"title": "檢查 Python 版本", "judgement_mode": "ai"}]}
+    assert any("交給老師核查" in f for f in runner.check_condition(guessed))
+    assert runner.check_condition({**teacher, "staged_count": 2})
+
+
+def test_machine_case_uses_indistinguishable_machines(runner) -> None:
+    case = runner.CASES_BY_ID["P1-machine"]
+    assert len(case.machines) == 2
+    assert {m["role"] for m in case.machines} == {"server"}
+
+
 def test_multi_check_requires_count_header_and_title_mapping(runner) -> None:
     assert runner.check_multi(multi_record()) == []
     assert runner.check_multi(multi_record(created_count=4))

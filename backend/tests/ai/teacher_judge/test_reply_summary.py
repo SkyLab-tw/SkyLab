@@ -298,3 +298,23 @@ async def test_chat_mixed_names_missing_item_and_keeps_count(
     assert lines[1] == "摘要：共 3 項需求，2 項已建立提案，1 項需要補資訊或調整。"
     assert "需要你注意：" in lines
     assert any("備份腳本檢查" in line for line in lines[lines.index("需要你注意：") :])
+
+
+@pytest.mark.asyncio
+async def test_chat_hallucinated_tool_is_not_counted_as_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = await _chat(
+        monkeypatch,
+        [
+            tool_call_message("create_checklist_item", _create_args(1, "檢查一")),
+            tool_call_message("propose_checklist_changes", {"changes": "[]"}),
+            reply_message("已整理好。", "ready"),
+            # The server then forces one repair round for the failed tool.
+            reply_message("已整理好。", "ready"),
+        ],
+    )
+
+    assert len(result.proposal) == 1
+    assert "共 2 項需求" not in result.reply
+    assert "需要補資訊或調整" not in result.reply
