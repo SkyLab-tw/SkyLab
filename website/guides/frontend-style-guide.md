@@ -99,7 +99,8 @@ Always look up and reuse what is already defined in `_variables.scss` (spacing, 
 | `--color-divider` | Divider line |
 | `--color-hover` | Hover background |
 | `--color-row-hover` | Table row hover background (darker than `--color-hover` so it does not match the header colour) |
-| `--color-overlay` | Modal backdrop |
+| `--color-track` | Track of progress bars and meters (the unfilled part): 28% of the muted text colour, visible in light, dark and custom primary colours. Do not use `--color-hover` as a track: with a custom primary colour the light hover can equal the page background, and the track all but disappears on a card |
+| `--color-overlay` | Modal backdrop: in light mode it is derived from the deep shadow colour (darkened, then 25%), so it follows a custom primary colour; dark mode stays black at 60%. Do not hard-code a tinted backdrop: under a warm theme the glass dialog would show a blue cast |
 
 #### Shadows
 | Variable | Purpose |

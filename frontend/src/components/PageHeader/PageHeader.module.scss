@@ -13,13 +13,14 @@
   min-width: 0;
 }
 
-/* 統一承接各頁操作區，也提供導覽元件穩定的定位目標。 */
+/* 統一承接各頁操作區，也提供導覽元件穩定的定位目標。
+   跟標題同一列時由 .pageHeader 的 space-between 推到右邊；放不下換到下一列時靠左，
+   接在標題正下方（不寫 margin-left: auto，否則換行後會孤零零貼在右邊、左邊空一大塊） */
 .pageActions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: $spacing-8;
-  margin-left: auto;
 }
 
 /* leading（返回鍵等）與標題區同排靠左 */

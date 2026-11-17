@@ -2328,6 +2328,16 @@ button.heatAttentionChip {
     grid-template-columns: 1fr 1fr;
   }
 
+  /* 手機：名單鎖定說明跟標題同一列（靠右），搜尋框換到下一列撐滿；
+     原本說明排在搜尋框後面，換行後自己一列貼在右邊 */
+  .memberTitle {
+    order: -2;
+  }
+
+  .memberLockedNote {
+    order: -1;
+  }
+
   .heatmapHeader,
   .heatmapToolbar,
   .heatmapSummary {

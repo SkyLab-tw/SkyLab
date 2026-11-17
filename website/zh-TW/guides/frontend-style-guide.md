@@ -99,7 +99,8 @@ src/pages/personal/resources/
 | `--color-divider` | 分隔線 |
 | `--color-hover` | Hover 背景 |
 | `--color-row-hover` | 表格列 hover 背景（比 `--color-hover` 深，避免與表頭同色） |
-| `--color-overlay` | Modal 遮罩 |
+| `--color-track` | 進度條、量表的軌道（還沒填滿的部分）：muted 文字色 28%，亮暗與自訂主色都看得到。不要用 `--color-hover` 當軌道：自訂主色的淺色 hover 會等於頁面底色，軌道在卡片上幾乎看不見 |
+| `--color-overlay` | Modal 遮罩：淺色模式從深陰影色衍生（壓暗後取 25%），自訂主色時跟著換色調；深色模式固定黑 60%。不要寫死帶色相的遮罩，暖色主題下毛玻璃對話框會透出藍色 |
 
 #### 陰影
 | 變數 | 用途 |
