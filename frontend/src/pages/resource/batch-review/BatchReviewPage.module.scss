@@ -44,55 +44,6 @@
   @include btn-secondary;
 }
 
-/* ── Tabs ── */
-/* 分段切換器與搜尋擺同一排，省下的垂直空間留給右側詳情表單與審核按鈕 */
-.tabsRow {
-  display: flex;
-  align-items: center;
-  gap: $spacing-16;
-  flex-wrap: wrap;
-}
-
-/* 窄螢幕選項放不下時讓切換器自己橫向捲動；高度鎖 38px 與搜尋框對齊 */
-.tabsControl {
-  height: 38px;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-.search {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 $spacing-8 0 10px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  flex: 0 1 280px;
-  min-width: 200px;
-  box-shadow: var(--shadow-sm);
-}
-
-.searchInput {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: $font-size-14;
-  color: var(--color-text-primary);
-
-  &::placeholder {
-    color: var(--color-text-muted);
-  }
-}
-
 /* ── Content ── */
 .content {
   flex: 1;

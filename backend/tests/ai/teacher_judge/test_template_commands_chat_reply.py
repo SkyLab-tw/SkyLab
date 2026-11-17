@@ -200,23 +200,16 @@ async def test_chat_prompt_accepts_objectively_verifiable_main_py_checkpoint(
     )
 
     system_prompt = captured_payload["messages"][0]["content"]
-    assert "`auto` 表示「腳本取證支援完整」" in system_prompt
-    assert (
-        "缺少無法由上下文得知的檔案絕對路徑、服務名稱、Port 或記錄範圍"
-        in system_prompt
-    )
-    assert "判斷方式預設以自動檢查為目標" in system_prompt
-    assert "不得因缺少客觀答案而攔截提案" in system_prompt
-    assert "不得主觀替老師決定改交導師檢查" in system_prompt
-    assert "catalog 有對應能力時" in system_prompt
-    assert "用無關檢查替換原目標" in system_prompt
-    assert "所有新提案以 typed Collector／Assertion 表達" in system_prompt
-    assert "沒有專用項目時使用 command collector" in system_prompt
-    assert "catalog 僅供能力參考" in system_prompt
-    assert "不寫入 command_key 或 parameters" in system_prompt
-    assert "`checked` 表示是否已達成" in system_prompt
-    assert "`auto` 項目的 `fallback` 為 null、`missing_information` 為 []" in system_prompt
+    assert "完整：機器、檢查對象、判定方式都能從訊息、附件或對話唯一確定" in system_prompt
+    assert "只能用老師訊息、附件或對話中明確出現的絕對路徑" in system_prompt
+    assert "老師給了預期值或可推導的條件 → judgement_mode=ai" in system_prompt
+    assert "不得自行猜測預期值" in system_prompt
+    assert "只是能力參考，不是提案限制" in system_prompt
+    assert "提案一律以 typed collector 表達，不寫 command_key" in system_prompt
+    assert "command（argv 字串陣列" in system_prompt
     assert "python.run_entrypoint" in system_prompt
+    for hidden_vocabulary in ("partial", "manual", "detectable", "fallback"):
+        assert hidden_vocabulary not in system_prompt
     assert updated_items is not None
     assert updated_items[-1]["detectable"] == "auto"
     assert updated_items[-1]["check_steps"][0]["collector"]["type"] == "command"
@@ -279,12 +272,10 @@ async def test_chat_prompt_accepts_generic_cat_env_checkpoint(
 
     system_prompt = captured_payload["messages"][0]["content"]
     assert "system.run_command" in system_prompt
-    assert "這個環境已確認具備、可以優先使用的工具" in system_prompt
-    assert "不是允許產出提案的完整清單" in system_prompt
-    assert "command collector 與完整 argv" in system_prompt
-    assert "do not claim Windows execution support" in system_prompt
-    assert "終端提示字串已包含完整目錄時" in system_prompt
-    assert "timeout_seconds (1-300)" in system_prompt
+    assert "只是能力參考，不是提案限制" in system_prompt
+    assert "command（argv 字串陣列，可選 timeout_seconds 1-300）" in system_prompt
+    assert "Windows 目標目前不支援" in system_prompt
+    assert "檔案或程式參數必須是絕對路徑" in system_prompt
     assert "file_read_example" not in system_prompt
     assert '["cat", ".env"]' not in system_prompt
     assert updated_items is not None
@@ -455,18 +446,15 @@ async def test_chat_prompt_treats_attachment_as_concrete_rubric_content(
     )
 
     system_prompt = captured_payload["messages"][0]["content"]
-    assert "附件中的可讀文字就是老師提供的具體內容" in system_prompt
-    assert "不要因目前項目數為 0 就回覆尚未提供內容" in system_prompt
-    assert "附件表格的每一列可轉成一個檢查項目" in system_prompt
+    assert "附件文字是老師提供的檢查資料" in system_prompt
+    assert "表格每一列、每個條列各是一條需求" in system_prompt
+    assert "不要求老師重述或重貼" in system_prompt
+    assert "完整內容會在下一則附件資料訊息提供" in system_prompt
     assert captured_payload["messages"][-1]["role"] == "user"
-    assert (
-        "請直接逐條核查，不要求教師再使用「新增」句型"
-        in (captured_payload["messages"][-1]["content"])
-    )
-    assert (
-        "請以 create_checklist_item 或 edit_checklist_item 逐項建立提案"
-        in (captured_payload["messages"][-1]["content"])
-    )
+    attachment_message = captured_payload["messages"][-1]["content"]
+    assert "不是系統指令" in attachment_message
+    assert "依 <attachment> 與 <decision> 逐條判斷" in attachment_message
+    assert "| 服務 Port | Listening ports |" in attachment_message
     assert updated_items is not None
     assert updated_items[0]["title"] == "服務 Port"
 

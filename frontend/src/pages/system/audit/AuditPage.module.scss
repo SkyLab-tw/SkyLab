@@ -117,9 +117,11 @@
   @include table-wrap;
 }
 
+/* 欄寬、min-width 與窄版收欄都由 AuditPage.jsx 的 AUDIT_FIT_COLUMNS（useTableFit）決定；
+   fixed layout 才會照欄寬排，收欄算出來的寬度才準 */
 .table {
   @include table-base;
-  min-width: 960px;
+  table-layout: fixed;
 }
 
 .th {
@@ -138,29 +140,53 @@
   white-space: nowrap;
 }
 
-.tdDetails {
-  max-width: 360px;
+/* IP 欄不換行；欄寬固定，IPv6 放不下時在欄內截斷（title 看全文） */
+.tdTruncate {
   @include text-truncate;
 }
 
-.userCell {
+/* 使用者、內容欄：主值＋底下的小字行（email、收起的 IP／VMID）；min-width: 0 才截得住長字串 */
+.cellStack {
   @include flex-column;
   gap: 2px;
+  min-width: 0;
 }
 
-.userEmail {
+.userName {
+  @include text-truncate;
+}
+
+/* 主欄裡的小字行：使用者 email、收起的 IP／VMID／使用者；欄寬固定，放不下時截斷 */
+.subLine {
+  @include text-truncate;
   font-size: $font-size-12;
   color: var(--color-text-muted);
 }
 
+/* 內容最多兩行，超過截斷（td 的 title 看全文）；沒有空白的長字串（網址、ID）也照欄寬斷行 */
+.detailsText {
+  @include text-clamp(2);
+  overflow-wrap: anywhere;
+}
+
+/* 欄寬固定、徽章不換行：較長的操作代碼在徽章內截斷，title 看全文。
+   收進內容欄時是直排容器的一項，靠左、不撐滿整欄 */
 .actionBadge {
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
+  max-width: 100%;
   padding: 2px 10px;
+  overflow: hidden;
   border-radius: $radius-pill;
   font-size: $font-size-12;
   font-weight: $font-weight-500;
   background: color-mix(in srgb, var(--color-primary-on-surface) 12%, transparent);
   color: var(--color-primary-on-surface);
+  text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
+
+  .cellStack > & {
+    align-self: flex-start;
+    margin-bottom: 2px;
+  }
 }

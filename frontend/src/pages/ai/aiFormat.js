@@ -54,3 +54,25 @@ export function isOkStatus(status) {
     status === "ok"
   );
 }
+
+/* 後端固定寫入、可直接當代碼顯示的 error_message；其他（含例外自由文字）一律顯示 error */
+const KNOWN_ERROR_CODES = new Set([
+  "upstream_unavailable",
+  "upstream_stream_error",
+  "incomplete_stream",
+  "downstream_response_error",
+  "empty_choices",
+]);
+
+/* Token 證據欄：失敗列顯示 log 的錯誤代碼（分類語意同後端 ai_metrics.outcome），
+   成功列依上游是否回報用量；回傳 null 代表成功但上游未回報 */
+export function usageEvidence(call) {
+  if (isOkStatus(call.status)) return call.usage_reported ? "success" : null;
+  if (call.status === "cancelled") return "cancelled";
+  const message = call.error_message ?? "";
+  const http = message.match(/^upstream_http_(\d{3})$/);
+  if (http) return http[1] === "429" ? "429 rate_limit" : `HTTP ${http[1]}`;
+  if (message.startsWith("queue_")) return "server_busy";
+  if (message.endsWith("_timeout")) return "timeout";
+  return KNOWN_ERROR_CODES.has(message) ? message : "error";
+}

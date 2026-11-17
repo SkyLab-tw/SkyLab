@@ -28,7 +28,7 @@ import BatchBar, { BatchAction, BatchDivider } from "../../../components/DataToo
 import SelectCheckbox from "../../../components/DataToolbar/SelectCheckbox";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
 import useRowSelection from "../../../hooks/useRowSelection";
-import Pagination from "../shared/Pagination";
+import Pagination from "../../../components/Pagination/Pagination";
 import { formatDate } from "../../../utils/formatDate";
 import { joinList } from "../../../utils/joinList";
 import { isPasswordStrong } from "../../../utils/passwordPolicy";

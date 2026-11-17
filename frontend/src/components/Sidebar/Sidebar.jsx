@@ -463,7 +463,6 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
             onClose={() => setLangOpen(false)}
             closing={langMenu.closing}
             placement="side"
-            glass
           />
         )}
 
@@ -499,7 +498,6 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
             onClose={() => setUserOpen(false)}
             closing={userMenu.closing}
             placement="side"
-            glass
             header={(
               <div className={styles.menuUser}>
                 <Avatar user={user} size={32} />

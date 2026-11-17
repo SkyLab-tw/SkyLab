@@ -135,4 +135,3 @@ export function firewallMocks(m, topo) {
     ["GET", /^\/api\/v1\/reverse-proxy\/domain-availability$/, ({ query }) => ({ domain: query.domain, available: true, reason: null, message: null })],
   ]);
 }
-

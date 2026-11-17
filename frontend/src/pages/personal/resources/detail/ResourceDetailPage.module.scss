@@ -19,25 +19,16 @@
   color: var(--color-primary);
 }
 
-/* ── Tabs（共用 SegmentedControl）──
-   左側分頁切換器＋右側工具槽同列；分頁元件把自己的控制項 portal 進工具槽 */
+/* ── 頁面分頁（<Tabs page>）──
+   左側分頁＋右側工具槽同列；分頁元件把自己的控制項 portal 進工具槽 */
 .tabsRow {
   @include flex-between;
   gap: $spacing-8 $spacing-16;
   flex-wrap: wrap;
+  @include page-tabs-row;
 }
 
 /* 6 段窄螢幕放不下時讓切換器自己橫向捲動 */
-.tabs {
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
-
 /* 同列時靠右由 .tabsRow 的 space-between 負責；
    不加 margin-left: auto，窄螢幕折行後才會靠左對齊 */
 .tabsToolbar {

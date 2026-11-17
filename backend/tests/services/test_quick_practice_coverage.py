@@ -764,3 +764,33 @@ def test_serialize_session_reports_machine_and_group_status(
     qdb.add(practice)
     qdb.commit()
     assert quick_practice.serialize_session(qdb, practice)["status"] == "stopping"
+
+
+def test_serialize_session_machines_follow_teardown_status(
+    qdb: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """環境在收尾時，還沒建好的機器不能再回 provisioning（清單會寫成「開通中」）。"""
+    practice, requests = _session_graph(qdb)
+    monkeypatch.setattr(course_publication_service, "public_urls_by_vmid", lambda session, vmids: {})
+    monkeypatch.setattr(course_publication_service, "forward_endpoints_by_vmid", lambda session, vmids: {})
+    monkeypatch.setattr(quick_practice.resource_repo, "get_cached_ip_address", lambda *, session, vmid: None)
+    # 一台還在 clone、一台還沒拿到 vmid
+    requests[0].provisioning_status = VMProvisioningStatus.running
+    requests[1].vmid = None
+    requests[1].provisioning_status = VMProvisioningStatus.pending
+    qdb.add_all(requests)
+    qdb.commit()
+
+    for status in ("stopping", "reclaiming", "reclaimed"):
+        practice.status = status
+        qdb.add(practice)
+        qdb.commit()
+        data = quick_practice.serialize_session(qdb, practice)
+        assert data["status"] == status
+        assert [m["status"] for m in data["machines"]] == [status, status]
+
+    # 還在建立中的環境：機器照舊回各自的建立進度
+    practice.status = "creating"
+    qdb.add(practice)
+    qdb.commit()
+    assert [m["status"] for m in quick_practice.serialize_session(qdb, practice)["machines"]] == ["provisioning", "provisioning"]

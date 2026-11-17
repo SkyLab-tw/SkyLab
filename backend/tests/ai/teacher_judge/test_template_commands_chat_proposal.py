@@ -404,7 +404,8 @@ async def test_teacher_information_gap_rejection_still_defers_to_reply(
     assert len(rejected) == 1
     reason = str(rejected[0]["reason"])
     assert "目前無法形成可套用的提案" in reason
-    assert "請改在 reply 中說明缺少的內容" in reason
+    assert "不要猜測" in reason
+    assert "請在 reply 詢問老師" in reason
     assert "可由你自行補齊" not in reason
 
 

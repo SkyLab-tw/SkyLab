@@ -11,7 +11,7 @@ import { SUPPORTED_LANGUAGES, setLanguage } from "../../i18n";
 import SegmentedControl from "../../components/SegmentedControl/SegmentedControl";
 import OctoMark from "../../components/OctoPet/OctoMark";
 import { ColorsSection, DimsSection, TypeSection, ZIndexSection } from "./sections/FoundationSections";
-import { ActionMenuSection, BadgesSection, ButtonsSection, FormsSection, ListboxSection, SegmentSection, StepperSection } from "./sections/ControlSections";
+import { ActionMenuSection, BadgesSection, ButtonsSection, FormsSection, ListboxSection, SegmentSection, StepperSection, TabsSection } from "./sections/ControlSections";
 import { CardRulesSection, DropzoneSection, TablesSection } from "./sections/DataSections";
 import { EmptyStateSection, LoadingSection, MiscSection, ModalSection, ToastSection } from "./sections/StateSections";
 import { IndicatorsSection } from "./sections/IndicatorSections";
@@ -36,6 +36,7 @@ const TABS = {
       { id: "badges", label: "徽章", Component: BadgesSection },
       { id: "indicators", label: "狀態指示", Component: IndicatorsSection },
       { id: "segment", label: "分段切換", Component: SegmentSection },
+      { id: "tabs", label: "分頁", Component: TabsSection },
       { id: "listbox", label: "單選清單", Component: ListboxSection },
       { id: "actionmenu", label: "動作選單", Component: ActionMenuSection },
       { id: "stepper", label: "步驟列", Component: StepperSection },

@@ -219,6 +219,8 @@ export function derivePrimaryTheme(hex) {
       textSecondary: hslToHex(h, s, between(l + 4, 30, 66)),
       textMuted: tone(20, 59),
       hover: tone(80, 95),
+      // 表格可點列的 hover、淡底鈕的 hover：比 hover 深一階（預設藍 #e8efff → #d9e4fc，亮度差約 3.5）
+      rowHover: tone(80, 91.5),
       border: tone(40, 93),
       divider: tone(45, 96),
       bgBase: tone(85, 95),
@@ -238,6 +240,8 @@ export function derivePrimaryTheme(hex) {
       textSecondary: hslToHex(h, s, 92),
       textMuted: tone(18, 43),
       hover: tone(30, 17),
+      // 深色模式往亮一階（預設 #1f2636 → #273148，亮度差約 5）
+      rowHover: tone(30, 22),
       border: tone(25, 21),
       divider: tone(25, 17),
       bgBase: tone(30, 7),

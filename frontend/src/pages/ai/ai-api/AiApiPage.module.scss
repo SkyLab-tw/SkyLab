@@ -21,40 +21,11 @@
   gap: $spacing-16;
 }
 
-/* ── 控制列（排版比照 AI 金鑰管理）：窄螢幕上下堆疊，寬螢幕分頁在左、動作在右 ── */
-.controlsRow {
-  @include flex-column;
-  gap: $spacing-16;
-
-  /* 桌機並排；內容欄不夠寬（側欄展開＋小筆電）時按鈕換到下一行靠右，不凸出內容右緣 */
-  @include respond-to(lg) {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: $spacing-16 $spacing-32;
-  }
+.tabsBar {
+  @include page-tabs-row;
 }
 
 /* 分頁切換：窄螢幕放不下時橫向捲動，留細捲軸當提示（藏起來會看不出還有分頁） */
-.pageTabs {
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.headerActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: $spacing-8;
-  flex-shrink: 0;
-
-  /* 換行後仍靠右；手機直排維持靠左 */
-  @include respond-to(lg) { margin-left: auto; }
-}
-
 /* ── 表單：共用 form-field／form-control（控制項 36px） ── */
 .field {
   @include form-field;
@@ -142,11 +113,17 @@
 
 .table {
   @include table-base;
-  min-width: 760px;
 }
 
+/* 金鑰表：欄寬、min-width 與窄版收欄由 AiApiPage.jsx 的 KEY_FIT_COLUMNS（useTableFit）決定，
+   fixed layout 才會照欄寬排 */
+.tableKeys {
+  table-layout: fixed;
+}
+
+/* 申請紀錄表：同金鑰表，欄寬、min-width 與窄版收欄由 AiApiPage.jsx 的 RECORD_FIT_COLUMNS 決定 */
 .tableRecords {
-  min-width: 960px;
+  table-layout: fixed;
 }
 
 .th {
@@ -251,6 +228,21 @@
   color: var(--color-text-muted);
 }
 
+/* 收進狀態底下的到期日已過期：只換紅字，字級維持小字（.textDanger 自帶 14px） */
+.cellSublineDanger {
+  color: var(--color-danger);
+}
+
+/* 收到名稱底下的申請用途：最多兩行，全文在 title */
+.cellSublineClamp {
+  @include text-clamp(2);
+}
+
+/* 收到狀態底下的審核意見：整段換行，長網址也不撐出欄外 */
+.cellSublineWrap {
+  overflow-wrap: anywhere;
+}
+
 .tdActions {
   width: 1%;
   white-space: nowrap;
@@ -298,10 +290,9 @@
   width: 220px;
   @include flex-column;
   padding: $spacing-4;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: $radius-8;
-  box-shadow: var(--shadow-md);
+  /* 底色跟 ActionMenu 同一套玻璃，隨介面風格與主題色變 */
+  @include popover-glass;
 }
 
 .keyMenuItem {
@@ -465,32 +456,11 @@
 }
 
 /* 常見錯誤：預設收合，出錯才點開 */
+/* 限制與錯誤代碼：共用行內收合（Disclosure inline），這裡只管上方分隔線與字級 */
 .docsErrors {
-  min-width: 0;
   padding-top: $spacing-16;
   border-top: 1px solid var(--color-divider);
-
-  summary {
-    display: flex;
-    align-items: center;
-    gap: $spacing-8;
-    color: var(--color-text-secondary);
-    font-size: $font-size-14;
-    font-weight: $font-weight-500;
-    cursor: pointer;
-    list-style: none;
-
-    &::-webkit-details-marker { display: none; }
-    &:hover { color: var(--color-text-primary); }
-    &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 4px; }
-  }
-
-  &[open] .docsErrorsChevron { transform: rotate(180deg); }
-}
-
-.docsErrorsChevron {
-  margin-left: auto;
-  transition: transform $transition-base;
+  font-size: $font-size-14;
 }
 
 /* HTTP 狀態碼：錯誤徽章（12% 淡底、不加框） */

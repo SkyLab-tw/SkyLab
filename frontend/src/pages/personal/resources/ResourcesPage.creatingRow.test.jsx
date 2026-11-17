@@ -139,4 +139,29 @@ describe("ResourcesPage creating row", () => {
     expect(rowOf("prov-vm").textContent).toContain("CreatingRow.statusProvisioning");
     expect(rowOf("prov-vm").textContent).toContain("CreatingRow.creating");
   });
+  test("快速練習群組回收中：底下還沒建好的機器跟著顯示回收中，不寫開通中", async () => {
+    mocks.list.mockResolvedValue([]);
+    mocks.listRequests.mockResolvedValue({ data: [] });
+    mocks.listMySessions.mockResolvedValue([{
+      id: "s1",
+      title: "n8n 與 AI 智慧自動化",
+      status: "reclaiming",
+      expiresAt: null,
+      machines: [
+        { id: "m1", requestId: "q1", vmid: null, name: "n8n", type: "lxc", os_info: "n8n", status: "provisioning", ip: null, node: "pve-01" },
+        { id: "m2", requestId: "q2", vmid: null, name: "PostgreSQL", type: "lxc", os_info: "PostgreSQL", status: "provisioning", ip: null, node: "pve-01" },
+      ],
+    }]);
+
+    await act(async () => { root.render(withQueryClient(<ResourcesPage />)); });
+    await flush();
+
+    const machineRows = [...host.querySelectorAll("tr")].filter((tr) => tr.textContent.includes("n8n") || tr.textContent.includes("PostgreSQL")).slice(-2);
+    expect(machineRows).toHaveLength(2);
+    for (const row of machineRows) {
+      expect(row.textContent).toContain("ResourcesPage.statusReclaiming");
+      expect(row.textContent).not.toContain("ResourcesPage.statusProvisioning");
+      expect(row.textContent).not.toContain("EnvironmentMachineRow.creating");
+    }
+  });
 });

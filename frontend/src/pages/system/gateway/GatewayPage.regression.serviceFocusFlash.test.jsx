@@ -89,7 +89,7 @@ test("returning to the window while the Gateway is unreachable keeps the nginx t
   await act(async () => { root.render(withQueryClient(<GatewayPage />, client)); });
   await flush();
   await act(async () => {
-    [...host.querySelectorAll("button")].find((b) => b.textContent === "nginx").click();
+    host.querySelector(`[role="tab"][data-guide-tab="gateway-nginx"]`).click();
   });
   await flush();
   expect(host.querySelector('[data-testid="editor"]')?.dataset.failed).toBe("true");

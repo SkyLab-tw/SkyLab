@@ -52,8 +52,12 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 
-  @include respond-to(md) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  @include respond-to(sm) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @include respond-to(xl) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -90,6 +94,11 @@
 .metricIcon_info {
   background: color-mix(in srgb, var(--color-info) 12%, transparent);
   color: var(--color-info);
+}
+
+.metricIcon_success {
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
 }
 
 .metricBody {
@@ -222,12 +231,15 @@
   font-weight: $font-weight-700;
 }
 
+/* 標題不讓工具列擠扁（不換行）；整排放不下時，切換與搜尋自己換到下一行靠左，
+   不靠視窗斷點：右側有系統狀態卡時，卡片本身就比視窗窄很多 */
 .panelHeader,
 .detailHeader {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: $spacing-16;
+  gap: $spacing-8 $spacing-16;
   margin-bottom: $spacing-16;
 }
 
@@ -236,6 +248,7 @@
   align-items: center;
   gap: 7px;
   margin: 0;
+  white-space: nowrap;
   color: var(--color-text-primary);
   font-size: $font-size-16;
   font-weight: $font-weight-700;
@@ -255,6 +268,18 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 4px 10px;
+  max-width: 100%;
+
+  /* 卡片比五個選項還窄時（手機），切換自己橫向捲動，不撐出卡片 */
+  > [role="group"] {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
   color: var(--color-text-muted);
   font-size: $font-size-12;
   text-align: right;
@@ -313,132 +338,29 @@
   border-radius: $radius-16;
 }
 
-.detailTitle {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: $font-size-18;
-  font-weight: $font-weight-700;
+/* 分頁（Tabs）＋篩選搜尋同一排，分頁靠左、工具列靠右。
+   工具列固定以 440px 判斷換不換行、搜尋框撐滿工具列：切到多一個狀態篩選的分頁時，
+   只有搜尋框變窄，不會一下同排一下換行；換到下一行時靠右，手機上撐滿一行 */
+.detailBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-8 $spacing-16;
 }
 
 .detailToolbar {
   display: flex;
+  flex: 0 1 440px;
+  flex-wrap: wrap; /* 手機上狀態篩選＋搜尋放不下：搜尋換到下一行撐滿 */
   align-items: center;
-  justify-content: flex-end;
   gap: $spacing-8;
-  flex-wrap: wrap;
-  flex: 1;
-}
-
-.detailSummary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: $spacing-8;
-  margin: 0 0 $spacing-16;
-}
-
-.detailSummaryItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--color-divider);
-  border-radius: $radius-8;
-  background: var(--color-surface);
+  margin-left: auto;
 }
 
-.detailSummaryIcon {
-  @include flex-center;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: $radius-8;
-}
-
-.detailSummaryIcon_success { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 11%, transparent); }
-.detailSummaryIcon_danger { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 11%, transparent); }
-.detailSummaryIcon_info { color: var(--color-info); background: color-mix(in srgb, var(--color-info) 11%, transparent); }
-.detailSummaryItem > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
-.detailSummaryItem small { overflow: hidden; color: var(--color-text-muted); font-size: $font-size-10; text-overflow: ellipsis; white-space: nowrap; }
-.detailSummaryItem strong { color: var(--color-text-primary); font-size: $font-size-18; font-variant-numeric: tabular-nums; }
-
-.search {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 260px;
-  max-width: 480px;
-  padding: 6px 8px 6px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  box-shadow: var(--shadow-sm);
-}
-
-.search:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
-}
-
-.searchInput {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: $font-size-14;
-
-  &::placeholder { color: var(--color-text-muted); }
-}
-
-.clearSearch {
-  width: 24px;
-  min-height: 24px;
-  border: 0;
-  background: transparent;
-}
-
-.clearSearch:hover { background: var(--color-hover); color: var(--color-text-primary); }
-
-.detailTabs {
-  display: flex;
-  gap: 2px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.detailTab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border-bottom: 2px solid transparent;
-  color: var(--color-text-secondary);
-  font-size: $font-size-14;
-  font-weight: $font-weight-500;
-  cursor: pointer;
-  transition: color $transition-base, border-color $transition-base;
-
-  &:hover { color: var(--color-text-primary); }
-  &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
-}
-
-.detailTabActive {
-  border-bottom-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.tabCount {
-  padding: 1px 6px;
-  border-radius: $radius-pill;
-  background: var(--color-hover);
-  color: var(--color-text-muted);
-  font-size: $font-size-10;
-  font-variant-numeric: tabular-nums;
+/* 蓋過共用搜尋框的 flex: 0 1 300px（兩邊權重相同，順序看載入先後，所以加上外層） */
+.detailToolbar .detailSearch {
+  flex: 1 1 auto;
 }
 
 .detailContent {
@@ -451,9 +373,11 @@
   max-width: 100%;
 }
 
+/* 三張明細表（模型、呼叫紀錄、使用者）的欄寬、min-width 與窄版收欄由 AiMonitoringPage.jsx 的
+   MODEL_／CALL_／USER_FIT_COLUMNS（useTableFit）決定，fixed layout 才會照欄寬排 */
 .table {
   @include table-base;
-  min-width: 880px;
+  table-layout: fixed;
 }
 
 .th { @include table-th; }
@@ -477,7 +401,6 @@
 .callTypeCell {
   display: flex;
   flex-direction: column;
-  min-width: 120px;
   gap: 2px;
 }
 
@@ -485,6 +408,11 @@
 .callTypeLabel {
   color: var(--color-text-primary);
   font-weight: $font-weight-500;
+}
+
+/* 欄寬固定：姓名（沒有姓名時是使用者 ID）單行截斷，全文在 title */
+.userName {
+  @include text-truncate;
 }
 
 .userEmail,
@@ -502,9 +430,29 @@
 }
 
 .monoCell {
-  max-width: 280px;
-  overflow-wrap: anywhere;
   font-size: $font-size-12;
+}
+
+/* ── 窄版收起的欄（useTableFit）改畫在主欄底下的小字行 ──
+   數字欄的 td 不換行（.numericCell），收進來的「欄名 值」放不下時要能在空白處換行 */
+.foldedLine {
+  margin-top: 2px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
+  white-space: normal;
+}
+
+/* 收進狀態底下的「輸入 1.2K · 輸出 345」：放不下時只在「·」換行，欄名跟數字不拆開 */
+.foldedPair {
+  white-space: nowrap;
+}
+
+/* 欄寬固定：模型名稱、呼叫類型、收進時間欄的「姓名 · Email」都是沒有空白的長字串，
+   單行截斷、全文在 title，不從中間折成兩行。
+   要寫在 .foldedLine 後面：收進來的這幾行兩個 class 都有，不換行要蓋過 .foldedLine 的 normal */
+.truncate {
+  display: block;
+  @include text-truncate;
 }
 
 /* 呼叫時間下方的 Request ID：自成一行，不跟時間黏成「09:56:007443be10」 */
@@ -526,8 +474,10 @@
   cursor: pointer;
 }
 
-.modelDrilldown span { overflow: hidden; text-overflow: ellipsis; }
-.modelDrilldown:hover span { text-decoration: underline; }
+/* 名稱單行截斷、箭頭留在右邊（全名在按鈕的 title） */
+.modelDrilldownName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modelDrilldown > :last-child { flex-shrink: 0; }
+.modelDrilldown:hover .modelDrilldownName { text-decoration: underline; }
 .modelDrilldown:focus-visible { border-radius: 3px; outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
 .runtimeBadge {
@@ -561,22 +511,10 @@
 .badge_danger { background: color-mix(in srgb, var(--color-danger) 12%, transparent); color: var(--color-danger); }
 
 @include respond-below(md) {
-  .panelHeader,
-  .detailHeader {
-    flex-direction: column;
-  }
-
   .trendMeta {
     justify-content: flex-start;
     text-align: left;
   }
-
-  .detailToolbar {
-    justify-content: stretch;
-    width: 100%;
-  }
-
-  .search { flex: 1; min-width: 0; }
 }
 
 @include respond-below(sm) {
@@ -597,14 +535,7 @@
 
   .metricValue { font-size: $font-size-18; }
 
-  .detailSummary { grid-template-columns: 1fr; }
-
   .panel,
   .detailSection { padding: 12px; }
 
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .clearSearch,
-  .detailTab { transition: none; }
 }

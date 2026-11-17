@@ -90,9 +90,11 @@
   @include table-wrap;
 }
 
+/* 欄寬、min-width 與窄版收欄由 GpuMgmtPage.jsx 的 GPU_FIT_COLUMNS（useTableFit）決定，
+   fixed layout 才會照欄寬排 */
 .table {
   @include table-base;
-  min-width: 1080px;
+  table-layout: fixed;
 }
 
 .th {
@@ -124,15 +126,39 @@
   flex-shrink: 0;
 }
 
+/* 欄寬固定：文字區要能縮，長的 mapping 名稱與收進來的內容在欄內換行，不撐出欄外 */
+.nameText {
+  min-width: 0;
+}
+
 .namePrimary {
   font-size: $font-size-14;
   font-weight: $font-weight-500;
   color: var(--color-text-primary);
+  overflow-wrap: anywhere;
 }
 
 .nameSub {
   font-size: $font-size-12;
   color: var(--color-text-muted);
+}
+
+/* ── 窄版收起的欄（useTableFit）：描述、節點 / PCI 改畫在名稱欄，可用 / 總數、使用中 VM 改畫在狀態欄 ── */
+.foldedLine {
+  margin-top: 2px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 「2 / 4」中間有空白，整段一起換行 */
+.foldedValue {
+  white-space: nowrap;
+}
+
+/* 整塊收進來的欄（PCI 清單、VM 晶片），跟上面的字隔開一點 */
+.foldedBlock {
+  margin-top: 4px;
 }
 
 /* ── PCI code ── */
@@ -200,8 +226,9 @@
 }
 
 /* ── 展開列（完整 PCI 清單） ── */
+/* 有底色的列一律用 table-row-bg：底色也給橫捲時的固定欄用，固定欄才會跟同一列同色 */
 .trExpanded {
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  @include table-row-bg(color-mix(in srgb, var(--color-primary) 6%, transparent));
 
   &:not(:last-child) {
     border-bottom: none;
@@ -241,11 +268,11 @@
   color: var(--color-text-muted);
 }
 
+/* 欄寬固定後不能再 nowrap（會溢到隔壁欄）；VRAM 的數字與單位之間是不換行空格，只在詞與詞之間換行 */
 .cellSub {
   margin-top: 2px;
   font-size: $font-size-12;
   color: var(--color-text-muted);
-  white-space: nowrap;
 }
 
 /* ── VM chips ── */

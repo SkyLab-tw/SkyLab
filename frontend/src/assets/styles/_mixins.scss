@@ -64,6 +64,12 @@
   padding-inline: $spacing-16;
 }
 
+/* 頁面分頁（<Tabs page>）那一列：頁面直排間距 24px，分頁到下方內容收成 12px（標題到分頁維持 24px），
+   分頁才貼著它控制的內容，不會像一條獨立的列浮在中間。掛在 .page 的直接子層（分頁本身或包著分頁的列） */
+@mixin page-tabs-row {
+  margin-bottom: -12px;
+}
+
 @mixin badge-base {
   display: inline-flex;
   align-items: center;
@@ -112,6 +118,11 @@
   font: inherit;
   font-size: $font-size-14;
 
+  /* 提示字一律淡色：沒設時是瀏覽器預設的 #757575，比輸入的字還深，看起來像已經填好了 */
+  &::placeholder {
+    color: var(--color-text-muted);
+  }
+
   &:focus {
     border-color: var(--color-primary);
     background: var(--color-surface);
@@ -156,7 +167,8 @@
    .tr        { @include table-tr; }     整列可點時再疊 table-tr-clickable
                                          列數會變的表格要 table-layout: fixed（見樣式規範文件規則二）
    .td        { @include table-td; }
-   欄寬、對齊、特殊儲存格等頁面差異寫在 @include 之後。 */
+   欄寬、對齊、特殊儲存格等頁面差異寫在 @include 之後。
+   窄版要收欄的表格用 hooks/useTableFit（規則四），欄寬寫在它的欄位表、不寫在這裡。 */
 @mixin table-wrap {
   @include glass-surface($shadow: var(--shadow-sm));
   border-radius: $radius-16;
@@ -167,6 +179,71 @@
 @mixin table-base {
   width: 100%;
   border-collapse: collapse;
+  @include table-pin-edges;
+}
+
+/* 收到底仍放不下（useTableFit 標 data-overflow）：固定第一欄，中間的欄位橫捲，捲到哪裡都看得到是哪一列；
+   data-overflow="both"（中間還留得下捲動空間）時連最後一欄也固定，按得到操作。
+   固定欄要不透明，否則捲過去的字會透出來：底色是 surface，上面疊列自己的 --table-row-bg
+   （table-row-bg 設的 hover、群組列底色），跟同一列其他欄一樣色。分隔線＋淡陰影提示旁邊還有欄。 */
+@mixin table-pin-edges {
+  $pinned: "> * > tr > :first-child";
+  $pinned-end: "> * > tr > :last-child";
+
+  &[data-overflow] #{$pinned},
+  &[data-overflow="both"] #{$pinned-end} {
+    position: sticky;
+    z-index: 1;
+    background-color: var(--color-surface);
+  }
+
+  &[data-overflow] > thead > tr > :first-child,
+  &[data-overflow="both"] > thead > tr > :last-child {
+    background-image: linear-gradient(var(--color-hover), var(--color-hover));
+  }
+
+  &[data-overflow] > tbody > tr > :first-child,
+  &[data-overflow="both"] > tbody > tr > :last-child {
+    background-image: linear-gradient(var(--table-row-bg, transparent), var(--table-row-bg, transparent));
+  }
+
+  &[data-overflow] #{$pinned} {
+    left: 0;
+    box-shadow: inset -1px 0 0 var(--color-divider), 6px 0 8px -6px color-mix(in srgb, var(--shadow-color) 22%, transparent);
+  }
+
+  &[data-overflow="both"] #{$pinned-end} {
+    right: 0;
+    box-shadow: inset 1px 0 0 var(--color-divider), -6px 0 8px -6px color-mix(in srgb, var(--shadow-color) 22%, transparent);
+  }
+
+  /* 第一欄是勾選框（data-pin-lead="2"）：後面的名稱欄一起固定，貼在勾選框右邊；
+     分隔線與陰影移到名稱欄右側，勾選框與名稱之間不畫線 */
+  &[data-overflow][data-pin-lead="2"] > * > tr > :nth-child(2) {
+    position: sticky;
+    z-index: 1;
+    left: var(--table-pin-offset, 0px);
+    background-color: var(--color-surface);
+    box-shadow: inset -1px 0 0 var(--color-divider), 6px 0 8px -6px color-mix(in srgb, var(--shadow-color) 22%, transparent);
+  }
+
+  &[data-overflow][data-pin-lead="2"] > thead > tr > :nth-child(2) {
+    background-image: linear-gradient(var(--color-hover), var(--color-hover));
+  }
+
+  &[data-overflow][data-pin-lead="2"] > tbody > tr > :nth-child(2) {
+    background-image: linear-gradient(var(--table-row-bg, transparent), var(--table-row-bg, transparent));
+  }
+
+  &[data-overflow][data-pin-lead="2"] #{$pinned} {
+    box-shadow: none;
+  }
+}
+
+/* 有自己底色的列（hover、群組列、示範列）：底色同時給固定欄用，橫捲時固定欄跟同一列同色 */
+@mixin table-row-bg($color) {
+  --table-row-bg: #{$color};
+  background: $color;
 }
 
 @mixin table-th {
@@ -195,7 +272,7 @@
   cursor: pointer;
 
   &:hover {
-    background: var(--color-row-hover);
+    @include table-row-bg(var(--color-row-hover));
   }
 }
 
@@ -381,6 +458,36 @@
       color: var(--color-text-primary);
       background: var(--color-row-hover);
     }
+  }
+}
+
+/* 文字連結鈕：一行說明後面的次要動作（例如「還沒有合適的模板？建立新的 · 稍後再繼續」）。
+   主色字、無底無框，hover 底線；不是第七款按鈕，要按鈕外觀就用上面幾款 */
+@mixin btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-primary);
+  background: none;
+  font: inherit;
+  font-weight: $font-weight-500;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 
@@ -573,9 +680,10 @@
   }
 }
 
-/* 側欄延伸出來的彈出（語言、帳號、背景任務）：跟側欄同一套玻璃，介面風格切到白底／黑底時自動變實色。
+/* 浮層選單（⋮ 動作選單、單選清單、開關機選單，以及側欄的語言、帳號、背景任務）：
+   跟側欄同一套玻璃，隨介面風格與主題色變，介面風格切到白底／黑底時自動變實色。
    這類彈出疊在頁面內容上，液態玻璃的 2px 折射太清透、深色液態塗層太淡，背後的字會干擾閱讀：
-   這兩種改回毛玻璃濾鏡、加重塗層。頁面內容裡的選單（⋮、換週、開關機）仍用不透明的 var(--color-surface) */
+   這兩種改回毛玻璃濾鏡、加重塗層 */
 @mixin popover-glass($shadow: var(--shadow-lg)) {
   @include glass-surface($shadow: $shadow);
 

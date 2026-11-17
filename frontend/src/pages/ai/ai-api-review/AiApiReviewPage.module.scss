@@ -43,9 +43,11 @@
   @include table-wrap;
 }
 
+/* 欄寬、min-width 與窄版收欄由 AiApiReviewPage.jsx 的 REQUEST_FIT_COLUMNS（useTableFit）決定，
+   fixed layout 才會照欄寬排 */
 .table {
   @include table-base;
-  min-width: 1080px;
+  table-layout: fixed;
 }
 
 .th {
@@ -61,46 +63,63 @@
 }
 
 /* ── 勾選欄（勾選框是共用 SelectCheckbox）；勾選狀態下待審的列整列可點 ── */
-.checkCell {
-  width: 36px;
-}
-
-/* 多一欄勾選就多留 36px，其他欄不會被擠窄 */
-.tableSelectable {
-  min-width: 1116px;
-}
-
-.trSelected > td {
-  @include row-selected;
+/* 勾選中的列：淡主色（同 row-selected 的 7%）用 table-row-bg 設在列上，窄版橫捲時固定的勾選欄才跟同一列同色；
+   勾選狀態下滑過時，淡主色疊在 hover 色上（跟不固定的欄看起來一樣） */
+.trSelected {
+  @include table-row-bg(color-mix(in srgb, var(--color-primary) 7%, transparent));
 }
 
 .trClickable {
   @include table-tr-clickable;
 }
 
+.trSelected.trClickable:hover {
+  @include table-row-bg(color-mix(in srgb, var(--color-primary) 7%, var(--color-row-hover)));
+}
+
+/* 欄寬固定：姓名、Email、金鑰名稱常是沒有空白的長字串，在欄內換行，不撐出欄外 */
 .userCell {
   @include flex-column;
   gap: 2px;
-  min-width: 160px;
 }
 
 .userName {
   font-weight: $font-weight-500;
   color: var(--color-text-primary);
+  overflow-wrap: anywhere;
 }
 
 .userEmail {
   font-size: $font-size-12;
   color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.keyName {
+  overflow-wrap: anywhere;
 }
 
 .purposeCell {
-  max-width: 320px;
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-muted);
+}
+
+/* ── 窄版收起的欄（useTableFit）：申請者、用途改畫在金鑰名稱底下，時間改畫在狀態徽章底下 ── */
+.foldedLine {
+  margin-top: 2px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 收進名稱底下的申請者、用途都單行截斷，完整內容在 title：email 不會被從中間折成兩行 */
+.foldedTruncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Badge ── */
@@ -124,7 +143,6 @@
 /* 批量通過／拒絕沒成功的那筆：原因標在狀態底下（可換行，後端的訊息長短不一） */
 .rowError {
   margin-top: $spacing-4;
-  max-width: 220px;
   font-size: $font-size-12;
   line-height: 1.5;
   color: var(--color-danger);
@@ -165,10 +183,11 @@
   &:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger) 18%, transparent); }
 }
 
+/* 已審核的列在操作欄放審核備註：單行截斷（寬度跟著欄），完整內容在 title */
 .reviewComment {
+  display: block;
   font-size: $font-size-12;
   color: var(--color-text-muted);
-  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
