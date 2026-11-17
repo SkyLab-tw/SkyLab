@@ -1020,6 +1020,9 @@ def list_sessions(
     )
 
 
+_TEARDOWN_STATUSES = frozenset({"stopping", "reclaiming", "reclaimed"})
+
+
 def serialize_session(session: Session, item: QuickPracticeSession) -> dict:
     version = session.get(CourseEnvironmentVersion, item.environment_version_id)
     if version is None:
@@ -1084,6 +1087,12 @@ def serialize_session(session: Session, item: QuickPracticeSession) -> dict:
             group_status = "provisioning"
     elif practice_status == "ready":
         group_status = "running"
+    # 環境在收尾（準備回收／回收中／已回收）時，每台機器都跟著環境狀態。
+    # 機器狀態原本只看各自的建立進度：還沒建好、或 clone 到一半就被結束的機器會一直是
+    # provisioning，清單就變成環境「回收中」、底下的機器卻寫「開通中」
+    if practice_status in _TEARDOWN_STATUSES:
+        for machine in machines:
+            machine["status"] = practice_status
     return {
         "id": item.id,
         "kind": "quick_practice",

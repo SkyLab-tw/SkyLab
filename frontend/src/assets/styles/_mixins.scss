@@ -112,6 +112,11 @@
   font: inherit;
   font-size: $font-size-14;
 
+  /* 提示字一律淡色：沒設時是瀏覽器預設的 #757575，比輸入的字還深，看起來像已經填好了 */
+  &::placeholder {
+    color: var(--color-text-muted);
+  }
+
   &:focus {
     border-color: var(--color-primary);
     background: var(--color-surface);
@@ -447,6 +452,36 @@
       color: var(--color-text-primary);
       background: var(--color-row-hover);
     }
+  }
+}
+
+/* 文字連結鈕：一行說明後面的次要動作（例如「還沒有合適的模板？建立新的 · 稍後再繼續」）。
+   主色字、無底無框，hover 底線；不是第七款按鈕，要按鈕外觀就用上面幾款 */
+@mixin btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-primary);
+  background: none;
+  font: inherit;
+  font-weight: $font-weight-500;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 

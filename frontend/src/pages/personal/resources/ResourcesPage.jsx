@@ -57,6 +57,9 @@ const STATUS_MAP = {
   unknown:      { labelKey: "ResourcesPage.statusUnknown",       color: "muted",   icon: "help_outline"   },
 };
 
+/* 群組進入這些狀態後，環境內每台機器的狀態都跟著群組顯示（見 EnvironmentMachineRow） */
+const MACHINE_FOLLOWS_GROUP = new Set(["stopping", "reclaiming", "reclaimed"]);
+
 const TYPE_MAP = {
   lxc:   { labelKey: "ResourcesPage.typeLxc", icon: "terminal" },
   qemu:  { labelKey: "ResourcesPage.typeQemu", icon: "computer" },
@@ -432,6 +435,10 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
   const resource = machine.resource;
   const isLxc = machine.type === "lxc";
   const environmentReady = ["running", "active"].includes(groupStatus);
+  /* 群組在收尾（準備回收／回收中／已回收）時，機器列跟著群組顯示：後端的機器狀態只看各自的建立進度，
+     還沒建好或還在 clone 的機器會一直回 provisioning，畫面就變成群組「回收中」、底下卻寫「開通中」 */
+  const groupTearingDown = MACHINE_FOLLOWS_GROUP.has(groupStatus);
+  const displayStatus = groupTearingDown ? (groupStatus === "reclaimed" ? "deleted" : groupStatus) : machine.status;
   const canControl = Boolean(
     environmentReady && resource?.vmid && resource.can_control !== false,
   );
@@ -471,8 +478,8 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
       {fit.isFolded("env") && machine.os && machine.os !== machine.name && <small>{machine.os}</small>}</div></div></td>
     {/* 「來源」欄佔位：群組標題列已標示來源，環境內機器不重複 */}
     {!fit.isFolded("kind") && <td className={styles.td}><span className={styles.muted}>—</span></td>}
-    {!fit.isFolded("env") && <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>}
-    <td className={styles.td}><StatusBadge status={machine.status} />
+    {!fit.isFolded("env") && <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div>{machine.resource ? <div className={styles.envSub}>{t("EnvironmentMachineRow.resourceConnected")}</div> : !groupTearingDown && <div className={styles.envSub}>{t("EnvironmentMachineRow.creating")}</div>}</td>}
+    <td className={styles.td}><StatusBadge status={displayStatus} />
       {fit.isFolded("ip") && machine.ip && <FoldedLine><MachineIpValue machine={machine} /></FoldedLine>}</td>
     {!fit.isFolded("ip") && <td className={styles.td}><MachineIpValue machine={machine} /></td>}
     {!fit.isFolded("expiry") && <td className={styles.td}><span className={styles.muted}>{t("EnvironmentMachineRow.managedByEnvironment")}</span></td>}

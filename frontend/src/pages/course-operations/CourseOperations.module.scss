@@ -1590,53 +1590,50 @@ button.heatAttentionChip {
   font-size: $font-size-12;
 }
 
+/* 規格：一行 12px 文字，中間用「·」隔開（不做成一顆顆淡底標籤：疊在玻璃上幾乎看不出底色） */
 .envChoiceSpecs {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: $font-size-12;
+  font-variant-numeric: tabular-nums;
 }
 
 .envChoiceSpecs>span {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border-radius: $radius-8;
-  color: var(--color-text-secondary);
-  background: color-mix(in srgb, var(--color-hover) 55%, transparent);
-  font-size: $font-size-10;
-  font-weight: $font-weight-500;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
-.envChoiceSpecs>span:first-child {
+.envChoiceSpecs>span+span::before {
+  content: "·";
+  padding: 0 $spacing-8;
+  color: var(--color-text-muted);
+}
+
+/* 每人幾台：帶圖示、深色中粗，是這一行的重點 */
+.envChoiceSpecs>.envChoiceUnit {
+  gap: 4px;
+  color: var(--color-text-primary);
+  font-weight: $font-weight-500;
+}
+
+.envChoiceUnit :global(.material-icons-outlined) {
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
 }
 
+/* 選中的列：主色「✓ 已選擇」文字，不包膠囊（整列就是按鈕，不另外做一顆假按鈕） */
 .envChoices em {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  min-height: 30px;
-  padding: 0 11px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-pill;
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
+  color: var(--color-primary);
   font-size: $font-size-12;
   font-style: normal;
   font-weight: $font-weight-500;
   white-space: nowrap;
-}
-
-.envChoiceSelected em {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
 }
 
 /* 手機：四欄放不下（名稱會被擠到 0 寬、規格被切掉），改成
@@ -2287,9 +2284,14 @@ button.heatAttentionChip {
     height: 38px;
   }
 
-  .setupSummary .btnPrimary {
+  /* 按鈕包在 .setupActions 裡：要拉滿整列的是這一層（只對按鈕下 grid-column 不會生效，
+     外層會被排進 38px 的圖示欄、按鈕跟著被擠成 38px）；裡面的按鈕平分整列 */
+  .setupSummary .setupActions {
     grid-column: 1 / -1;
-    width: 100%;
+  }
+
+  .setupSummary .setupActions > button {
+    flex: 1 1 auto;
   }
 
   .setupChecklist {
