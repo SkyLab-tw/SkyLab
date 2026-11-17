@@ -5,6 +5,14 @@ name: Deploy to PVE Test
 # self-hosted runner 上，自動觸發等於讓程式碼未經人工確認就在內網機器執行。
 on:
   workflow_dispatch:
+    inputs:
+      ai_model_smoke:
+        # AI 模型不是主系統：上游 GPU／遠端主機卡住時，逐一測每個模型會讓部署
+        # 多等好幾分鐘，結果又不影響部署成敗。預設不跑，需要時勾選。
+        # （runner 的 job-started-guard 只放行這支 workflow，所以不另開 workflow）
+        description: 部署完成後對每個公開 AI 模型跑 smoke test（較慢，模型異常時最多再等 8 分鐘）
+        type: boolean
+        default: false
 
 # 同一時間只允許一個部署，且不中斷進行中的部署
 concurrency:
@@ -67,10 +75,12 @@ jobs:
         run: AI_STACK_PYTHON="$PWD/vllm-service/.runtime/deploy-venv/bin/python" bash scripts/prepare-ai-stack.sh --start
 
       - name: Smoke test
+        # 只驗主系統。LiteLLM readiness 已在 Deploy（prepare-ai-stack.sh --start）
+        # 等過；每次 curl 都設上限，對方接了連線卻不回應時不會一路卡到 job 逾時。
         run: |
           for i in {1..30}; do
-            if docker compose exec -T backend curl -fsS http://localhost:8000/api/v1/utils/health-check/ && curl -fsS http://localhost:4000/health/readiness; then
-              echo "Backend and LiteLLM healthy"
+            if docker compose exec -T backend curl -fsS --max-time 5 http://localhost:8000/api/v1/utils/health-check/; then
+              echo "Backend healthy"
               exit 0
             fi
             sleep 2
@@ -81,16 +91,23 @@ jobs:
 
       - name: Smoke test every public AI model
         id: ai_api_smoke
-        # Model readiness is observed after deployment. A failed model check
-        # must be visible as a warning without turning an otherwise completed
-        # deployment into a failed deploy job.
+        # Opt-in (see the ai_model_smoke input): AI models are not part of the
+        # main system, and a hung upstream makes this sequential check wait
+        # for every model. Model readiness is observed after deployment. A
+        # failed model check must be visible as a warning without turning an
+        # otherwise completed deployment into a failed deploy job.
+        if: ${{ inputs.ai_model_smoke }}
         continue-on-error: true
+        # 上限讓卡住的模型吃不掉整個 job 的時間；後面的金鑰清理照樣會跑
+        timeout-minutes: 8
         # Use the normal request/review flow to create a temporary, dedicated
         # ccai_* smoke credential after cleaning up previous runs. The optional variable
         # is the Campus API root ending in /api/v1; otherwise use the published
         # backend port from this deployment.
         env:
           CONFIGURED_AI_API_PUBLIC_BASE_URL: ${{ vars.AI_API_PUBLIC_BASE_URL }}
+          # 只要回「OK」、最多 8 個 token：正常的模型幾秒內就回，45 秒沒回就算失敗
+          AI_API_SMOKE_TIMEOUT: "45"
         run: |
           set +x
           umask 077
