@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from typing import Any
 
 from app.ai.adherence_check import ADHERENCE_MAX_TOKENS
@@ -15,24 +14,24 @@ from app.ai.teacher_judge.chat_transport import (
     assistant_message,
     charge_missing_completion_usage,
     merge_vllm_metrics,
-    tool_arguments,
 )
 from app.ai.teacher_judge.check_plan_contract import TYPED_STEP_REPAIR_HINT
-from app.ai.teacher_judge.proposal_dispatch import (
-    ToolTurnState,
-    execute_checklist_tool,
-)
+from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.proposal_replies import tool_error_reply
 from app.ai.teacher_judge.proposal_rules import (
     finalizer_completion_blockers,
-    normalized_title_key,
+)
+from app.ai.teacher_judge.proposal_tool_calls import (
+    LoopState,
+    function_choice,
+    normalize_tool_calls,
+    run_tool_call,
 )
 from app.ai.teacher_judge.proposal_tools import (
     CREATE_CHECKLIST_ITEM_TOOL_NAME,
     EDIT_CHECKLIST_ITEM_TOOL_NAME,
     GET_CHECKLIST_ITEM_TOOL_NAME,
     LIST_CHECKLIST_TOOL_NAME,
-    PROPOSAL_TOOL_NAMES,
     build_proposal_tools,
 )
 from app.ai.teacher_judge.reply_payload import (
@@ -48,24 +47,6 @@ from app.ai.utils import apply_thinking_control
 from app.models.teacher_judge_template_command import TeacherJudgeTemplateCommand
 
 logger = logging.getLogger(__name__)
-
-
-_UNKNOWN_TOOL_ERROR = (
-    "工具「{name}」不存在。可用工具只有 list_checklist、get_checklist_item、"
-    "create_checklist_item、edit_checklist_item；最終回覆請直接在 content 輸出 JSON，不要呼叫工具。"
-)
-
-
-_AWAITING_TEACHER_ERROR = (
-    "此項目需要老師補充資訊；本輪不要再呼叫工具，請在 reply 詢問老師，"
-    "proposal_status 設為 needs_information。"
-)
-
-
-_STAGED_REVISIT_ERROR = (
-    "本輪提案已建立，不需要再列出、讀取或修改；請停止呼叫工具，"
-    "直接依 <final_answer> 輸出 JSON。"
-)
 
 
 _JSON_REPLY_REPAIR_INSTRUCTION = (
@@ -86,6 +67,261 @@ _READY_REMINDER_INSTRUCTION = (
 
 
 _MAX_READY_REMINDERS = 2
+
+_PLAIN_REPLY_INSTRUCTION = (
+    "本次工具階段已結束，請停止呼叫工具，依已取得的資料輸出非空的 reply "
+    "與 proposal_status。說明已建立的修改提案、需要補充的資訊或無須修改的依據。"
+    "若尚未完成細查，明確說明未完成；沒有修改候選不代表檢查通過。"
+)
+
+_PENDING_ERROR_INSTRUCTION = "工具修改尚未成功；請依工具的 issues 與 repair_hint 修正參數後重新呼叫，不要宣稱完成或承諾背景重試。"
+
+
+def _empty_metrics() -> VLLMMetrics:
+    return {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "elapsed_seconds": 0.0,
+        "tokens_per_second": 0.0,
+        "usage_reported": True,
+        "response_model": None,
+    }
+
+
+def _build_base_request(
+    payload_data: dict[str, Any],
+    *,
+    machine_entries: list[dict[str, Any]] | None,
+    chat_mode: bool,
+    rubric_available: bool,
+    require_rubric: bool,
+) -> dict[str, Any]:
+    base_request = dict(payload_data)
+    base_request.pop("messages", None)
+    if rubric_available:
+        base_request["tools"] = build_proposal_tools(
+            machine_entries,
+            chat=chat_mode,
+        )
+        base_request["tool_choice"] = (
+            function_choice(LIST_CHECKLIST_TOOL_NAME) if require_rubric else "auto"
+        )
+        base_request.pop("response_format", None)
+    else:
+        base_request.pop("tools", None)
+        base_request.pop("tool_choice", None)
+    return base_request
+
+
+async def _call_round(state: LoopState, payload: dict[str, Any]) -> dict[str, Any]:
+    """Send one request, fold its usage into the run and return the raw message."""
+    request = apply_thinking_control(
+        payload, chat_transport.settings.VLLM_ENABLE_THINKING
+    )
+    raw_message, round_metrics = await chat_transport.call_vllm_message(
+        request, timeout=float(chat_transport.settings.VLLM_TIMEOUT)
+    )
+    round_metrics = charge_missing_completion_usage(
+        round_metrics, int(payload["max_tokens"])
+    )
+    state.metrics = merge_vllm_metrics(state.metrics, round_metrics)
+    return raw_message
+
+
+async def _call_tool_round(state: LoopState) -> dict[str, Any]:
+    payload = {**state.base_request, "messages": list(state.messages)}
+    payload["max_tokens"] = min(state.per_call_max_tokens, state.remaining_tokens())
+    if state.forced_tool_choice is not None:
+        payload["tool_choice"] = state.forced_tool_choice
+        state.forced_tool_choice = None
+    return await _call_round(state, payload)
+
+
+def _retry_pending_error(state: LoopState, content: str) -> bool:
+    """Send the model back to a retryable tool error it answered with prose."""
+    retry = next(
+        (
+            key
+            for key, error in state.pending_errors.items()
+            if error.get("retryable") and key not in state.error_reply_reminders
+        ),
+        None,
+    )
+    if retry is None:
+        return False
+    state.error_reply_reminders.add(retry)
+    state.messages.extend(
+        [
+            {"role": "assistant", "content": content},
+            {"role": "system", "content": _PENDING_ERROR_INSTRUCTION},
+        ]
+    )
+    state.forced_tool_choice = function_choice(
+        GET_CHECKLIST_ITEM_TOOL_NAME
+        if state.pending_errors[retry].get("reason_code") == "checklist_item_not_read"
+        else state.pending_errors[retry]["tool"]
+    )
+    return True
+
+
+def _repair_finalizer_candidate(state: LoopState) -> bool:
+    """Ask the Finalizer to fix a candidate that still fails typed Check Plan checks."""
+    turn = state.turn
+    blockers = finalizer_completion_blockers(
+        turn.snapshot_items,
+        turn.staged_ops,
+        template_commands=turn.template_commands,
+        machine_entries=turn.machine_entries,
+    )
+    repairable = [
+        {
+            "item_id": blocker.get("item_id"),
+            "reason_code": blocker.get("reason_code"),
+            "detail": blocker.get("detail"),
+            "issues": blocker.get("issues", []),
+        }
+        for blocker in blockers
+        if blocker.get("reason_code") == "check_plan_contract_invalid"
+        and blocker.get("item_id")
+    ]
+    if not repairable:
+        return False
+    fingerprint = json.dumps(
+        repairable,
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    if fingerprint in state.finalizer_repair_fingerprints:
+        return False
+    state.finalizer_repair_fingerprints.add(fingerprint)
+    state.messages = [
+        *state.messages,
+        {"role": "assistant", "content": state.final_content},
+        {
+            "role": "system",
+            "content": (
+                "Finalizer 的 server-side candidate 尚未通過 typed "
+                "Check Plan 驗證。不要只用 reply 宣稱完成；請立即呼叫 "
+                "get_checklist_item 讀取尚未讀過的項目，再依下列問題呼叫 "
+                "edit_checklist_item 修正對應欄位；保留已有效的步驟與已知路徑。"
+                + TYPED_STEP_REPAIR_HINT
+                + "\n"
+                + json.dumps(
+                    repairable,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            ),
+        },
+    ]
+    state.forced_tool_choice = function_choice(
+        GET_CHECKLIST_ITEM_TOOL_NAME
+        if any(issue["item_id"] not in turn.read_ids for issue in repairable)
+        else EDIT_CHECKLIST_ITEM_TOOL_NAME
+    )
+    return True
+
+
+def _remind_unbacked_ready_claim(state: LoopState, claims_ready: bool) -> bool:
+    """Push back on a Ready claim that no proposal tool call backs up."""
+    if not (
+        claims_ready
+        and not state.turn.staged_ops
+        and not state.turn.rejected_ops
+        and state.rubric_available
+        and not state.require_rubric
+        and state.reminder_count < _MAX_READY_REMINDERS
+    ):
+        return False
+    state.reminder_count += 1
+    if state.reminder_count == 1:
+        state.messages = [
+            *state.messages,
+            {"role": "assistant", "content": state.final_content},
+            {"role": "system", "content": _READY_REMINDER_INSTRUCTION},
+        ]
+        return True
+    # Second reminder: stop re-prompting prose and force the model
+    # through the proposal tool channel so the loop converges even
+    # for models that keep claiming Ready without calling tools.
+    target_item_id = structured_requirement_target_item(state.final_content)
+    state.forced_tool_choice = function_choice(
+        GET_CHECKLIST_ITEM_TOOL_NAME
+        if target_item_id
+        else CREATE_CHECKLIST_ITEM_TOOL_NAME
+    )
+    logger.warning(
+        "Teacher Judge ready claim without tools persisted; forcing tool_choice=%s",
+        state.forced_tool_choice["function"]["name"],
+    )
+    return True
+
+
+def _continue_after_plain_reply(state: LoopState, content: str) -> bool:
+    """Handle a round without tool calls; True asks for another tool round."""
+    if contains_embedded_tool_call(content):
+        logger.warning(
+            "Teacher Judge ignored a content-encoded tool call; native "
+            "tool_calls is required"
+        )
+        state.final_content = ""
+        return False
+    state.final_content = content
+    if _retry_pending_error(state, content):
+        return True
+    _, proposal_status = parse_chat_reply_payload(state.final_content)
+    claims_ready = proposal_status == "ready" or structured_requirement_needs_candidate(
+        state.final_content
+    )
+    if state.turn.finalizer and _repair_finalizer_candidate(state):
+        return True
+    return _remind_unbacked_ready_claim(state, claims_ready)
+
+
+async def _force_plain_reply(state: LoopState) -> None:
+    """The model kept calling tools: one plain reply round so the teacher gets an answer."""
+    reply_payload = {
+        **state.base_request,
+        "messages": [
+            *state.messages,
+            {"role": "system", "content": _PLAIN_REPLY_INSTRUCTION},
+        ],
+    }
+    reply_payload.pop("tools", None)
+    reply_payload.pop("tool_choice", None)
+    if state.reply_format:
+        reply_payload["response_format"] = state.reply_format
+    remaining_tokens = state.remaining_tokens()
+    if remaining_tokens > 0 and not state.pending_errors:
+        reply_payload["max_tokens"] = min(state.per_call_max_tokens, remaining_tokens)
+        raw_message = await _call_round(state, reply_payload)
+        state.final_content = str(assistant_message(raw_message).get("content") or "")
+
+
+async def _restate_reply_as_json(state: LoopState) -> None:
+    """Chat final reply came back as prose: one no-tool JSON-mode round restates it
+    so proposal_status / focus are not lost."""
+    remaining_tokens = state.remaining_tokens()
+    if remaining_tokens <= 0:
+        return
+    repair_payload = {
+        **state.base_request,
+        "messages": [
+            *state.messages,
+            {"role": "assistant", "content": state.final_content},
+            {"role": "system", "content": _JSON_REPLY_REPAIR_INSTRUCTION},
+        ],
+        "response_format": state.reply_format,
+        "max_tokens": min(state.per_call_max_tokens, remaining_tokens),
+    }
+    repair_payload.pop("tools", None)
+    repair_payload.pop("tool_choice", None)
+    logger.warning("Teacher Judge chat final reply was not JSON; restating it")
+    raw_message = await _call_round(state, repair_payload)
+    repaired = str(assistant_message(raw_message).get("content") or "")
+    if reply_payload_object(repaired)[1] is not None:
+        state.final_content = repaired
 
 
 async def run_proposal_tool_loop(
@@ -115,480 +351,78 @@ async def run_proposal_tool_loop(
     the staged entries, and ``tool_outcomes`` records every tool invocation
     for teacher-facing status display.
     """
-    snapshot_items = rubric_context_data(rubric_context).get("items")
-    read_ids: set[str] = set()
-    staged_ops: list[dict[str, Any]] = []
-    rejected_ops: list[tuple[TeacherJudgeRubricItem, dict[str, Any], str]] = []
-    tool_outcomes: list[dict[str, Any]] = []
-    turn = ToolTurnState(
-        snapshot_items=snapshot_items,
-        analysis_revision=analysis_revision,
-        template_key=template_key,
-        template_commands=template_commands,
-        ready_only=ready_only,
-        read_ids=read_ids,
-        staged_ops=staged_ops,
-        rejected_ops=rejected_ops,
-        tool_calls=tool_outcomes,
-        machine_entries=machine_entries,
-        finalizer=finalizer,
-    )
-
     # Chat (and attachment-item) proposals; refine/Finalizer keep their loop.
     chat_mode = ready_only and not finalizer
-    # Tool rounds cannot use JSON mode; chat no-tool reply rounds restore it.
-    reply_format = payload_data.get("response_format") if chat_mode else None
-    base_request = dict(payload_data)
-    base_request.pop("messages", None)
-    if rubric_available:
-        base_request["tools"] = build_proposal_tools(
-            machine_entries,
-            chat=chat_mode,
-        )
-        base_request["tool_choice"] = (
-            {"type": "function", "function": {"name": LIST_CHECKLIST_TOOL_NAME}}
-            if require_rubric
-            else "auto"
-        )
-        base_request.pop("response_format", None)
-    else:
-        base_request.pop("tools", None)
-        base_request.pop("tool_choice", None)
-
-    messages = list(payload_data.get("messages") or [])
-    metrics: VLLMMetrics = {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-        "elapsed_seconds": 0.0,
-        "tokens_per_second": 0.0,
-        "usage_reported": True,
-        "response_model": None,
-    }
+    base_request = _build_base_request(
+        payload_data,
+        machine_entries=machine_entries,
+        chat_mode=chat_mode,
+        rubric_available=rubric_available,
+        require_rubric=require_rubric,
+    )
+    state = LoopState(
+        turn=ToolTurnState(
+            snapshot_items=rubric_context_data(rubric_context).get("items"),
+            analysis_revision=analysis_revision,
+            template_key=template_key,
+            template_commands=template_commands,
+            ready_only=ready_only,
+            read_ids=set(),
+            staged_ops=[],
+            rejected_ops=[],
+            tool_calls=[],
+            machine_entries=machine_entries,
+            finalizer=finalizer,
+        ),
+        base_request=base_request,
+        messages=list(payload_data.get("messages") or []),
+        metrics=_empty_metrics(),
+        chat_mode=chat_mode,
+        rubric_available=rubric_available,
+        require_rubric=require_rubric,
+        # Tool rounds cannot use JSON mode; chat no-tool reply rounds restore it.
+        reply_format=payload_data.get("response_format") if chat_mode else None,
+        main_completion_budget=max(
+            max(int(completion_token_budget), 0) - ADHERENCE_MAX_TOKENS * 2,
+            0,
+        ),
+        per_call_max_tokens=max(int(base_request.get("max_tokens") or 0), 1),
+    )
+    turn = state.turn
 
     max_rounds = max(int(chat_transport.settings.VLLM_CHAT_MAX_TOOL_ROUNDS), 1)
-    completion_token_budget = max(int(completion_token_budget), 0)
-    main_completion_budget = max(
-        completion_token_budget - ADHERENCE_MAX_TOKENS * 2,
-        0,
-    )
-    per_call_max_tokens = max(int(base_request.get("max_tokens") or 0), 1)
-    final_content = ""
-    reminder_count = 0
-    forced_tool_choice: dict[str, Any] | None = None
-    finalizer_repair_fingerprints: set[str] = set()
-    error_counts: dict[str, int] = {}
-    error_fingerprints: dict[str, int] = {}
-    pending_errors: dict[str, dict[str, Any]] = {}
-    terminal_errors: set[str] = set()
-    error_reply_reminders: set[str] = set()
-    # Chat only: items that already asked for teacher input, and hallucinated
-    # tool names. Repeating either ends the tool phase instead of looping.
-    awaiting_teacher: dict[str, str] = {}
-    unknown_tool_calls = 0
-    staged_revisit = False
-    stop_tools = False
     tools_exhausted = False
     for _ in range(max_rounds):
-        remaining_tokens = main_completion_budget - int(
-            metrics.get("completion_tokens") or 0
-        )
-        if remaining_tokens <= 0:
+        if state.remaining_tokens() <= 0:
             break
-        round_payload = {**base_request, "messages": list(messages)}
-        round_payload["max_tokens"] = min(per_call_max_tokens, remaining_tokens)
-        if forced_tool_choice is not None:
-            round_payload["tool_choice"] = forced_tool_choice
-            forced_tool_choice = None
-        request = apply_thinking_control(
-            round_payload, chat_transport.settings.VLLM_ENABLE_THINKING
-        )
-        raw_message, round_metrics = await chat_transport.call_vllm_message(
-            request, timeout=float(chat_transport.settings.VLLM_TIMEOUT)
-        )
-        round_metrics = charge_missing_completion_usage(
-            round_metrics, int(round_payload["max_tokens"])
-        )
-        metrics = merge_vllm_metrics(metrics, round_metrics)
-        assistant = assistant_message(raw_message)
-        cleaned_content = str(assistant.get("content") or "")
-        assistant = {**assistant, "content": cleaned_content or None}
+        assistant = assistant_message(await _call_tool_round(state))
+        content = str(assistant.get("content") or "")
         tool_calls = assistant.get("tool_calls")
         if not tool_calls:
-            if contains_embedded_tool_call(cleaned_content):
-                logger.warning(
-                    "Teacher Judge ignored a content-encoded tool call; native "
-                    "tool_calls is required"
-                )
-                final_content = ""
-                break
-            final_content = cleaned_content
-            retry = next(
-                (
-                    key
-                    for key, error in pending_errors.items()
-                    if error.get("retryable") and key not in error_reply_reminders
-                ),
-                None,
-            )
-            if retry is not None:
-                error_reply_reminders.add(retry)
-                messages.extend(
-                    [
-                        {"role": "assistant", "content": cleaned_content},
-                        {
-                            "role": "system",
-                            "content": "工具修改尚未成功；請依工具的 issues 與 repair_hint 修正參數後重新呼叫，不要宣稱完成或承諾背景重試。",
-                        },
-                    ]
-                )
-                forced_tool_choice = {
-                    "type": "function",
-                    "function": {
-                        "name": (
-                            GET_CHECKLIST_ITEM_TOOL_NAME
-                            if pending_errors[retry].get("reason_code")
-                            == "checklist_item_not_read"
-                            else pending_errors[retry]["tool"]
-                        )
-                    },
-                }
-                continue
-            _, proposal_status = parse_chat_reply_payload(final_content)
-            claims_ready = (
-                proposal_status == "ready"
-                or structured_requirement_needs_candidate(final_content)
-            )
-            if finalizer:
-                blockers = finalizer_completion_blockers(
-                    snapshot_items,
-                    staged_ops,
-                    template_commands=template_commands,
-                    machine_entries=machine_entries,
-                )
-                repairable = [
-                    {
-                        "item_id": blocker.get("item_id"),
-                        "reason_code": blocker.get("reason_code"),
-                        "detail": blocker.get("detail"),
-                        "issues": blocker.get("issues", []),
-                    }
-                    for blocker in blockers
-                    if blocker.get("reason_code") == "check_plan_contract_invalid"
-                    and blocker.get("item_id")
-                ]
-                if repairable:
-                    fingerprint = json.dumps(
-                        repairable,
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    )
-                    if fingerprint not in finalizer_repair_fingerprints:
-                        finalizer_repair_fingerprints.add(fingerprint)
-                        messages = [
-                            *messages,
-                            {"role": "assistant", "content": final_content},
-                            {
-                                "role": "system",
-                                "content": (
-                                    "Finalizer 的 server-side candidate 尚未通過 typed "
-                                    "Check Plan 驗證。不要只用 reply 宣稱完成；請立即呼叫 "
-                                    "get_checklist_item 讀取尚未讀過的項目，再依下列問題呼叫 "
-                                    "edit_checklist_item 修正對應欄位；保留已有效的步驟與已知路徑。"
-                                    + TYPED_STEP_REPAIR_HINT
-                                    + "\n"
-                                    + json.dumps(
-                                        repairable,
-                                        ensure_ascii=False,
-                                        separators=(",", ":"),
-                                    )
-                                ),
-                            },
-                        ]
-                        forced_tool_choice = {
-                            "type": "function",
-                            "function": {
-                                "name": (
-                                    GET_CHECKLIST_ITEM_TOOL_NAME
-                                    if any(
-                                        issue["item_id"] not in read_ids
-                                        for issue in repairable
-                                    )
-                                    else EDIT_CHECKLIST_ITEM_TOOL_NAME
-                                )
-                            },
-                        }
-                        continue
-            if (
-                claims_ready
-                and not staged_ops
-                and not rejected_ops
-                and rubric_available
-                and not require_rubric
-                and reminder_count < _MAX_READY_REMINDERS
-            ):
-                reminder_count += 1
-                if reminder_count == 1:
-                    messages = [
-                        *messages,
-                        {"role": "assistant", "content": final_content},
-                        {"role": "system", "content": _READY_REMINDER_INSTRUCTION},
-                    ]
-                    continue
-                # Second reminder: stop re-prompting prose and force the model
-                # through the proposal tool channel so the loop converges even
-                # for models that keep claiming Ready without calling tools.
-                target_item_id = structured_requirement_target_item(final_content)
-                forced_tool_choice = {
-                    "type": "function",
-                    "function": {
-                        "name": (
-                            GET_CHECKLIST_ITEM_TOOL_NAME
-                            if target_item_id
-                            else CREATE_CHECKLIST_ITEM_TOOL_NAME
-                        )
-                    },
-                }
-                logger.warning(
-                    "Teacher Judge ready claim without tools persisted; "
-                    "forcing tool_choice=%s",
-                    forced_tool_choice["function"]["name"],
-                )
+            if _continue_after_plain_reply(state, content):
                 continue
             break
-
-        normalized_calls: list[dict[str, Any]] = []
-        for raw_call in tool_calls:
-            if not isinstance(raw_call, dict):
-                continue
-            call = dict(raw_call)
-            call["id"] = str(call.get("id") or f"call_{uuid.uuid4().hex[:8]}")
-            call["type"] = "function"
-            normalized_calls.append(call)
-        if not normalized_calls:
-            final_content = str(assistant.get("content") or "")
+        calls = normalize_tool_calls(tool_calls)
+        if not calls:
+            state.final_content = content
             break
-        messages = [*messages, assistant]
-        for tool_call in normalized_calls:
-            function = tool_call.get("function")
-            function = function if isinstance(function, dict) else {}
-            tool_name = str(function.get("name") or "")
-            parsed_arguments = tool_arguments(function.get("arguments"))
-            arguments = parsed_arguments or {}
-            attempt_key = f"{tool_name}:{arguments.get('id') or normalized_title_key(arguments.get('title'))}"
-            chat_block = None
-            if chat_mode and tool_name not in PROPOSAL_TOOL_NAMES:
-                unknown_tool_calls += 1
-                logger.warning(
-                    "Teacher Judge ignored unknown tool call: %s",
-                    tool_name or "(missing name)",
-                )
-                chat_block = {
-                    "error": _UNKNOWN_TOOL_ERROR.format(name=tool_name),
-                    "reason_code": "unknown_tool",
-                    "retryable": False,
-                }
-            elif chat_mode and awaiting_teacher.get(attempt_key) == json.dumps(
-                arguments, ensure_ascii=False, sort_keys=True
-            ):
-                stop_tools = True
-                chat_block = {
-                    "error": _AWAITING_TEACHER_ERROR,
-                    "reason_code": "teacher_input_required",
-                    "retryable": False,
-                }
-            elif (
-                chat_mode
-                and staged_ops
-                and (
-                    tool_name == LIST_CHECKLIST_TOOL_NAME
-                    or (
-                        tool_name
-                        in {GET_CHECKLIST_ITEM_TOOL_NAME, EDIT_CHECKLIST_ITEM_TOOL_NAME}
-                        and str(arguments.get("id") or "")
-                        in {str(entry["item"].id) for entry in staged_ops}
-                    )
-                )
-            ):
-                # Re-reading or re-editing this turn's own proposals only loops
-                # (and invites guessed edits); the staged result is final.
-                staged_revisit = True
-                stop_tools = True
-                chat_block = {
-                    "error": _STAGED_REVISIT_ERROR,
-                    "reason_code": "already_staged",
-                    "retryable": False,
-                }
-            if chat_block is not None:
-                # Not a proposal outcome: keep it out of tool_outcomes/pending
-                # errors so the teacher never sees a fake per-item failure.
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": str(tool_call["id"]),
-                        "content": json.dumps(chat_block, ensure_ascii=False),
-                    },
-                )
-                continue
-            if attempt_key in terminal_errors or parsed_arguments is None:
-                result = {
-                    "error": "此項目的有限重試已結束。"
-                    if attempt_key in terminal_errors
-                    else "工具 arguments 必須是有效的 JSON 物件。",
-                    "reason_code": "tool_retry_exhausted"
-                    if attempt_key in terminal_errors
-                    else "tool_arguments_invalid",
-                    "retryable": attempt_key not in terminal_errors,
-                    "repair_hint": "arguments 必須是符合該工具 schema 的 JSON 物件；修正 JSON 格式後重新呼叫。",
-                }
-                tool_outcomes.append(
-                    {
-                        "tool": tool_name,
-                        "status": "error",
-                        "item_id": arguments.get("id"),
-                        "title": str(
-                            arguments.get("title")
-                            or arguments.get("id")
-                            or "未命名項目"
-                        ),
-                        "reason": result["error"],
-                        "reason_code": result["reason_code"],
-                    }
-                )
-            else:
-                result = execute_checklist_tool(tool_name, arguments, turn)
-            if isinstance(result, dict) and result.get("error"):
-                error_counts[attempt_key] = error_counts.get(attempt_key, 0) + 1
-                fingerprint_issues = [
-                    {key: value for key, value in issue.items() if key != "item_id"}
-                    for issue in result.get("issues", [])
-                ]
-                fingerprint = json.dumps(
-                    [
-                        attempt_key,
-                        result.get("reason_code"),
-                        fingerprint_issues or result["error"],
-                    ],
-                    ensure_ascii=False,
-                    sort_keys=True,
-                )
-                error_fingerprints[fingerprint] = (
-                    error_fingerprints.get(fingerprint, 0) + 1
-                )
-                retryable = (
-                    bool(result.get("retryable", True))
-                    and error_fingerprints[fingerprint] < 2
-                    and error_counts[attempt_key] < 3
-                )
-                result.update(
-                    {"retryable": retryable, "attempt": error_counts[attempt_key]}
-                )
-                outcome = tool_outcomes[-1]
-                outcome.update(
-                    {
-                        "attempt_key": attempt_key,
-                        "attempt": error_counts[attempt_key],
-                        "retryable": retryable,
-                    }
-                )
-                pending_errors[attempt_key] = {
-                    **result,
-                    "tool": tool_name,
-                    "title": outcome.get("title"),
-                    "item_id": outcome.get("item_id"),
-                }
-                if result.get("teacher_input_required"):
-                    # Asking the teacher is the next step, not an AI retry.
-                    pending_errors.pop(attempt_key)
-                    if chat_mode:
-                        # A changed retry may still fix the item; a second gap
-                        # for the same item means only the teacher can.
-                        if attempt_key in awaiting_teacher:
-                            stop_tools = True
-                        awaiting_teacher[attempt_key] = json.dumps(
-                            arguments, ensure_ascii=False, sort_keys=True
-                        )
-                if not retryable and not result.get("teacher_input_required"):
-                    terminal_errors.add(attempt_key)
-                logger.warning(
-                    "Teacher Judge tool %s failed argument validation: %s",
-                    tool_name or "(missing name)",
-                    result["error"],
-                )
-            else:
-                if tool_name == LIST_CHECKLIST_TOOL_NAME:
-                    # The initial index read is a prerequisite, not a permanent
-                    # restriction on every subsequent model decision.
-                    base_request["tool_choice"] = "auto"
-                write_accepted = bool(result.get("staged") or result.get("unchanged"))
-                for key, error in list(pending_errors.items()):
-                    read_repaired = (
-                        tool_name
-                        in {LIST_CHECKLIST_TOOL_NAME, GET_CHECKLIST_ITEM_TOOL_NAME}
-                        and error.get("tool") == tool_name
-                    )
-                    precondition_repaired = (
-                        tool_name == GET_CHECKLIST_ITEM_TOOL_NAME
-                        and error.get("reason_code") == "checklist_item_not_read"
-                        and error.get("item_id") == arguments.get("id")
-                    )
-                    anonymous_repaired = (
-                        key == f"{tool_name}:"
-                        and error.get("reason_code") == "tool_arguments_invalid"
-                    )
-                    if (
-                        read_repaired
-                        or precondition_repaired
-                        or (
-                            write_accepted
-                            and (
-                                key == attempt_key
-                                or anonymous_repaired
-                                or (
-                                    result.get("item_id")
-                                    and result.get("item_id") == error.get("item_id")
-                                )
-                            )
-                        )
-                    ):
-                        pending_errors.pop(key)
-                        error_reply_reminders.discard(key)
-                        for outcome in tool_outcomes:
-                            if outcome.get("attempt_key") == key:
-                                outcome["resolved"] = True
-                if write_accepted:
-                    for outcome in tool_outcomes:
-                        if outcome.get("attempt_key") == attempt_key and outcome.get(
-                            "reason"
-                        ):
-                            outcome["resolved"] = True
-                logger.debug(
-                    "Teacher Judge tool round executed: tool=%s staged=%d rejected=%d",
-                    tool_name,
-                    len(staged_ops),
-                    len(rejected_ops),
-                )
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": str(tool_call["id"]),
-                    "content": json.dumps(result, ensure_ascii=False),
-                },
-            )
-        if pending_errors and all(
-            not error.get("retryable") for error in pending_errors.values()
+        state.messages = [*state.messages, {**assistant, "content": content or None}]
+        for call in calls:
+            run_tool_call(state, call)
+        if state.pending_errors and all(
+            not error.get("retryable") for error in state.pending_errors.values()
         ):
             break
-        if chat_mode and (stop_tools or unknown_tool_calls >= 2):
-            stop_tools = True
+        if state.chat_mode and (state.stop_tools or state.unknown_tool_calls >= 2):
+            state.stop_tools = True
             logger.warning(
                 "Teacher Judge chat tool phase stopped: repeated_teacher_input=%s "
                 "staged_revisit=%s unknown_tool_calls=%d staged=%d rejected=%d",
-                bool(awaiting_teacher),
-                staged_revisit,
-                unknown_tool_calls,
-                len(staged_ops),
-                len(rejected_ops),
+                bool(state.awaiting_teacher),
+                state.staged_revisit,
+                state.unknown_tool_calls,
+                len(turn.staged_ops),
+                len(turn.rejected_ops),
             )
             break
     else:
@@ -597,94 +431,34 @@ async def run_proposal_tool_loop(
             "Teacher Judge tool round budget (%s) exhausted with staged=%d "
             "rejected=%d failed=%d",
             max_rounds,
-            len(staged_ops),
-            len(rejected_ops),
-            len(pending_errors),
+            len(turn.staged_ops),
+            len(turn.rejected_ops),
+            len(state.pending_errors),
         )
-    if tools_exhausted or stop_tools:
-        # The model kept calling tools; force one plain reply round without
-        # tools so the teacher always gets an answer.
-        reply_payload = {
-            **base_request,
-            "messages": [
-                *messages,
-                {
-                    "role": "system",
-                    "content": (
-                        "本次工具階段已結束，請停止呼叫工具，依已取得的資料輸出非空的 reply "
-                        "與 proposal_status。說明已建立的修改提案、需要補充的資訊或無須修改的依據。"
-                        "若尚未完成細查，明確說明未完成；沒有修改候選不代表檢查通過。"
-                    ),
-                },
-            ],
-        }
-        reply_payload.pop("tools", None)
-        reply_payload.pop("tool_choice", None)
-        if reply_format:
-            reply_payload["response_format"] = reply_format
-        remaining_tokens = main_completion_budget - int(
-            metrics.get("completion_tokens") or 0
-        )
-        if remaining_tokens > 0 and not pending_errors:
-            reply_payload["max_tokens"] = min(per_call_max_tokens, remaining_tokens)
-            request = apply_thinking_control(
-                reply_payload, chat_transport.settings.VLLM_ENABLE_THINKING
-            )
-            raw_message, round_metrics = await chat_transport.call_vllm_message(
-                request, timeout=float(chat_transport.settings.VLLM_TIMEOUT)
-            )
-            round_metrics = charge_missing_completion_usage(
-                round_metrics, int(reply_payload["max_tokens"])
-            )
-            metrics = merge_vllm_metrics(metrics, round_metrics)
-            final_content = str(assistant_message(raw_message).get("content") or "")
+    if tools_exhausted or state.stop_tools:
+        await _force_plain_reply(state)
     elif (
-        reply_format
-        and final_content.strip()
-        and not pending_errors
-        and reply_payload_object(final_content)[1] is None
+        state.reply_format
+        and state.final_content.strip()
+        and not state.pending_errors
+        and reply_payload_object(state.final_content)[1] is None
     ):
-        # Chat final reply came back as prose: one no-tool JSON-mode round
-        # restates it so proposal_status / focus are not lost.
-        remaining_tokens = main_completion_budget - int(
-            metrics.get("completion_tokens") or 0
-        )
-        if remaining_tokens > 0:
-            repair_payload = {
-                **base_request,
-                "messages": [
-                    *messages,
-                    {"role": "assistant", "content": final_content},
-                    {"role": "system", "content": _JSON_REPLY_REPAIR_INSTRUCTION},
-                ],
-                "response_format": reply_format,
-                "max_tokens": min(per_call_max_tokens, remaining_tokens),
-            }
-            repair_payload.pop("tools", None)
-            repair_payload.pop("tool_choice", None)
-            logger.warning("Teacher Judge chat final reply was not JSON; restating it")
-            raw_message, round_metrics = await chat_transport.call_vllm_message(
-                apply_thinking_control(
-                    repair_payload, chat_transport.settings.VLLM_ENABLE_THINKING
-                ),
-                timeout=float(chat_transport.settings.VLLM_TIMEOUT),
-            )
-            round_metrics = charge_missing_completion_usage(
-                round_metrics, int(repair_payload["max_tokens"])
-            )
-            metrics = merge_vllm_metrics(metrics, round_metrics)
-            repaired = str(assistant_message(raw_message).get("content") or "")
-            if reply_payload_object(repaired)[1] is not None:
-                final_content = repaired
+        await _restate_reply_as_json(state)
 
-    if pending_errors:
-        final_content = json.dumps(
+    if state.pending_errors:
+        state.final_content = json.dumps(
             {
                 "reply": tool_error_reply(
-                    list(pending_errors.values()), staged=bool(staged_ops)
+                    list(state.pending_errors.values()), staged=bool(turn.staged_ops)
                 ),
-                "proposal_status": "ready" if staged_ops else "none",
+                "proposal_status": "ready" if turn.staged_ops else "none",
             },
             ensure_ascii=False,
         )
-    return final_content, metrics, staged_ops, rejected_ops, tool_outcomes
+    return (
+        state.final_content,
+        state.metrics,
+        turn.staged_ops,
+        turn.rejected_ops,
+        turn.tool_calls,
+    )

@@ -34,6 +34,7 @@ CHAT_MODULES = [
         "proposal_rules",
         "proposal_replies",
         "proposal_dispatch",
+        "proposal_tool_calls",
         "proposal_tool_loop",
         "attachment_itemwise",
     )
