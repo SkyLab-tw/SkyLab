@@ -2966,7 +2966,7 @@ export function ExecutionFailure({ target }) {
       <strong>{t(`AiJudgePanel.execution${kind}`)}</strong>
       <p>{t(`AiJudgePanel.execution${kind}Hint`)}</p>
       <p>{t("AiJudgePanel.executionNotGraded")}</p>
-      <Disclosure variant="inline" label={t("AiJudgePanel.executionEvidence")}>
+      <Disclosure variant="inline" className={styles.evidenceFold} label={t("AiJudgePanel.executionEvidence")}>
         <div className={styles.cmdLog}>
           <p>{t("AiJudgePanel.executionReason", { reason: target.reason_code || "unknown", stage: target.failure_stage || "unknown" })}</p>
           {target.exit_code != null && <p>{t("AiJudgePanel.exitCode", { code: target.exit_code })}</p>}
@@ -3065,7 +3065,7 @@ function ReviewCheckRow({ check, decision, onDecide, canDecide = true }) {
         <p>{summary === "—" ? t("AiJudgePanel.noSummary") : summary}</p>
         {check?.status === "unknown" && parseCheckRaw(check?.raw)?.error_code && <p>{t("AiJudgePanel.collectionErrorHint")}</p>}
         {hasLog && (
-          <Disclosure variant="inline" label={t("AiJudgePanel.viewEvidence")}><CommandLog raw={check?.raw} fallbackText={(check?.errors ?? []).join("\n")} /></Disclosure>
+          <Disclosure variant="inline" className={styles.evidenceFold} label={t("AiJudgePanel.viewEvidence")}><CommandLog raw={check?.raw} fallbackText={(check?.errors ?? []).join("\n")} /></Disclosure>
         )}
       </div>
       {reviewable && (

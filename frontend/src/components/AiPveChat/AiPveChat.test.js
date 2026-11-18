@@ -114,8 +114,9 @@ describe("tool activity disclosure", () => {
         { name: "ssh_exec", args: { vmid: 101, command: "private-command" }, result: { confirm_token: "private-token", error: "private-error" } },
       ],
     }));
-    expect(html).toContain("<details");
-    expect(html).not.toMatch(/<details[^>]*\bopen(?:=|\s|>)/);
+    /* 共用 Disclosure：收合列是按鈕，預設收起（內容掛著但 inert） */
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"/);
+    expect(html).toMatch(/<div[^>]*\binert=""/);
     expect(html).toContain("查詢紀錄（2）");
     expect(html).toContain("查詢節點狀態");
     expect(html).toContain("pve2");

@@ -49,6 +49,8 @@ This switch is separate from self-registration and needs no mail server. When it
 2. For each account, click **Approve** to let it sign in, or **Reject** to leave it unusable.
 3. When nothing is pending, the panel shows "No registrations await review".
 
+Click the **Pending registrations** title to collapse the whole panel; the number in the title stays visible while it is collapsed. The browser on this computer remembers the choice the next time you come back.
+
 ![Approve or reject a pending registration (numbers match the steps above)](/manual-shots/en/admin-users/s04.webp)
 
 ### Add a user

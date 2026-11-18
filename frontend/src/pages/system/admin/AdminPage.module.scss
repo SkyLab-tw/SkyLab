@@ -51,6 +51,58 @@
   align-items: center;
   justify-content: space-between;
   gap: $spacing-8 $spacing-16;
+
+  /* 標題吃掉剩下的寬度：中間空白也點得到收合（比照監控頁整列標題可點） */
+  > h2 {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+/* 收合鈕：外觀就是標題字，箭頭跟在字後面；滑過標題與箭頭轉主色，展開時箭頭轉 180°（同 Disclosure） */
+.panelToggle {
+  display: flex;
+  align-items: center;
+  gap: $spacing-4;
+  width: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: $radius-8;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: color $transition-base;
+
+  &:hover {
+    color: var(--color-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary-on-surface);
+    outline-offset: 2px;
+  }
+}
+
+.panelChevron {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  transition: transform $transition-base, color $transition-base;
+
+  .panelToggle:hover > & {
+    color: inherit;
+  }
+
+  .panelToggle[aria-expanded="true"] > & {
+    transform: rotate(180deg);
+  }
+}
+
+.pendingList {
+  @include flex-column;
+  gap: $spacing-16;
 }
 
 .pendingRow {

@@ -3,12 +3,14 @@ import { useTranslation } from "react-i18next";
 import styles from "./AdminPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
+import Collapse from "../../../components/Collapse/Collapse";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../hooks/useToast";
 import { useLoadError, useQueryErrorEffect, useQueryView } from "../../../hooks/useQueryLoadState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import usePersistedGroupExpansion from "../../../hooks/usePersistedGroupExpansion";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { UsersService } from "../../../services/users";
 import { UserGroupsService } from "../../../services/userGroups";
@@ -387,6 +389,8 @@ export default function AdminPage() {
   const users = usersQuery.data ?? EMPTY;
   const registrationPolicy = policyQuery.data ?? null;
   const pendingRegistrations = pendingQuery.data?.data ?? EMPTY;
+  /* 待審核註冊卡的開合記在本機（預設展開），重整或下次回來維持上次的選擇 */
+  const [pendingOpen, togglePendingOpen] = usePersistedGroupExpansion("admin", "pending-registrations");
   /* 載入失敗只在手上沒資料時提示（背景刷新失敗維持靜默、沿用舊資料）。首載失敗看 useQueryView／useLoadError：
      沒資料時 v5 每次重抓都把 status 改回 pending、清掉 error，直接看 isError 會在每次背景重試時閃回整頁載入中、
      重跳同一則 toast；useLoadError 的錯誤在重試期間不清掉，依訊息字串觸發，同一串失敗只提示一次 */
@@ -674,33 +678,43 @@ export default function AdminPage() {
         </button>
       </PageHeader>
 
-      {/* 註冊設定平常不用動，收進對話框；開啟鈕放在待審核註冊的標題列，跟它管的審核放一起 */}
+      {/* 註冊設定平常不用動，收進對話框；開啟鈕放在待審核註冊的標題列，跟它管的審核放一起。
+          整張卡點標題可收起（比照監控頁節點用量卡），收起時標題的筆數照樣看得到；設定鈕不跟著收 */}
       <section className={styles.registrationPanel} aria-label={t("AdminPage.pendingRegistrationsTitle")} data-guide="admin-pending">
         <div className={styles.panelHeader}>
-          <h2>{t("AdminPage.pendingRegistrationsTitle")} ({pendingRegistrations.length})</h2>
+          <h2>
+            <button type="button" className={styles.panelToggle} aria-expanded={pendingOpen}
+              aria-controls="admin-pending-list" onClick={togglePendingOpen}>
+              {t("AdminPage.pendingRegistrationsTitle")} ({pendingRegistrations.length})
+              <MIcon name="expand_more" size={20} className={styles.panelChevron} />
+            </button>
+          </h2>
           <button type="button" className={styles.btnSecondary} data-guide="admin-registration"
             disabled={!registrationPolicy} onClick={openRegistrationSettings}>
             <MIcon name="settings" size={16} />
             {t("AdminPage.registrationSettingsTitle")}
           </button>
         </div>
-        {pendingRegistrations.length === 0 ? (
-          <p className={styles.registrationEmpty}>{t("AdminPage.noPendingRegistrations")}</p>
-        ) : pendingRegistrations.map((item) => (
-          <div className={styles.pendingRow} key={item.id}>
-            <span><strong>{userDisplayName(item)}</strong><small>{item.email}</small></span>
-            <div>
-              <button type="button" className={styles.btnSecondary}
-                disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, false)}>
-                {t("AdminPage.rejectRegistration")}
-              </button>
-              <button type="button" className={styles.btnPrimary}
-                disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, true)}>
-                {t("AdminPage.approveRegistration")}
-              </button>
+        {/* 收合走共用 Collapse：高度與透明度一起過渡；gap 對應 .registrationPanel 的 16px，收起時不多留一段空白 */}
+        <Collapse id="admin-pending-list" open={pendingOpen} gap={16} innerClassName={styles.pendingList}>
+          {pendingRegistrations.length === 0 ? (
+            <p className={styles.registrationEmpty}>{t("AdminPage.noPendingRegistrations")}</p>
+          ) : pendingRegistrations.map((item) => (
+            <div className={styles.pendingRow} key={item.id}>
+              <span><strong>{userDisplayName(item)}</strong><small>{item.email}</small></span>
+              <div>
+                <button type="button" className={styles.btnSecondary}
+                  disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, false)}>
+                  {t("AdminPage.rejectRegistration")}
+                </button>
+                <button type="button" className={styles.btnPrimary}
+                  disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, true)}>
+                  {t("AdminPage.approveRegistration")}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </Collapse>
       </section>
 
       <div className={styles.summaryGrid} data-guide="admin-summary">

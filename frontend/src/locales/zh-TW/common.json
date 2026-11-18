@@ -701,7 +701,7 @@
   "UserGuide.adminUsers.registration.title": "開放自行註冊與審核",
   "UserGuide.adminUsers.registration.text": "按這裡打開註冊設定，改完按「儲存」才會生效。「允許自行註冊」控制登入頁能否申請新帳號；「允許 Google 首次登入自動建帳」另外控制沒有帳號的 Google 信箱能否在首次登入時自動建帳；開啟「註冊後需管理員審核」時，新帳號要在這個區塊核准後才能使用。關閉註冊不影響既有帳號登入。",
   "UserGuide.adminUsers.pending.title": "處理待審核的註冊",
-  "UserGuide.adminUsers.pending.text": "這裡列出等待管理員核准的新帳號。按「核准」後對方即可登入；按「拒絕」則帳號無法使用。沒有待審核帳號時這裡會顯示空白提示。",
+  "UserGuide.adminUsers.pending.text": "這裡列出等待管理員核准的新帳號。按「核准」後對方即可登入；按「拒絕」則帳號無法使用。沒有待審核帳號時這裡會顯示空白提示。點標題可以收起或展開這個區塊，下次回來會維持上次的狀態。",
   "UserGuide.adminUsers.summary.title": "帳號數量一覽",
   "UserGuide.adminUsers.summary.text": "依目前所有帳號統計總使用者、啟用中、教師與管理者人數，不受下方搜尋影響。",
   "UserGuide.adminUsers.row.title": "每列是一個帳號",

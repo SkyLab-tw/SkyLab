@@ -116,7 +116,7 @@
 
   > strong { color: var(--color-danger); }
   p { margin: 0; }
-  details { min-width: 0; }
+  .evidenceFold { min-width: 0; }
 }
 
 /* 彈窗內文的補充說明：跟彈窗說明文字同一級（14px、次要色） */
@@ -500,7 +500,7 @@ strong.reviewStatValue { font-size: $font-size-14; }
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
   }
-  details { font-size: $font-size-12; }
+  .evidenceFold { font-size: $font-size-12; }
 }
 
 /* 通過／未通過兩顆：標準次要款，選中的那顆換成狀態色淡底（含 hover，權重要壓過基底的 hover） */
