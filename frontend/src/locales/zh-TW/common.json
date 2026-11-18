@@ -731,7 +731,7 @@
   "UserGuide.scheduler.boot.title": "排程開機分批進行",
   "UserGuide.scheduler.boot.text": "使用時段開始前，平台會依「提前開機（分）」先把機器開起來，每批「開機批次大小」台、批次之間隔開指定秒數，避免同時開機壓垮儲存。「時段寬限（分）」是時段結束後再等多久才自動關機。這張卡在下個排程週期生效。",
   "UserGuide.scheduler.practice.title": "練習時段與到期提醒",
-  "UserGuide.scheduler.practice.text": "學生在使用時段以外自己開機時，機器會在「練習時段（小時）」後自動關機，結束前依「練習提醒（分）」提醒。「到期提醒（小時）」只決定學生畫面多早顯示快到期警示；到期後的通知、關機與刪除由「資源政策」頁的 TTL 生命週期負責。",
+  "UserGuide.scheduler.practice.text": "學生在使用時段以外自己開機時，機器會在「練習時段（小時）」後自動關機，結束前依「練習提醒（分）」提醒。「到期提醒（小時）」只決定學生畫面多早顯示快到期警示；到期後的通知、關機與刪除由「資源政策」頁的 TTL 生命週期負責。這張卡儲存後立即生效。",
   "UserGuide.scheduler.save.title": "改完要按儲存",
   "UserGuide.scheduler.save.text": "所有卡片共用下方的「儲存排程設定」，有修改才能按；「還原」會丟掉尚未儲存的修改。有未儲存的變更時離開頁面會先跳出提醒。",
   "UserGuide.governance.title": "資源政策",
