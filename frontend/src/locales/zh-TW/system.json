@@ -111,6 +111,7 @@
   "AdminPage.statTotal": "總使用者",
   "AdminPage.statusActive": "啟用",
   "AdminPage.statusInactive": "停用",
+  "AdminPage.createdOn": "建立於 {{date}}",
   "AdminPage.toastCreated": "使用者已建立",
   "AdminPage.toastDeleteFailed": "刪除失敗",
   "AdminPage.toastDeleted": "使用者已刪除",

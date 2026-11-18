@@ -116,6 +116,7 @@
   "AdminPage.statTotal": "Total Users",
   "AdminPage.statusActive": "Active",
   "AdminPage.statusInactive": "Inactive",
+  "AdminPage.createdOn": "Created {{date}}",
   "AdminPage.toastCreated": "User created",
   "AdminPage.toastDeleteFailed": "Delete failed",
   "AdminPage.toastDeleted": "User deleted",

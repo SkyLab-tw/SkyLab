@@ -111,6 +111,7 @@
   "AdminPage.statTotal": "ユーザー総数",
   "AdminPage.statusActive": "有効",
   "AdminPage.statusInactive": "無効",
+  "AdminPage.createdOn": "作成日 {{date}}",
   "AdminPage.toastCreated": "ユーザーを作成しました",
   "AdminPage.toastDeleteFailed": "削除に失敗しました",
   "AdminPage.toastDeleted": "ユーザーを削除しました",

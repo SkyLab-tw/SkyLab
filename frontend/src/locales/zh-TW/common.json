@@ -705,7 +705,7 @@
   "UserGuide.adminUsers.summary.title": "帳號數量一覽",
   "UserGuide.adminUsers.summary.text": "依目前所有帳號統計總使用者、啟用中、教師與管理者人數，不受下方搜尋影響。",
   "UserGuide.adminUsers.row.title": "每列是一個帳號",
-  "UserGuide.adminUsers.row.text": "列上顯示角色與狀態；「LDAP」標籤表示密碼由校方目錄管理，「2FA」表示已綁定兩步驟驗證。勾選左側方塊可批次「啟用」「停用」、「加入群組」「移出群組」或刪除帳號，但不能勾選或刪除自己。上方搜尋框可比對姓名、Email 或角色，有群組時旁邊的選單可以只看某個群組的成員。",
+  "UserGuide.adminUsers.row.text": "列上顯示角色、狀態與帳號建立日期；「LDAP」標籤表示密碼由校方目錄管理，「2FA」表示已綁定兩步驟驗證。勾選左側方塊可批次「啟用」「停用」、「加入群組」「移出群組」或刪除帳號，但不能勾選或刪除自己。上方搜尋框可比對姓名、Email 或角色，有群組時旁邊的選單可以只看某個群組的成員。",
   "UserGuide.adminUsers.security.title": "逐帳號強制兩步驟驗證",
   "UserGuide.adminUsers.security.text": "在編輯視窗勾選「強制兩步驟驗證」並儲存後，對方下次登入必須先綁定驗證 App，且不能自行停用。手機遺失時，在同一個視窗按「重設兩步驟驗證」解除綁定，對方既有的登入會立即失效。這一步只打開視窗示範，不會儲存。",
   "UserGuide.pveConnections.title": "PVE 管理",

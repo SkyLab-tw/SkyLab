@@ -328,8 +328,8 @@ function UserRow({ user, currentUserId, selected = false, selecting = false, onT
                 ? t("AdminPage.statusRejected")
                 : user.is_active ? t("AdminPage.statusActive") : t("AdminPage.statusInactive")}
         </span>
+        <span className={styles.createdAt}>{t("AdminPage.createdOn", { date: formatDate(user.created_at) })}</span>
       </div>
-      <span className={styles.createdAt}>{formatDate(user.created_at)}</span>
       <div className={styles.rowActions}>
         <button type="button" className={styles.actionBtn} title={t("AdminPage.editTitle")} onClick={() => onEdit(user)} data-guide="admin-user-edit">
           <MIcon name="edit" size={16} />
