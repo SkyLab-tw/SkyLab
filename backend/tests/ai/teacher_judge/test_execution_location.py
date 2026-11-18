@@ -23,6 +23,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionMessageCreateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.ai.teacher_judge.template_command_service import GENERAL_COMMAND
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_session import (
@@ -391,7 +392,7 @@ async def test_routes_persist_visible_path_question_and_never_create_script(
         )
 
         async def fake_chat(*args, **kwargs):
-            return "所有檢查項目已通過，狀態良好。", [], {}
+            return TeacherJudgeChatResult("所有檢查項目已通過，狀態良好。", [], {})
 
         def unexpected_compile(**kwargs):
             pytest.fail("A missing location must stop before creating artifacts")

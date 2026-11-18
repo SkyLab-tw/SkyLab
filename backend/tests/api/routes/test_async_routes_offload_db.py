@@ -19,6 +19,7 @@ from app.ai import monitoring as ai_monitoring
 from app.ai.pve_log import chat as pve_chat_module
 from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import TeacherJudgeSessionMessageCreateRequest
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.api.routes import classroom as classroom_routes
 from app.api.routes import course_environments as course_environment_routes
 from app.api.routes import teacher_judge_sessions
@@ -69,7 +70,7 @@ async def test_teacher_judge_chat_runs_db_work_off_the_loop(
 
     async def fake_chat(messages, rubric_context, **kwargs):
         threads.mark("model")
-        return "好的。", None, {}
+        return TeacherJudgeChatResult("好的。", None, {})
 
     def record_usage(**kwargs: Any) -> None:
         threads.mark("usage")

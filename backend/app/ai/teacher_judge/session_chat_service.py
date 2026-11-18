@@ -49,6 +49,7 @@ from app.ai.teacher_judge.schemas import (
 )
 from app.ai.teacher_judge.session_service import (
     WorkflowMessage,
+    analysis_revision_conflict,
     apply_proposal_operations_to_analysis,
     bounded_history,
     conversation_focus_from_item_results,
@@ -563,14 +564,7 @@ def admit_chat_message(
         and payload.analysis_revision is not None
         and payload.analysis_revision != file.analysis_revision
     ):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "teacher_judge_analysis_revision_conflict",
-                "message": t("teacherJudgeSessions.analysisRevisionConflict"),
-                "analysis_revision": file.analysis_revision,
-            },
-        )
+        raise analysis_revision_conflict(file)
     if not payload.content.strip() and not payload.attachment_ids:
         raise HTTPException(
             status_code=422,

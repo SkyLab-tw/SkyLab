@@ -20,6 +20,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeSessionCreateRequest,
     TeacherJudgeSessionMessageCreateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.api.routes import teacher_judge_sessions
 from app.models.teacher_judge_file import TeacherJudgeFile
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
@@ -373,7 +374,7 @@ async def test_chat_does_not_save_old_answer_after_source_switch(
         item.selected_file_id = second_file.id
         db.add(item)
         db.commit()
-        return "不應保存的舊回答", None, {}
+        return TeacherJudgeChatResult("不應保存的舊回答", None, {})
 
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
 

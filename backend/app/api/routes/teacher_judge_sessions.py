@@ -90,6 +90,7 @@ from app.ai.teacher_judge.session_chat_service import (
     save_workflow_message,
 )
 from app.ai.teacher_judge.session_service import (
+    analysis_revision_conflict,
     clear_session_messages,
     delete_session_data,
     ensure_active,
@@ -119,6 +120,7 @@ from app.models.teacher_judge_attachment import (
     TeacherJudgeMessageAttachment,
     TeacherJudgeSessionAttachment,
 )
+from app.models.teacher_judge_file import TeacherJudgeFile
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
 from app.models.teacher_judge_script_run import TeacherJudgeScriptRunTargetScope
 from app.models.teacher_judge_session import (
@@ -211,6 +213,17 @@ def _save_script_set_failure(
         metadata=outcome["metadata"],
         created_by=created_by,
     )
+
+
+def _mark_dispatch_failed(session: SessionDep, run_ids: list[str]) -> None:
+    """背景執行器沒接下任務：把這些 run 標成 executor_unavailable，並讓 session 重讀。"""
+    for run_id in run_ids:
+        _mark_run_executor_failed(
+            uuid.UUID(run_id),
+            "背景執行器未接受任務。",
+            reason_code="executor_unavailable",
+        )
+    session.expire_all()
 
 
 def _access(db: SessionDep, class_id: uuid.UUID, user: InstructorUser) -> None:
@@ -699,7 +712,7 @@ async def _generate_chat_reply(
             proposal=itemwise.proposal,
             metrics=itemwise.metrics,
             item_results=itemwise.item_results,
-            itemwise_error=getattr(itemwise, "error", None),
+            itemwise_error=itemwise.error,
         )
     chat_result = await chat_with_rubric(
         context.history or [],
@@ -714,14 +727,12 @@ async def _generate_chat_reply(
         analysis_revision=admission.base_revision,
         rubric_available=admission.file is not None,
     )
-    reply, proposal, metrics = chat_result
-    focus = getattr(chat_result, "conversation_focus", None)
     return ChatGeneration(
-        reply=reply,
-        proposal=proposal,
-        metrics=metrics,
-        conversation_focus=focus if isinstance(focus, dict) else None,
-        tool_calls=getattr(chat_result, "tool_calls", None),
+        reply=chat_result.reply,
+        proposal=chat_result.proposal,
+        metrics=chat_result.metrics,
+        conversation_focus=chat_result.conversation_focus,
+        tool_calls=chat_result.tool_calls,
     )
 
 
@@ -827,20 +838,13 @@ def _session_rubric_for_script_set(
     session: SessionDep,
     current_user: InstructorUser,
     expected_revision: int | None,
-) -> tuple[TeacherJudgeSession, Any, TeacherJudgeRubricAnalysis]:
+) -> tuple[TeacherJudgeSession, TeacherJudgeFile, TeacherJudgeRubricAnalysis]:
     _access(session, teaching_class_id, current_user)
     item = get_session(session, teaching_class_id, session_id)
     ensure_active(item)
     file = require_selected_file(session, item)
     if expected_revision is not None and expected_revision != file.analysis_revision:
-        conflict = HTTPException(
-            status_code=409,
-            detail={
-                "code": "teacher_judge_analysis_revision_conflict",
-                "message": t("teacherJudgeSessions.analysisRevisionConflict"),
-                "analysis_revision": file.analysis_revision,
-            },
-        )
+        conflict = analysis_revision_conflict(file)
         _save_script_set_failure(
             session,
             item,
@@ -858,6 +862,7 @@ def _session_rubric_for_script_set(
         file.template_key,
         include_cross_template=True,
     )
+    require_target_node = bool(load_class_machine_nodes(session, teaching_class_id))
     if not rubric_analysis.items:
         not_ready = HTTPException(
             status_code=422,
@@ -867,9 +872,7 @@ def _session_rubric_for_script_set(
                 "items": get_script_generation_blockers(
                     rubric_analysis,
                     commands,
-                    require_target_node=bool(
-                        load_class_machine_nodes(session, teaching_class_id)
-                    ),
+                    require_target_node=require_target_node,
                 ),
             },
         )
@@ -888,9 +891,7 @@ def _session_rubric_for_script_set(
         ensure_script_generation_supported(
             rubric_analysis,
             commands,
-            require_target_node=bool(
-                load_class_machine_nodes(session, teaching_class_id)
-            ),
+            require_target_node=require_target_node,
             require_typed_plan=True,
         )
     except HTTPException as exc:
@@ -946,8 +947,8 @@ def _generate_script_set(
     session: SessionDep,
     teaching_class_id: uuid.UUID,
     session_id: uuid.UUID,
-    item: Any,
-    file: Any,
+    item: TeacherJudgeSession,
+    file: TeacherJudgeFile,
     rubric_analysis: TeacherJudgeRubricAnalysis,
     current_user: InstructorUser,
     log_label: str,
@@ -1146,9 +1147,7 @@ def create_session_script_set_run(
         logger.exception("Teacher Judge batch dispatch failed batch=%s", batch.run_batch_id)
         task_id = ""
     if task_id == "":
-        for node in batch.nodes:
-            _mark_run_executor_failed(uuid.UUID(node.run_id), "背景執行器未接受任務。", reason_code="executor_unavailable")
-        session.expire_all()
+        _mark_dispatch_failed(session, [node.run_id for node in batch.nodes])
         return get_script_run_batch_public(
             session=session, teaching_class_id=teaching_class_id,
             run_batch_id=uuid.UUID(batch.run_batch_id), session_id=session_id,
@@ -1395,8 +1394,7 @@ def create_session_run(
         task_id=f"teacher_judge_script_run:{run.id}",
     )
     if task_id == "":
-        _mark_run_executor_failed(uuid.UUID(run.id), "背景執行器未接受任務。", reason_code="executor_unavailable")
-        session.expire_all()
+        _mark_dispatch_failed(session, [run.id])
     return get_script_run_public(
         session=session,
         teaching_class_id=teaching_class_id,

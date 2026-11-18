@@ -15,6 +15,10 @@ from sqlmodel import select
 
 from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import TeacherJudgeSessionMessageCreateRequest
+from app.ai.teacher_judge.service import (
+    TeacherJudgeChatResult,
+    TeacherJudgeItemwiseResult,
+)
 from app.api.routes import teacher_judge_sessions
 from app.core.request_context import RequestContext, set_request_context
 from app.models.teacher_judge_attachment import TeacherJudgeSessionAttachment
@@ -62,7 +66,7 @@ async def test_chat_llm_call_runs_without_an_open_transaction(
     async def fake_chat(messages, rubric_context, **kwargs):
         seen.append(db.in_transaction())
         assert messages[-1].content == "先討論檢查需求"
-        return "可以，先描述目標環境。", None, {}
+        return TeacherJudgeChatResult("可以，先描述目標環境。", None, {})
 
     _patch_common(monkeypatch)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
@@ -96,7 +100,7 @@ async def test_chat_admission_is_committed_before_the_model_call(
             )
         ).one()
         seen.append((in_transaction, (admitted.metadata_json or {}).get("processing")))
-        return "收到。", None, {}
+        return TeacherJudgeChatResult("收到。", None, {})
 
     _patch_common(monkeypatch)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
@@ -144,7 +148,7 @@ async def test_itemwise_attachment_call_runs_without_an_open_transaction(
         seen.append(db.in_transaction())
         # 附件內容必須在結束交易前就讀好，不能在 await 途中才延遲載入
         assert "nginx" in kwargs["attachment_context"]
-        return SimpleNamespace(
+        return TeacherJudgeItemwiseResult(
             reply="已看過附件。",
             proposal=None,
             metrics={},

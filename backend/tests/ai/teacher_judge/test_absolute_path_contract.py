@@ -26,6 +26,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionMessageCreateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.ai.teacher_judge.session_service import apply_proposal_operations_to_analysis
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_session import (
@@ -129,7 +130,7 @@ async def test_finalizer_explanation_uses_actual_blocker_not_false_model_path_cl
 
     async def fake_chat(*args, **kwargs):
         assert kwargs["is_refine"] is True
-        return false_reply, [], {}
+        return TeacherJudgeChatResult(false_reply, [], {})
 
     monkeypatch.setattr(routes, "_access", lambda *args: None)
     monkeypatch.setattr(chat_flow, "get_enabled_template_commands", lambda *args, **kwargs: [])

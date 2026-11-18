@@ -22,6 +22,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeSessionScriptCreateRequest,
     TeacherJudgeSessionUpdateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_attachment import TeacherJudgeSessionAttachment
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
@@ -546,7 +547,7 @@ async def test_persist_deadline_records_timeout_failure(chat_ctx, monkeypatch) -
         return 0.0 if calls["count"] <= 3 else 1e9
 
     async def chat(*args, **kwargs):
-        return "答覆", None, {}
+        return TeacherJudgeChatResult("答覆", None, {})
 
     monkeypatch.setattr(chat_flow, "perf_counter", fake_perf_counter)
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
