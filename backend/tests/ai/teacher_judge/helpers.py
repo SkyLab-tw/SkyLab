@@ -81,7 +81,7 @@ def requirement_focus(status: str, *, key: str, title: str) -> dict[str, object]
 
 
 def scripted_vllm(responses: list[object]):
-    """Build a fake `_call_vllm_message`; steps may carry (response, metrics)."""
+    """Build a fake `call_vllm_message`; steps may carry (response, metrics)."""
     calls: list[dict[str, object]] = []
 
     async def fake_call(payload, timeout=60.0):

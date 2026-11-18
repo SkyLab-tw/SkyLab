@@ -628,7 +628,7 @@ def test_conversation_focus_caps_shrink_long_payload() -> None:
 
 
 def _scripted_vllm(steps: list[object]):
-    """Build a fake `_call_vllm_message`; steps may carry (response, metrics)."""
+    """Build a fake `call_vllm_message`; steps may carry (response, metrics)."""
     calls: list[dict[str, object]] = []
 
     async def fake_call(payload, timeout=60.0):
