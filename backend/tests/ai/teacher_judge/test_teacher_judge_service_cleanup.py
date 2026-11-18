@@ -13,6 +13,7 @@ import pytest
 
 from app.ai.teacher_judge import (
     machine_context,
+    proposal_rules,
     rubric_normalization,
     session_service,
     target_ip_resolver,
@@ -50,7 +51,7 @@ def test_peer_ip_token_has_one_definition() -> None:
 
 
 def test_proposal_status_claims_ready_reads_only_structured_status() -> None:
-    claims = teacher_judge_service._proposal_status_claims_ready
+    claims = proposal_rules.proposal_status_claims_ready
     assert claims("ready") is True
     assert claims(" READY ") is True
     assert claims("needs_information") is False

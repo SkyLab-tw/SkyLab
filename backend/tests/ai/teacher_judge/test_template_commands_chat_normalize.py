@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ai.teacher_judge import chat_transport, rubric_normalization
+from app.ai.teacher_judge import chat_transport, proposal_replies, rubric_normalization
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
 from app.ai.teacher_judge.template_command_service import (
@@ -562,7 +562,7 @@ async def test_ready_claim_without_rubric_source_gets_no_source_reply(
     assert "tools" not in calls[0]
     assert "目前對話尚未選擇檢查表來源" in calls[0]["messages"][0]["content"]
     assert proposal is None
-    assert _reply == teacher_judge_service._NO_RUBRIC_READY_REPLY
+    assert _reply == proposal_replies.NO_RUBRIC_READY_REPLY
 
 
 @pytest.mark.asyncio

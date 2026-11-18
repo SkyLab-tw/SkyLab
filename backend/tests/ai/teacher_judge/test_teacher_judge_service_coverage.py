@@ -11,7 +11,13 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.ai.teacher_judge import chat_transport, reply_payload, rubric_normalization
+from app.ai.teacher_judge import (
+    chat_transport,
+    proposal_replies,
+    proposal_rules,
+    reply_payload,
+    rubric_normalization,
+)
 from app.ai.teacher_judge import service as svc
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricChatMessage,
@@ -208,7 +214,7 @@ def test_context_and_latest_request_helpers() -> None:
 
 
 def test_finalizer_completion_blockers_skip_invalid_inputs() -> None:
-    blockers = svc._finalizer_completion_blockers(
+    blockers = proposal_rules.finalizer_completion_blockers(
         ["bad", {"id": "i1"}],
         [{"item": "not-an-item"}, {"item": _item(id="i2")}],
         template_commands=None,
@@ -218,15 +224,15 @@ def test_finalizer_completion_blockers_skip_invalid_inputs() -> None:
 
 
 def test_duplicate_title_owner_paths() -> None:
-    assert svc._duplicate_title_owner("   ", [], []) is None
+    assert proposal_rules.duplicate_title_owner("   ", [], []) is None
     assert (
-        svc._duplicate_title_owner(
+        proposal_rules.duplicate_title_owner(
             "Same", ["bad", {"id": "", "title": "same"}], [{"item": None}]
         )
         is None
     )
     staged = [{"item": _item(id="i7", title="SAME")}]
-    assert svc._duplicate_title_owner("same", "bad", staged) == ("i7", "SAME")
+    assert proposal_rules.duplicate_title_owner("same", "bad", staged) == ("i7", "SAME")
 
 
 # ----------------------------------------------------- candidate rejection
@@ -234,7 +240,7 @@ def test_duplicate_title_owner_paths() -> None:
 
 def test_candidate_rejection_machine_issue() -> None:
     item = _item(target_node_key="web", peer_node_key="web")
-    reason = svc._proposal_candidate_rejection(
+    reason = proposal_rules.proposal_candidate_rejection(
         item,
         {},
         capability_declared=False,
@@ -248,9 +254,9 @@ def test_candidate_rejection_recoverable_parameter_gap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     gap = "要檢查的檔案、服務或記錄範圍"
-    monkeypatch.setattr(svc, "_recoverable_parameter_gaps", lambda _item: [gap])
+    monkeypatch.setattr(proposal_rules, "_recoverable_parameter_gaps", lambda _item: [gap])
     item = _item(detectable="partial", missing_information=[gap])
-    reason = svc._proposal_candidate_rejection(
+    reason = proposal_rules.proposal_candidate_rejection(
         item,
         {"id": "i1", "detectable": "partial"},
         capability_declared=False,
@@ -269,15 +275,15 @@ def test_teacher_missing_gap_reply_location_result_and_remaining() -> None:
         detectable="partial",
         missing_information=["檔案路徑與服務名稱", "預期結果", "其他事項"],
     )
-    reply = svc._teacher_missing_gap_reply(item)
+    reply = proposal_replies.teacher_missing_gap_reply(item)
     assert "檢查位置、通過方式與「其他事項」" in reply
     assert "請補充檔案或程式的絕對路徑，以及服務、連接埠或記錄範圍" in reply
     assert "請補充預期文字或內容、版本" in reply
     assert "請補充「其他事項」" in reply
 
     plain = _item(title="zzz", detectable="partial", missing_information=["預期答案"])
-    assert "請補充可直接比對的預期結果" in svc._teacher_missing_gap_reply(plain)
-    assert svc._teacher_result_hints(_item(title="連接埠狀態")) == ["Port", "狀態"]
+    assert "請補充可直接比對的預期結果" in proposal_replies.teacher_missing_gap_reply(plain)
+    assert proposal_replies._teacher_result_hints(_item(title="連接埠狀態")) == ["Port", "狀態"]
 
 
 def test_proposal_unavailable_reply_variants() -> None:
@@ -285,7 +291,7 @@ def test_proposal_unavailable_reply_variants() -> None:
     second = _item(
         id="b", title="同名", detectable="partial", missing_information=["y"]
     )
-    reply = svc._proposal_unavailable_reply([first, second], [])
+    reply = proposal_replies.proposal_unavailable_reply([first, second], [])
     assert reply.count("同名") == 1
 
     manual = _item(id="i1", title="壞 auto")
@@ -297,15 +303,15 @@ def test_proposal_unavailable_reply_variants() -> None:
             "check_steps": ["bad", {"template_key": "x", "command_key": "y"}],
         },
     ]
-    reply = svc._proposal_unavailable_reply([manual], raw_items, [])
+    reply = proposal_replies.proposal_unavailable_reply([manual], raw_items, [])
     assert "x/y" in reply
 
-    unsupported = svc._proposal_unavailable_reply(
+    unsupported = proposal_replies.proposal_unavailable_reply(
         [manual], [{"id": "i1", "detectable": "manual"}]
     )
     assert "仍未建立提案" in unsupported
 
-    same = svc._proposal_unavailable_reply(
+    same = proposal_replies.proposal_unavailable_reply(
         [_item(detectable="auto", detection_method="m")], []
     )
     assert "相同內容" in same
@@ -313,7 +319,7 @@ def test_proposal_unavailable_reply_variants() -> None:
 
 def test_dedupe_helpers_and_title_coverage() -> None:
     untitled = (_item(title="  "), {}, "r")
-    kept = svc._dedupe_rejected_ops_keep_latest([untitled, untitled])
+    kept = proposal_replies.dedupe_rejected_ops_keep_latest([untitled, untitled])
     assert len(kept) == 2
 
     outcomes = [
@@ -322,14 +328,14 @@ def test_dedupe_helpers_and_title_coverage() -> None:
         {"status": "rejected", "title": "A"},
         {"status": "rejected", "title": "a", "n": 2},
     ]
-    result = svc._dedupe_tool_outcomes_keep_latest(outcomes)  # type: ignore[arg-type]
+    result = proposal_replies.dedupe_tool_outcomes_keep_latest(outcomes)  # type: ignore[arg-type]
     assert result[0] == "raw"
     assert result[2]["n"] == 2
 
-    assert svc._title_covered_by_reply("anything", "") is False
-    assert svc._title_covered_by_reply("檢查 Nginx 服務", "nginx") is True
-    assert svc._title_covered_by_reply("沒有", "「」") is False
-    assert svc._title_covered_by_reply("請看 main.log", "取得 main.log 檔案") is True
+    assert proposal_replies._title_covered_by_reply("anything", "") is False
+    assert proposal_replies._title_covered_by_reply("檢查 Nginx 服務", "nginx") is True
+    assert proposal_replies._title_covered_by_reply("沒有", "「」") is False
+    assert proposal_replies._title_covered_by_reply("請看 main.log", "取得 main.log 檔案") is True
 
 
 # --------------------------------------------------------------- vLLM client
@@ -511,7 +517,7 @@ def test_dispatch_edit_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(svc, "normalize_rubric_items", original_normalize)
     monkeypatch.setattr(
-        svc,
+        proposal_rules,
         "typed_item_issues",
         lambda *_a, **_k: [{"field": "check_steps", "message": "壞掉"}],
     )

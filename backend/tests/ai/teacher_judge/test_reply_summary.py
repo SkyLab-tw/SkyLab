@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import chat_transport, service
+from app.ai.teacher_judge import chat_transport, proposal_replies, service
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
 from tests.ai.teacher_judge.helpers import (
     patch_teacher_judge_vllm_settings,
@@ -39,7 +39,7 @@ def _summarize(reply: str, **kwargs: Any) -> str:
     kwargs.setdefault("rejected_ops", [])
     kwargs.setdefault("conversation_focus", None)
     kwargs.setdefault("template_commands", None)
-    return service._proposal_summary_reply(reply, **kwargs)
+    return proposal_replies.proposal_summary_reply(reply, **kwargs)
 
 
 # ------------------------------------------------------- _proposal_summary_reply

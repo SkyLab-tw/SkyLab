@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ai.teacher_judge import chat_transport, rubric_normalization
+from app.ai.teacher_judge import chat_transport, proposal_replies, rubric_normalization
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
 from app.ai.teacher_judge.template_command_service import (
@@ -475,7 +475,7 @@ def test_unavailable_reply_explains_invalid_catalog_reference() -> None:
         template_commands=[],
     )
 
-    reply = teacher_judge_service._proposal_unavailable_reply(
+    reply = proposal_replies.proposal_unavailable_reply(
         normalized,
         raw_items,
         [],
@@ -498,7 +498,7 @@ def test_unavailable_reply_ignores_retired_result_gap() -> None:
         missing_information=["客觀成功條件"],
     )
 
-    reply = teacher_judge_service._proposal_unavailable_reply(
+    reply = proposal_replies.proposal_unavailable_reply(
         [item], [item.model_dump()]
     )
 
@@ -521,7 +521,7 @@ def test_unavailable_reply_only_asks_for_location_when_location_is_missing() -> 
         missing_information=["服務日誌的檔案位置"],
     )
 
-    reply = teacher_judge_service._proposal_unavailable_reply(
+    reply = proposal_replies.proposal_unavailable_reply(
         [item], [item.model_dump()]
     )
 
@@ -548,7 +548,7 @@ def test_unavailable_reply_hides_platform_fields_from_teacher() -> None:
         ],
     )
 
-    reply = teacher_judge_service._proposal_unavailable_reply(
+    reply = proposal_replies.proposal_unavailable_reply(
         [item], [item.model_dump()]
     )
 

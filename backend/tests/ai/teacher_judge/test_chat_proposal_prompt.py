@@ -9,7 +9,12 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import chat_transport, proposal_tools, service
+from app.ai.teacher_judge import (
+    chat_transport,
+    proposal_replies,
+    proposal_tools,
+    service,
+)
 from app.ai.teacher_judge.prompt import (
     CHAT_PROPOSAL_SYSTEM_TEMPLATE,
     FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION,
@@ -414,7 +419,7 @@ async def test_attachment_item_missing_information_is_needs_information(
     ],
 )
 def test_creation_claim_only_counts_completed_wording(reply: str, claims: bool) -> None:
-    assert service._reply_claims_created(reply) is claims
+    assert proposal_replies.reply_claims_created(reply) is claims
 
 
 async def test_prose_final_reply_is_restated_once_in_json_mode(

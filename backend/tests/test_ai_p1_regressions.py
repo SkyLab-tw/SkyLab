@@ -14,7 +14,13 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.ai.pve_log import collector
 from app.ai.system_config import system_ai_env
-from app.ai.teacher_judge import chat_transport, proposal_tools, reply_payload, service
+from app.ai.teacher_judge import (
+    chat_transport,
+    proposal_rules,
+    proposal_tools,
+    reply_payload,
+    service,
+)
 from app.ai.teacher_judge import script_executor_service as executor
 from app.ai.teacher_judge.prompt import (
     CHAT_SYSTEM_TEMPLATE,
@@ -112,9 +118,9 @@ def test_retired_success_criteria_is_not_in_new_step_contract() -> None:
 
 
 def test_structured_proposal_status_overrides_reply_wording() -> None:
-    assert service._proposal_status_claims_ready("ready") is True
-    assert service._proposal_status_claims_ready("needs_information") is False
-    assert service._proposal_status_claims_ready(None) is False
+    assert proposal_rules.proposal_status_claims_ready("ready") is True
+    assert proposal_rules.proposal_status_claims_ready("needs_information") is False
+    assert proposal_rules.proposal_status_claims_ready(None) is False
 
 
 def test_create_tool_rejection_explains_invalid_step_to_model_only() -> None:
