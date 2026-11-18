@@ -16,6 +16,7 @@ from app.ai.pve_log import collector
 from app.ai.system_config import system_ai_env
 from app.ai.teacher_judge import (
     chat_transport,
+    proposal_dispatch,
     proposal_rules,
     proposal_tools,
     reply_payload,
@@ -129,7 +130,7 @@ def test_create_tool_rejection_explains_invalid_step_to_model_only() -> None:
     rejected_ops: list[tuple[object, dict[str, object], str]] = []
     tool_calls: list[dict[str, object]] = []
 
-    result = service._execute_checklist_tool(
+    result = proposal_dispatch.execute_checklist_tool(
         proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {
             "title": "檢查 answer.txt 內容",
@@ -190,7 +191,7 @@ def test_create_tool_blocks_duplicate_title_of_existing_item() -> None:
         }
     ]
 
-    result = service._execute_checklist_tool(
+    result = proposal_dispatch.execute_checklist_tool(
         proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查 ssh 服務狀態"},
         snapshot_items=snapshot_items,
@@ -221,7 +222,7 @@ def test_create_tool_blocks_second_same_title_in_same_turn() -> None:
     rejected_ops: list[tuple[object, dict[str, object], str]] = []
     tool_calls: list[dict[str, object]] = []
 
-    first = service._execute_checklist_tool(
+    first = proposal_dispatch.execute_checklist_tool(
         proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查磁碟空間", "detectable": "manual"},
         snapshot_items=[],
@@ -234,7 +235,7 @@ def test_create_tool_blocks_second_same_title_in_same_turn() -> None:
         rejected_ops=rejected_ops,
         tool_calls=tool_calls,
     )
-    second = service._execute_checklist_tool(
+    second = proposal_dispatch.execute_checklist_tool(
         proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查磁碟空間 "},
         snapshot_items=[],

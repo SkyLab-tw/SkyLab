@@ -7,7 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ai.teacher_judge import proposal_tools, service, session_chat_service
+from app.ai.teacher_judge import (
+    proposal_dispatch,
+    proposal_tools,
+    service,
+    session_chat_service,
+)
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.check_plan_contract import typed_step_issues
 from app.ai.teacher_judge.deterministic_compiler import (
@@ -51,11 +56,11 @@ def test_known_path_conflict_is_repairable_independently_of_assertion(operation,
         arguments = {key: value for key, value in item.items() if key != "id"}
         tool = "create_checklist_item"
     else:
-        service._execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+        proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
         arguments = {"id": item["id"]}
         tool = "edit_checklist_item"
     arguments.update(detectable="partial", missing_information=["檔案的絕對路徑"])
-    result = service._execute_checklist_tool(tool, arguments, **state)
+    result = proposal_dispatch.execute_checklist_tool(tool, arguments, **state)
     assert result["reason_code"] == "check_plan_contract_invalid"
     assert result["teacher_input_required"] is False
     assert result["retryable"] is True
@@ -67,8 +72,8 @@ def test_index_never_authorizes_edit(finalizer):
     item = file_item()
     state = tool_state(item)
     state["finalizer"] = finalizer
-    service._execute_checklist_tool("list_checklist", {}, **state)
-    result = service._execute_checklist_tool("edit_checklist_item", {"id": item["id"], "title": "updated"}, **state)
+    proposal_dispatch.execute_checklist_tool("list_checklist", {}, **state)
+    result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {"id": item["id"], "title": "updated"}, **state)
     assert result["reason_code"] == "checklist_item_not_read"
     assert result["teacher_input_required"] is False
 

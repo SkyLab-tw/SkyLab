@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from app.ai.teacher_judge import (
     chat_transport,
+    proposal_dispatch,
     proposal_replies,
     proposal_rules,
     reply_payload,
@@ -448,7 +449,7 @@ def _dispatch(
     template_commands: list[TeacherJudgeTemplateCommand] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     tool_calls: list[dict[str, Any]] = []
-    result = svc._dispatch_checklist_tool(
+    result = proposal_dispatch._dispatch_checklist_tool(
         name,
         arguments,
         snapshot_items=snapshot if snapshot is not None else [],
@@ -485,7 +486,7 @@ def test_dispatch_create_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert "node_key" in result["error"]
 
-    monkeypatch.setattr(svc, "normalize_rubric_items", lambda *_a, **_k: [])
+    monkeypatch.setattr(proposal_dispatch, "normalize_rubric_items", lambda *_a, **_k: [])
     result, _ = _dispatch("create_checklist_item", {"title": "新項目"})
     assert "無法解析" in result["error"]
 
@@ -505,8 +506,8 @@ def test_dispatch_edit_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert "node_key" in result["error"]
 
-    original_normalize = svc.normalize_rubric_items
-    monkeypatch.setattr(svc, "normalize_rubric_items", lambda *_a, **_k: [])
+    original_normalize = proposal_dispatch.normalize_rubric_items
+    monkeypatch.setattr(proposal_dispatch, "normalize_rubric_items", lambda *_a, **_k: [])
     result, _ = _dispatch(
         "edit_checklist_item",
         {"id": "i1", "title": "新"},
@@ -515,7 +516,7 @@ def test_dispatch_edit_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert "無法解析" in result["error"]
 
-    monkeypatch.setattr(svc, "normalize_rubric_items", original_normalize)
+    monkeypatch.setattr(proposal_dispatch, "normalize_rubric_items", original_normalize)
     monkeypatch.setattr(
         proposal_rules,
         "typed_item_issues",

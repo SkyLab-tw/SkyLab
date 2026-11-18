@@ -12,6 +12,7 @@ import pytest
 from app.ai.teacher_judge import (
     chat_transport,
     file_service,
+    proposal_dispatch,
     script_artifact_service,
     service,
     session_chat_service,
@@ -77,9 +78,9 @@ async def review(monkeypatch, item, responses):
 def test_list_does_not_authorize_finalizer_edit_without_reading_path():
     item = file_item()
     state = tool_state(item)
-    listing = service._execute_checklist_tool("list_checklist", {}, **state)
+    listing = proposal_dispatch.execute_checklist_tool("list_checklist", {}, **state)
     assert "check_steps" not in listing["items"][0]
-    result = service._execute_checklist_tool("edit_checklist_item", {
+    result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {
         "id": item["id"], "detectable": "partial", "missing_information": [PATH_GAP],
     }, **state)
     assert result["reason_code"] == "checklist_item_not_read"
@@ -94,9 +95,9 @@ def test_list_does_not_authorize_finalizer_edit_without_reading_path():
 def test_located_plan_rejects_prose_gap_as_repairable_contract_error(gap):
     item = file_item()
     state = tool_state(item)
-    detail = service._execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+    detail = proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
     assert detail["execution_readiness"]["ready"] is True
-    result = service._execute_checklist_tool("edit_checklist_item", {
+    result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {
         "id": item["id"], "detectable": "partial", "missing_information": [gap],
     }, **state)
     assert result["reason_code"] == "check_plan_contract_invalid"
@@ -172,10 +173,10 @@ async def test_path_conflict_repairs_only_false_gap_and_preserves_date_scope(mon
 def test_finalizer_cannot_replace_known_absolute_path_with_unlocated_relative_path():
     item = file_item()
     state = tool_state(item)
-    service._execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+    proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
     steps = copy.deepcopy(item["check_steps"])
     steps[0]["collector"]["path"] = "test.txt"
-    result = service._execute_checklist_tool("edit_checklist_item", {
+    result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {
         "id": item["id"], "check_steps": steps, "detectable": "auto",
     }, **state)
     assert result["reason_code"] == "check_plan_contract_invalid"
