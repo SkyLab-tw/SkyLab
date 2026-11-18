@@ -71,6 +71,7 @@ Administrators only. The page lives in the administrator settings sidebar, and t
 - Removing a mapping does not check whether any VM is using it. VMs still configured with that GPU will fail to start afterwards.
 - If several PVE connections have a mapping with the same name, the deletion is refused rather than removing it on every cluster.
 - The counts on this page reflect VMs that exist on PVE now. Approved requests whose machines have not been created yet are not counted here; they are deducted from the GPU choices users see in the request form for the overlapping time window, and request approval only places a GPU request on a node that still has a free slot for that mapping.
+- When SkyLab attaches a GPU to a machine it creates, it also turns on PCI-Express (`pcie=1`) if that machine's machine type is q35. PVE only supports PCI-Express on q35, so on any other machine type (PVE defaults to i440fx) the GPU is attached as a plain PCI device. A created machine keeps the machine type of the template it is cloned from.
 - The page refreshes automatically in the background.
 
 ## Related

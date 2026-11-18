@@ -663,14 +663,16 @@ def run_clone_task(task_id: uuid.UUID, payload: dict[str, Any]) -> dict[str, Any
             if gpu_mapping_id:
                 # 容量與 vGPU 規格以掛載當下重新驗證（與申請流程同一套檢查）
                 from app.services.proxmox.provisioning_service import (
-                    _build_gpu_hostpci,
+                    build_gpu_hostpci_for_vm,
                 )
 
                 proxmox_ops.update_config(
                     node,
                     new_vmid,
                     "qemu",
-                    hostpci0=_build_gpu_hostpci(
+                    hostpci0=build_gpu_hostpci_for_vm(
+                        node,
+                        new_vmid,
                         str(gpu_mapping_id),
                         str(gpu_mdev_profile) if gpu_mdev_profile else None,
                     ),
