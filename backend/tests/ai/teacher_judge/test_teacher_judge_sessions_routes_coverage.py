@@ -801,3 +801,26 @@ def test_create_session_run_submits_run(ctx, monkeypatch) -> None:
     assert result["artifact_id"] == artifact_id
     assert created[0]["target_vmids"] == [101]
     assert submitted == [f"teacher_judge_script_run:{run_id}"]
+
+
+def test_mark_dispatch_failed_marks_every_run_and_expires_session(monkeypatch) -> None:
+    marked: list[tuple[uuid.UUID, str, str]] = []
+    monkeypatch.setattr(
+        routes,
+        "mark_run_executor_failed",
+        lambda run_id, message, *, reason_code: marked.append(
+            (run_id, message, reason_code)
+        ),
+    )
+    expired: list[bool] = []
+    fake_session = SimpleNamespace(expire_all=lambda: expired.append(True))
+    first, second = uuid.uuid4(), uuid.uuid4()
+
+    routes._mark_dispatch_failed(fake_session, [str(first), str(second)])  # type: ignore[arg-type]
+
+    reason = "背景執行器未接受任務。"
+    assert marked == [
+        (first, reason, "executor_unavailable"),
+        (second, reason, "executor_unavailable"),
+    ]
+    assert expired == [True]
