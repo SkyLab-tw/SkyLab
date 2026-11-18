@@ -11,12 +11,18 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from sqlmodel import select
 
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import TeacherJudgeSessionMessageCreateRequest
 from app.api.routes import teacher_judge_sessions
 from app.core.request_context import RequestContext, set_request_context
 from app.models.teacher_judge_attachment import TeacherJudgeSessionAttachment
-from app.models.teacher_judge_session import TeacherJudgeSession
+from app.models.teacher_judge_session import (
+    TeacherJudgeMessageRole,
+    TeacherJudgeSession,
+    TeacherJudgeSessionMessage,
+)
 from tests.ai.teacher_judge.helpers import make_session
 
 
@@ -39,7 +45,7 @@ def _chat_session(db) -> tuple[uuid.UUID, TeacherJudgeSession]:
 def _patch_common(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -71,6 +77,48 @@ async def test_chat_llm_call_runs_without_an_open_transaction(
 
     assert seen == [False]
     assert result.assistant_message.content == "可以，先描述目標環境。"
+
+
+@pytest.mark.asyncio
+async def test_chat_admission_is_committed_before_the_model_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = make_session()
+    class_id, item = _chat_session(db)
+    seen: list[tuple[bool, bool | None]] = []
+
+    async def fake_chat(messages, rubric_context, **kwargs):
+        in_transaction = db.in_transaction()
+        admitted = db.exec(
+            select(TeacherJudgeSessionMessage).where(
+                TeacherJudgeSessionMessage.session_id == item.id,
+                TeacherJudgeSessionMessage.role == TeacherJudgeMessageRole.user,
+            )
+        ).one()
+        seen.append((in_transaction, (admitted.metadata_json or {}).get("processing")))
+        return "收到。", None, {}
+
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
+
+    result = await teacher_judge_sessions.create_message(
+        class_id,
+        item.id,
+        TeacherJudgeSessionMessageCreateRequest(content="先討論檢查需求"),
+        db,
+        SimpleNamespace(id=uuid.uuid4()),
+    )
+
+    # 呼叫模型時交易已結束，使用者訊息已落地且標記 processing；回覆保存後才清除。
+    assert seen == [(False, True)]
+    assert result.assistant_message.content == "收到。"
+    stored = db.exec(
+        select(TeacherJudgeSessionMessage).where(
+            TeacherJudgeSessionMessage.session_id == item.id,
+            TeacherJudgeSessionMessage.role == TeacherJudgeMessageRole.user,
+        )
+    ).one()
+    assert (stored.metadata_json or {}).get("processing") is False
 
 
 @pytest.mark.asyncio

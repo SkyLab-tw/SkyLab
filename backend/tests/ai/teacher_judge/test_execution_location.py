@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlmodel import select
 
 from app.ai.teacher_judge import chat_transport, rubric_normalization, service
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.deterministic_compiler import (
     CheckPlanContractError,
@@ -385,6 +386,9 @@ async def test_routes_persist_visible_path_question_and_never_create_script(
         monkeypatch.setattr(
             routes, "get_enabled_template_commands", lambda *a, **kw: []
         )
+        monkeypatch.setattr(
+            chat_flow, "get_enabled_template_commands", lambda *a, **kw: []
+        )
 
         async def fake_chat(*args, **kwargs):
             return "所有檢查項目已通過，狀態良好。", [], {}
@@ -428,7 +432,7 @@ async def test_routes_persist_visible_path_question_and_never_create_script(
 def test_compile_contract_error_keeps_specific_reason_in_chat(monkeypatch) -> None:
     saved = []
     monkeypatch.setattr(
-        routes, "_save_workflow_message", lambda *a, **kw: saved.append(kw)
+        routes, "save_workflow_message", lambda *a, **kw: saved.append(kw)
     )
     routes._save_script_set_failure(
         None,

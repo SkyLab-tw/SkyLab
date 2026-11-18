@@ -13,6 +13,7 @@ from app.ai.teacher_judge import (
     service,
     session_chat_service,
 )
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.check_plan_contract import typed_step_issues
 from app.ai.teacher_judge.deterministic_compiler import (
@@ -131,7 +132,7 @@ async def test_finalizer_explanation_uses_actual_blocker_not_false_model_path_cl
         return false_reply, [], {}
 
     monkeypatch.setattr(routes, "_access", lambda *args: None)
-    monkeypatch.setattr(routes, "get_enabled_template_commands", lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_flow, "get_enabled_template_commands", lambda *args, **kwargs: [])
     monkeypatch.setattr(routes, "chat_with_rubric", fake_chat)
     with make_session() as db:
         class_id = uuid.uuid4()

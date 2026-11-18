@@ -14,6 +14,7 @@ from sqlmodel import select
 
 from app.ai.teacher_judge import attachment_service, session_service
 from app.ai.teacher_judge import service as teacher_judge_service
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionMessageCreateRequest,
@@ -110,7 +111,7 @@ async def test_refine_auto_teacher_typed_plan_is_script_ready(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -157,7 +158,7 @@ async def test_message_without_rubric_is_saved_and_uses_general_chat(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -203,7 +204,7 @@ async def test_message_without_rubric_does_not_claim_proposal_was_created(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -265,7 +266,7 @@ async def test_message_does_not_enable_script_creation_workflow(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -475,7 +476,7 @@ async def test_message_can_send_parsed_attachment_without_text(
         teacher_judge_sessions, "analyze_attachments_itemwise", fake_itemwise
     )
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -538,7 +539,7 @@ async def test_attachment_proposal_is_recoverable_but_not_applied_automatically(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -642,7 +643,7 @@ async def test_attachment_message_runs_itemwise_analysis_and_records_results(
         teacher_judge_sessions, "analyze_attachments_itemwise", fake_itemwise
     )
     monkeypatch.setattr(
-        teacher_judge_sessions, "get_enabled_template_commands", lambda *a, **k: []
+        chat_flow, "get_enabled_template_commands", lambda *a, **k: []
     )
 
     result = await teacher_judge_sessions.create_message(
@@ -700,7 +701,7 @@ async def test_refine_message_uses_the_rubric_polish_prompt_mode(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -798,7 +799,7 @@ async def test_refine_message_uses_server_readiness_and_saves_resolved_chat(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [command],
     )
@@ -911,7 +912,7 @@ async def test_refine_message_preserves_ready_proposal_rows_alongside_blockers(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [command],
     )
@@ -958,7 +959,7 @@ async def test_message_failure_is_saved_as_visible_processing_outcome(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fail_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )

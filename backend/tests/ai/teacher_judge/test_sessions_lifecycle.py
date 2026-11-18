@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from app.ai.teacher_judge import file_service, session_service
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionCreateRequest,
@@ -362,7 +363,7 @@ async def test_chat_does_not_save_old_answer_after_source_switch(
     db.refresh(item)
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )

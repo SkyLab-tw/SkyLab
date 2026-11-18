@@ -18,6 +18,7 @@ from app.ai.teacher_judge import (
     session_chat_service,
     session_service,
 )
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.check_plan_contract import (
     typed_item_issues,
@@ -302,7 +303,7 @@ async def test_route_keeps_failed_finalizer_unready_even_if_saved_plan_is_valid(
         monkeypatch.setattr(service, "check_adherence", block)
     calls = install_responses(monkeypatch, responses)
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *_args: None)
-    monkeypatch.setattr(teacher_judge_sessions, "machine_context_entries", lambda *_args: [{"node_key": "web", "display_label": "P1"}])
+    monkeypatch.setattr(chat_flow, "machine_context_entries", lambda *_args: [{"node_key": "web", "display_label": "P1"}])
     monkeypatch.setattr(session_chat_service, "load_class_machine_nodes", lambda *_args: [SimpleNamespace(node_key="web")])
     response = await teacher_judge_sessions.create_message(
         class_id, session.id,
