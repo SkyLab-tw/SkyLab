@@ -11,12 +11,17 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
+from app.ai.teacher_judge import chat_transport, reply_payload, rubric_normalization
 from app.ai.teacher_judge import service as svc
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricChatMessage,
     TeacherJudgeRubricCheckStep,
     TeacherJudgeRubricItem,
 )
+from app.ai.teacher_judge.template_command_service import (
+    DEFAULT_SYSTEM_COMMAND_TIMEOUT_SECONDS,
+)
+from app.infrastructure.ai import VLLMRequestProfile
 from app.models.teacher_judge_template_command import TeacherJudgeTemplateCommand
 
 
@@ -73,13 +78,13 @@ def _general_command() -> TeacherJudgeTemplateCommand:
 def test_conversation_focus_skips_invalid_entries() -> None:
     proposal = None
     assert (
-        svc._conversation_focus_from_content(
+        reply_payload.conversation_focus_from_content(
             json.dumps({"reply": "x", "conversation_focus": "bad"}), proposal=proposal
         )
         is None
     )
     assert (
-        svc._conversation_focus_from_content(
+        reply_payload.conversation_focus_from_content(
             json.dumps({"reply": "x", "conversation_focus": {"requirements": "x"}}),
             proposal=proposal,
         )
@@ -98,7 +103,7 @@ def test_conversation_focus_skips_invalid_entries() -> None:
             },
         }
     )
-    focus = svc._conversation_focus_from_content(content, proposal=proposal)
+    focus = reply_payload.conversation_focus_from_content(content, proposal=proposal)
     assert focus == {
         "turn_kind": "question",
         "requirements": [
@@ -114,17 +119,17 @@ def test_conversation_focus_skips_invalid_entries() -> None:
 
 def test_structured_requirement_helpers() -> None:
     focus = {"reply": "x", "conversation_focus": {"turn_kind": "requirement"}}
-    assert svc._structured_requirement_needs_candidate(json.dumps(focus)) is False
-    assert svc._structured_requirement_target_item("") is None
+    assert reply_payload.structured_requirement_needs_candidate(json.dumps(focus)) is False
+    assert reply_payload.structured_requirement_target_item("") is None
     payload = {
         "reply": "x",
         "conversation_focus": {
             "requirements": ["bad", {"target_item_id": " "}, {"target_item_id": "i9"}]
         },
     }
-    assert svc._structured_requirement_target_item(json.dumps(payload)) == "i9"
+    assert reply_payload.structured_requirement_target_item(json.dumps(payload)) == "i9"
     payload["conversation_focus"]["requirements"] = [{"target_item_id": None}]
-    assert svc._structured_requirement_target_item(json.dumps(payload)) is None
+    assert reply_payload.structured_requirement_target_item(json.dumps(payload)) is None
 
 
 # ------------------------------------------------------- step normalization
@@ -136,7 +141,7 @@ def test_normalize_typed_steps_skip_bad_and_expand_legacy() -> None:
         "title": "版本",
         "collector": {"type": "command", "argv": ["python3", "--version"]},
     }
-    steps = svc._normalize_check_steps(
+    steps = rubric_normalization._normalize_check_steps(
         [
             "bad",
             typed,
@@ -150,7 +155,7 @@ def test_normalize_typed_steps_skip_bad_and_expand_legacy() -> None:
 
 
 def test_normalize_template_command_steps_skip_non_dict() -> None:
-    steps = svc._normalize_check_steps(
+    steps = rubric_normalization._normalize_check_steps(
         [
             "bad",
             {"command_key": "unknown.cmd", "parameters": {"argv": ["cat", "/etc/os"]}},
@@ -162,7 +167,7 @@ def test_normalize_template_command_steps_skip_non_dict() -> None:
 
 
 def test_normalize_legacy_steps_without_catalog() -> None:
-    steps = svc._normalize_check_steps(
+    steps = rubric_normalization._normalize_check_steps(
         [
             "bad",
             {"argv": [], "cwd": "/srv"},
@@ -177,14 +182,14 @@ def test_normalize_legacy_steps_without_catalog() -> None:
     assert steps[0].argv == ["ls"] and steps[0].cwd == "/srv"
     assert steps[0].timeout_seconds == 5
     assert steps[1].cwd is None
-    assert steps[1].timeout_seconds == svc.DEFAULT_SYSTEM_COMMAND_TIMEOUT_SECONDS
+    assert steps[1].timeout_seconds == DEFAULT_SYSTEM_COMMAND_TIMEOUT_SECONDS
     assert [step.command_key for step in steps[2:]] == ["x.y", "svc.status"]
     assert steps[3].command_label == "狀態"
 
 
 def test_normalize_rubric_items_bad_shapes() -> None:
-    assert svc._normalize_rubric_items("bad") == []
-    items = svc._normalize_rubric_items(
+    assert rubric_normalization.normalize_rubric_items("bad") == []
+    items = rubric_normalization.normalize_rubric_items(
         ["bad", {"title": "t", "judgement_mode": "robot"}]
     )
     assert len(items) == 1
@@ -192,8 +197,8 @@ def test_normalize_rubric_items_bad_shapes() -> None:
 
 
 def test_context_and_latest_request_helpers() -> None:
-    assert svc._rubric_context_data("{bad") == {}
-    assert svc._rubric_context_data("[]") == {}
+    assert rubric_normalization.rubric_context_data("{bad") == {}
+    assert rubric_normalization.rubric_context_data("[]") == {}
     assert (
         svc._latest_teacher_request(
             [TeacherJudgeRubricChatMessage(role="assistant", content="hi")]
@@ -334,8 +339,8 @@ async def test_request_vllm_with_retry_deadline_and_second_connect_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with pytest.raises(httpx.ReadTimeout):
-        await svc._request_vllm_with_retry(
-            {}, profile=svc.VLLMRequestProfile.CONFIGURED_TEXT, timeout=0
+        await chat_transport._request_vllm_with_retry(
+            {}, profile=VLLMRequestProfile.CONFIGURED_TEXT, timeout=0
         )
 
     calls: list[float] = []
@@ -348,7 +353,7 @@ async def test_request_vllm_with_retry_deadline_and_second_connect_error(
         return None
 
     monkeypatch.setattr(
-        svc, "teacher_judge_client", SimpleNamespace(create_chat_completion=failing)
+        chat_transport, "teacher_judge_client", SimpleNamespace(create_chat_completion=failing)
     )
     monkeypatch.setattr(
         svc,
@@ -360,8 +365,8 @@ async def test_request_vllm_with_retry_deadline_and_second_connect_error(
         ),
     )
     with pytest.raises(httpx.ConnectError):
-        await svc._request_vllm_with_retry(
-            {}, profile=svc.VLLMRequestProfile.CONFIGURED_TEXT, timeout=30
+        await chat_transport._request_vllm_with_retry(
+            {}, profile=VLLMRequestProfile.CONFIGURED_TEXT, timeout=30
         )
     assert len(calls) == 2
 
@@ -369,7 +374,7 @@ async def test_request_vllm_with_retry_deadline_and_second_connect_error(
 async def test_call_vllm_message_success_and_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(svc, "settings", _settings())
+    monkeypatch.setattr(chat_transport, "settings", _settings())
     responses: list[Any] = []
 
     async def fake_request(payload: Any, *, profile: Any, timeout: float) -> Any:
@@ -378,22 +383,22 @@ async def test_call_vllm_message_success_and_errors(
             raise step
         return step
 
-    monkeypatch.setattr(svc, "_request_vllm_with_retry", fake_request)
+    monkeypatch.setattr(chat_transport, "_request_vllm_with_retry", fake_request)
 
     responses.append({"choices": [{"message": {"content": 42}}]})
-    message, metrics = await svc._call_vllm_message({"messages": []})
+    message, metrics = await chat_transport.call_vllm_message({"messages": []})
     assert message["content"] == "42"
     assert metrics["usage_reported"] is False
     assert metrics["response_model"] is None
 
     responses.append({"choices": [{"message": "text"}]})
     with pytest.raises(HTTPException) as exc:
-        await svc._call_vllm_message({"messages": []})
+        await chat_transport.call_vllm_message({"messages": []})
     assert exc.value.status_code == 502
 
     responses.append(httpx.ReadTimeout("slow"))
     with pytest.raises(HTTPException) as exc:
-        await svc._call_vllm_message({"messages": []})
+        await chat_transport.call_vllm_message({"messages": []})
     assert exc.value.status_code == 504
 
     request = httpx.Request("POST", "http://vllm.test")
@@ -403,22 +408,22 @@ async def test_call_vllm_message_success_and_errors(
         )
     )
     with pytest.raises(HTTPException) as exc:
-        await svc._call_vllm_message({"messages": []})
+        await chat_transport.call_vllm_message({"messages": []})
     assert exc.value.status_code == 502
 
 
 def test_tool_arguments_and_embedded_calls() -> None:
-    assert svc._tool_arguments({"a": 1}) == {"a": 1}
-    assert svc._tool_arguments(5) is None
-    assert svc._contains_embedded_tool_call("<tool_call>x") is True
-    assert svc._contains_embedded_tool_call("```json\n{bad json}\n```") is False
+    assert chat_transport.tool_arguments({"a": 1}) == {"a": 1}
+    assert chat_transport.tool_arguments(5) is None
+    assert reply_payload.contains_embedded_tool_call("<tool_call>x") is True
+    assert reply_payload.contains_embedded_tool_call("```json\n{bad json}\n```") is False
     nested = '```json\n{"tool_call": {"name": "list_checklist"}}\n```'
-    assert svc._contains_embedded_tool_call(nested) is True
+    assert reply_payload.contains_embedded_tool_call(nested) is True
 
 
 def test_reply_payload_object_variants() -> None:
-    assert svc._is_reply_payload_object({"conversation_focus": {}}) is True
-    leftover, payload = svc._reply_payload_object('前言 {"x": 1} 後記')
+    assert reply_payload._is_reply_payload_object({"conversation_focus": {}}) is True
+    leftover, payload = reply_payload.reply_payload_object('前言 {"x": 1} 後記')
     assert payload is None
     assert leftover == '前言 {"x": 1} 後記'
 
@@ -474,7 +479,7 @@ def test_dispatch_create_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert "node_key" in result["error"]
 
-    monkeypatch.setattr(svc, "_normalize_rubric_items", lambda *_a, **_k: [])
+    monkeypatch.setattr(svc, "normalize_rubric_items", lambda *_a, **_k: [])
     result, _ = _dispatch("create_checklist_item", {"title": "新項目"})
     assert "無法解析" in result["error"]
 
@@ -494,8 +499,8 @@ def test_dispatch_edit_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert "node_key" in result["error"]
 
-    original_normalize = svc._normalize_rubric_items
-    monkeypatch.setattr(svc, "_normalize_rubric_items", lambda *_a, **_k: [])
+    original_normalize = svc.normalize_rubric_items
+    monkeypatch.setattr(svc, "normalize_rubric_items", lambda *_a, **_k: [])
     result, _ = _dispatch(
         "edit_checklist_item",
         {"id": "i1", "title": "新"},
@@ -504,7 +509,7 @@ def test_dispatch_edit_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert "無法解析" in result["error"]
 
-    monkeypatch.setattr(svc, "_normalize_rubric_items", original_normalize)
+    monkeypatch.setattr(svc, "normalize_rubric_items", original_normalize)
     monkeypatch.setattr(
         svc,
         "typed_item_issues",
@@ -535,11 +540,11 @@ def _scripted(responses: list[dict[str, Any]]):
 async def test_tool_loop_ignores_non_dict_tool_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(svc, "settings", _settings())
+    monkeypatch.setattr(chat_transport, "settings", _settings())
     _calls, fake = _scripted(
         [{"role": "assistant", "content": "最後回覆", "tool_calls": ["bad"]}]
     )
-    monkeypatch.setattr(svc, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     content, *_rest = await svc._run_proposal_tool_loop(
         {"messages": [], "max_tokens": 512},
         rubric_context=json.dumps({"items": []}),
@@ -556,7 +561,7 @@ async def test_tool_loop_ignores_non_dict_tool_calls(
 
 
 async def test_model_not_configured_guards(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(svc, "settings", _settings(VLLM_MODEL_NAME=""))
+    monkeypatch.setattr(chat_transport, "settings", _settings(VLLM_MODEL_NAME=""))
     message = TeacherJudgeRubricChatMessage(role="user", content="hi")
     with pytest.raises(HTTPException):
         await svc.summarize_conversation([message])
@@ -580,7 +585,7 @@ def _patch_loop(
     async def fake_loop(*_args: Any, **_kwargs: Any) -> Any:
         return content, _metrics(completion_tokens), staged, [], []
 
-    monkeypatch.setattr(svc, "settings", _settings())
+    monkeypatch.setattr(chat_transport, "settings", _settings())
     monkeypatch.setattr(svc, "_run_proposal_tool_loop", fake_loop)
 
 
@@ -722,7 +727,7 @@ def test_itemwise_result_variants() -> None:
 async def test_itemwise_rejects_conflicting_merged_steps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(svc, "settings", _settings())
+    monkeypatch.setattr(chat_transport, "settings", _settings())
 
     async def fake_extract(*_args: Any, **_kwargs: Any) -> Any:
         return [_source()], None, _metrics()

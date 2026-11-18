@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import service
+from app.ai.teacher_judge import chat_transport, proposal_tools, service
 from app.ai.teacher_judge.prompt import (
     CHAT_PROPOSAL_SYSTEM_TEMPLATE,
     FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION,
@@ -88,7 +88,7 @@ async def _chat(
     **kwargs: Any,
 ):
     calls, fake = scripted_vllm(responses)
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     kwargs.setdefault("rubric_context", json.dumps({"items": []}))
     kwargs.setdefault("template_key", "linux")
@@ -185,8 +185,8 @@ def _properties(tools: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 
 def test_chat_tool_schema_hides_fill_fields_and_keeps_node_fields() -> None:
-    chat_tools = service._build_proposal_tools(_MACHINES, chat=True)
-    refine_tools = service._build_proposal_tools(_MACHINES)
+    chat_tools = proposal_tools.build_proposal_tools(_MACHINES, chat=True)
+    refine_tools = proposal_tools.build_proposal_tools(_MACHINES)
 
     create = _properties(chat_tools, "create_checklist_item")
     edit = _properties(chat_tools, "edit_checklist_item")
@@ -207,9 +207,9 @@ def test_chat_tool_schema_hides_fill_fields_and_keeps_node_fields() -> None:
 
 
 def test_refine_tool_schema_is_unchanged() -> None:
-    assert service._build_proposal_tools() == service._PROPOSAL_TOOLS
+    assert proposal_tools.build_proposal_tools() == proposal_tools._PROPOSAL_TOOLS
     refine_create = _properties(
-        service._build_proposal_tools(), "create_checklist_item"
+        proposal_tools.build_proposal_tools(), "create_checklist_item"
     )
     assert "detectable" in refine_create
     assert "missing_information" in refine_create
@@ -378,7 +378,7 @@ async def test_attachment_item_missing_information_is_needs_information(
             reply_message("這列需要 main.py 的絕對路徑。", "none"),
         ]
     )
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     source = {
         "source_index": 0,
@@ -557,7 +557,7 @@ async def test_editing_own_staged_item_is_blocked_and_keeps_proposal(
             return tool_call_message("edit_checklist_item", guessed_edit), {}
         return reply_message("已整理成提案。", "ready"), {}
 
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     result = await service.chat_with_rubric(
         messages=[SimpleNamespace(role="user", content="我想看學生的 Python 版本")],

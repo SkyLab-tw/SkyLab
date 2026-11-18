@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.ai.teacher_judge import chat_transport, rubric_normalization
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
 from app.ai.teacher_judge.template_command_service import (
@@ -35,7 +36,7 @@ def _python_entrypoint_command() -> TeacherJudgeTemplateCommand:
 
 
 def test_normalize_allows_teacher_judgement_when_script_inputs_are_complete() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -97,7 +98,7 @@ async def test_teacher_judgement_requirement_can_form_proposal_without_objective
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -123,7 +124,7 @@ async def test_teacher_judgement_requirement_can_form_proposal_without_objective
 
 
 def test_normalize_marks_auto_without_valid_check_steps_as_unsupported() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "title": "未知檢查",
@@ -182,7 +183,7 @@ async def test_edit_patch_explicitly_clears_resolved_missing_information(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     current = {
@@ -273,7 +274,7 @@ async def test_edit_patch_with_incomplete_parameters_returns_retry_hint(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     current = {
@@ -354,7 +355,7 @@ async def test_ready_claim_without_tool_call_is_repaired_by_forced_create(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -434,7 +435,7 @@ async def test_finalizer_repairs_legacy_plan_before_accepting_prose(
         ]
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -487,7 +488,7 @@ async def test_finalizer_stops_after_same_contract_repair_fingerprint(
         ]
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -519,7 +520,7 @@ async def test_prose_creation_claim_without_tool_call_is_rewritten(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -547,7 +548,7 @@ async def test_ready_claim_without_rubric_source_gets_no_source_reply(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -605,7 +606,7 @@ async def test_complete_manual_system_info_candidate_reselects_generic_capabilit
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -685,7 +686,7 @@ async def test_invalid_step_then_manual_uses_distinct_capability_repair(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -772,7 +773,7 @@ async def test_none_response_without_focus_does_not_invent_requirement(
             {},
         )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -857,7 +858,7 @@ async def test_empty_question_classification_remains_plain_question(
             {},
         )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(

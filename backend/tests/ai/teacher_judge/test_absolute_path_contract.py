@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ai.teacher_judge import service, session_chat_service
+from app.ai.teacher_judge import proposal_tools, service, session_chat_service
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.check_plan_contract import typed_step_issues
 from app.ai.teacher_judge.deterministic_compiler import (
@@ -75,7 +75,7 @@ def test_index_never_authorizes_edit(finalizer):
 
 @pytest.mark.parametrize("cwd", [None, "", "/root/test"])
 def test_write_schema_and_validation_remove_cwd(cwd):
-    assert '"cwd"' not in json.dumps(service._build_proposal_tools())
+    assert '"cwd"' not in json.dumps(proposal_tools.build_proposal_tools())
     item = file_item()
     item["check_steps"][0]["collector"]["cwd"] = cwd
     assert typed_step_issues(item["check_steps"])

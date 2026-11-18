@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException
 from sqlmodel import select
 
-from app.ai.teacher_judge import service
+from app.ai.teacher_judge import chat_transport, service
 from app.ai.teacher_judge.schemas import TeacherJudgeSessionMessageCreateRequest
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_session import (
@@ -144,7 +144,7 @@ async def test_real_itemwise_pipeline_cancels_active_and_waiting_items(
     # 開始就逾時，started 會是空的。放寬到 0.8 秒、項目改睡 3 秒，
     # 語意不變：前兩個項目一定被取消、後三個一定沒機會開始。
     routes.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.8
-    monkeypatch.setattr(service, "settings", SimpleNamespace(VLLM_MODEL_NAME="test"))
+    monkeypatch.setattr(chat_transport, "settings", SimpleNamespace(VLLM_MODEL_NAME="test"))
 
     async def extract(*args, **kwargs):
         return [{"source_index": i} for i in range(5)], None, {}

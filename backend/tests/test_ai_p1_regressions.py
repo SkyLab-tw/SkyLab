@@ -14,8 +14,8 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.ai.pve_log import collector
 from app.ai.system_config import system_ai_env
+from app.ai.teacher_judge import chat_transport, proposal_tools, reply_payload, service
 from app.ai.teacher_judge import script_executor_service as executor
-from app.ai.teacher_judge import service
 from app.ai.teacher_judge.prompt import (
     CHAT_SYSTEM_TEMPLATE,
     SITUATION_NORMAL,
@@ -92,7 +92,7 @@ def test_teacher_judge_chat_prompt_is_scoped_and_clarifies_missing_information()
 
 def test_retired_success_criteria_is_not_in_new_step_contract() -> None:
     assert "success_criteria" not in json.dumps(
-        service._CHECKLIST_STEP_TOOL_SCHEMA,
+        proposal_tools._CHECKLIST_STEP_TOOL_SCHEMA,
         ensure_ascii=False,
     )
 
@@ -124,7 +124,7 @@ def test_create_tool_rejection_explains_invalid_step_to_model_only() -> None:
     tool_calls: list[dict[str, object]] = []
 
     result = service._execute_checklist_tool(
-        service._CREATE_CHECKLIST_ITEM_TOOL_NAME,
+        proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {
             "title": "檢查 answer.txt 內容",
             "detectable": "auto",
@@ -185,7 +185,7 @@ def test_create_tool_blocks_duplicate_title_of_existing_item() -> None:
     ]
 
     result = service._execute_checklist_tool(
-        service._CREATE_CHECKLIST_ITEM_TOOL_NAME,
+        proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查 ssh 服務狀態"},
         snapshot_items=snapshot_items,
         analysis_revision=1,
@@ -205,7 +205,7 @@ def test_create_tool_blocks_duplicate_title_of_existing_item() -> None:
     assert rejected_ops == []
     duplicates = [entry for entry in tool_calls if entry.get("status") == "duplicate"]
     assert len(duplicates) == 1
-    assert duplicates[0]["tool"] == service._CREATE_CHECKLIST_ITEM_TOOL_NAME
+    assert duplicates[0]["tool"] == proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME
     assert duplicates[0]["item_id"] == "item-1"
 
 
@@ -216,7 +216,7 @@ def test_create_tool_blocks_second_same_title_in_same_turn() -> None:
     tool_calls: list[dict[str, object]] = []
 
     first = service._execute_checklist_tool(
-        service._CREATE_CHECKLIST_ITEM_TOOL_NAME,
+        proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查磁碟空間", "detectable": "manual"},
         snapshot_items=[],
         analysis_revision=1,
@@ -229,7 +229,7 @@ def test_create_tool_blocks_second_same_title_in_same_turn() -> None:
         tool_calls=tool_calls,
     )
     second = service._execute_checklist_tool(
-        service._CREATE_CHECKLIST_ITEM_TOOL_NAME,
+        proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查磁碟空間 "},
         snapshot_items=[],
         analysis_revision=1,
@@ -278,7 +278,7 @@ async def test_non_object_chat_output_fails_cleanly(monkeypatch, content):
     async def fake_call(*args, **kwargs):
         return content, {}
 
-    monkeypatch.setattr(service, "_call_vllm_message", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
     reply, proposal, _ = await service.chat_with_rubric(
         [TeacherJudgeRubricChatMessage(role="user", content="說明")], "{}"
     )
@@ -335,7 +335,7 @@ async def test_teacher_judge_session_proposal_keeps_only_ready_changes(monkeypat
         captured.update(payload)
         return await fake_call(payload, timeout=timeout)
 
-    monkeypatch.setattr(service, "_call_vllm_message", capture_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", capture_call)
     proposal_command = TeacherJudgeTemplateCommand(
         template_key="python",
         command_key="python.run_entrypoint",
@@ -440,7 +440,7 @@ async def test_teacher_judge_rejects_fenced_json_tool_call_without_executing_it(
         calls.append(payload)
         return await fake_call(payload, timeout=timeout)
 
-    monkeypatch.setattr(service, "_call_vllm_message", capture_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", capture_call)
     proposal_command = TeacherJudgeTemplateCommand(
         template_key="python",
         command_key="python.run_entrypoint",
@@ -485,7 +485,7 @@ async def test_teacher_judge_unwraps_non_tool_json_fence_in_reply(monkeypatch):
         + "\n```"
     )
     calls, fake_call = _scripted_vllm([{"role": "assistant", "content": fenced_reply}])
-    monkeypatch.setattr(service, "_call_vllm_message", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
 
     reply, proposal, _metrics = await service.chat_with_rubric(
         [TeacherJudgeRubricChatMessage(role="user", content="說明")],
@@ -510,7 +510,7 @@ async def test_teacher_judge_strips_fenced_reply_payload_around_prose(monkeypatc
     )
     leaked = f"好的。\n```json\n{payload}\n```"
     calls, fake_call = _scripted_vllm([{"role": "assistant", "content": leaked}])
-    monkeypatch.setattr(service, "_call_vllm_message", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
 
     reply, proposal, _metrics = await service.chat_with_rubric(
         [TeacherJudgeRubricChatMessage(role="user", content="檢查檔案格式")],
@@ -542,11 +542,11 @@ def test_teacher_judge_structured_readers_unwrap_fenced_payload() -> None:
         + "\n```"
     )
 
-    parsed_focus = service._conversation_focus_from_content(fenced, proposal=None)
+    parsed_focus = reply_payload.conversation_focus_from_content(fenced, proposal=None)
     assert parsed_focus is not None
     assert parsed_focus["turn_kind"] == "requirement"
     assert parsed_focus["requirements"][0]["focus_key"] == "Python 版本檢查"
-    assert service._structured_requirement_needs_candidate(fenced) is True
+    assert reply_payload.structured_requirement_needs_candidate(fenced) is True
 
     # Bare JSON embedded in prose is unwrapped instead of leaked.
     bare = (
@@ -557,14 +557,14 @@ def test_teacher_judge_structured_readers_unwrap_fenced_payload() -> None:
         )
         + "以上。"
     )
-    leftover, parsed = service._reply_payload_object(bare)
+    leftover, parsed = reply_payload.reply_payload_object(bare)
     assert parsed is not None
     assert parsed["reply"] == "補充完成。"
     assert '"reply"' not in leftover
 
     # An unparseable fence with internal payload keys is dropped, not shown.
     broken = '```json\n{"reply": "提案已建立。", "proposal_status": "ready",}\n```'
-    reply, status = service._parse_chat_reply_payload(broken)
+    reply, status = reply_payload.parse_chat_reply_payload(broken)
     assert reply == ""
     assert status is None
 
@@ -591,7 +591,7 @@ def test_conversation_focus_caps_shrink_long_payload() -> None:
             for index in range(6)
         ],
     }
-    parsed = service._conversation_focus_from_content(
+    parsed = reply_payload.conversation_focus_from_content(
         json.dumps(
             {
                 "reply": "還缺少檔案位置。",
@@ -686,7 +686,7 @@ async def test_teacher_judge_repairs_missing_status_without_turning_question_int
         ],
     )
 
-    monkeypatch.setattr(service, "_call_vllm_message", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
 
     reply, proposal, _metrics = await service.chat_with_rubric(
         [TeacherJudgeRubricChatMessage(role="user", content="可以讀取檔案嗎？")],
@@ -723,7 +723,7 @@ async def test_teacher_judge_does_not_keep_false_ready_reply_after_failed_repair
         ],
     )
 
-    monkeypatch.setattr(service, "_call_vllm_message", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
 
     reply, proposal, _metrics = await service.chat_with_rubric(
         [TeacherJudgeRubricChatMessage(role="user", content="檢查檔案格式")],
@@ -774,7 +774,7 @@ async def test_teacher_judge_accepts_typed_file_text_check(
         ],
     )
 
-    monkeypatch.setattr(service, "_call_vllm_message", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
 
     reply, proposal, _metrics = await service.chat_with_rubric(
         [
@@ -825,7 +825,7 @@ async def test_teacher_judge_summary_uses_dedicated_low_budget_prompt(monkeypatc
         captured["timeout"] = timeout
         return "  已確認只保留 Python 檢查。  ", {}
 
-    monkeypatch.setattr(service, "_call_vllm", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm", fake_call)
     summary, metrics = await service.summarize_conversation(
         [
             TeacherJudgeRubricChatMessage(role="user", content="保留 Python 檢查"),
@@ -853,10 +853,10 @@ async def test_truncated_model_output_is_not_accepted_as_complete_json(monkeypat
         }
 
     monkeypatch.setattr(
-        service.teacher_judge_client, "create_chat_completion", fake_completion
+        chat_transport.teacher_judge_client, "create_chat_completion", fake_completion
     )
     with pytest.raises(HTTPException) as error:
-        await service._call_vllm({"response_format": {"type": "json_object"}})
+        await chat_transport.call_vllm({"response_format": {"type": "json_object"}})
     assert error.value.status_code == 502
 
 

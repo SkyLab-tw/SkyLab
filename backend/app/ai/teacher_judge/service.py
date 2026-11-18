@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import json
 import logging
 import re
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
-from time import perf_counter
-from typing import Any, Literal, cast
+from typing import Any
 
-import httpx
 from fastapi import HTTPException
 
 from app.ai.adherence_check import ADHERENCE_MAX_TOKENS, check_adherence
@@ -24,20 +21,25 @@ from app.ai.role_contracts import (
     RoleContract,
     TurnContext,
 )
+from app.ai.teacher_judge import chat_transport
 from app.ai.teacher_judge._types import VLLMMetrics
 from app.ai.teacher_judge.automation_support import (
     get_script_generation_blockers,
     missing_step_information,
-    non_empty_argv,
+)
+from app.ai.teacher_judge.chat_transport import (
+    MAX_CHAT_COMPLETION_TOKENS,
+    assistant_message,
+    charge_missing_completion_usage,
+    merge_vllm_metrics,
+    tool_arguments,
 )
 from app.ai.teacher_judge.check_plan_contract import (
     TYPED_STEP_REPAIR_HINT,
     reconcile_finalizer_locations,
     typed_item_issues,
     typed_step_issues,
-    typed_step_tool_schema,
 )
-from app.ai.teacher_judge.config import settings
 from app.ai.teacher_judge.machine_context import (
     PEER_IP_TOKEN,
     canonicalize_machine_node_key,
@@ -59,25 +61,39 @@ from app.ai.teacher_judge.prompt import (
     SUMMARY_SYSTEM_PROMPT,
     TEMPLATE_COMMAND_CONTEXT_TEMPLATE,
 )
+from app.ai.teacher_judge.proposal_tools import (
+    CREATE_CHECKLIST_ITEM_TOOL_NAME,
+    EDIT_CHECKLIST_ITEM_TOOL_NAME,
+    GET_CHECKLIST_ITEM_TOOL_NAME,
+    LIST_CHECKLIST_TOOL_NAME,
+    PROPOSAL_FILL_PROPERTIES,
+    PROPOSAL_TOOL_NAMES,
+    build_proposal_tools,
+)
+from app.ai.teacher_judge.reply_payload import (
+    contains_embedded_tool_call,
+    conversation_focus_from_content,
+    parse_chat_reply_payload,
+    reply_payload_object,
+    structured_requirement_needs_candidate,
+    structured_requirement_target_item,
+)
+from app.ai.teacher_judge.rubric_normalization import (
+    normalize_rubric_items,
+    raw_item_detectable,
+    raw_items_by_id,
+    rubric_context_data,
+)
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeRubricChatMessage,
-    TeacherJudgeRubricCheckStep,
     TeacherJudgeRubricItem,
-    sanitize_rubric_missing_information,
 )
 from app.ai.teacher_judge.template_command_service import (
-    DEFAULT_SYSTEM_COMMAND_TIMEOUT_SECONDS,
-    coerce_timeout_seconds,
     format_template_commands_for_prompt,
-    sanitize_check_step_parameters,
-    validate_check_steps,
 )
-from app.ai.utils import apply_thinking_control, safe_bool, strip_think_tags
+from app.ai.utils import apply_thinking_control
 from app.core.i18n import t
-from app.infrastructure.ai import VLLMRequestProfile
-from app.infrastructure.ai.teacher_judge import client as teacher_judge_client
-from app.infrastructure.ai.vllm_client import VLLMEmptyContentError
 from app.models.teacher_judge_template_command import TeacherJudgeTemplateCommand
 
 TEACHER_FREE_TEXT_CONTRACT = RoleContract(
@@ -86,16 +102,21 @@ TEACHER_FREE_TEXT_CONTRACT = RoleContract(
     contract_version="teacher-judge-v1",
     fallback_key="teacher_judge.scope_clarification",
 )
+
+
 TEACHER_ACTION_CONTRACT = RoleContract(
     role_id="teacher_judge",
     output_mode=OutputMode.MODEL_ACTION,
     contract_version="teacher-judge-v1",
     fallback_key="teacher_judge.scope_clarification",
 )
+
+
 TEACHER_ADHERENCE_FALLBACK = (
     "我只能協助目前班級的評分檢查表、提案與執行結果；請指出要檢查或調整的項目。"
 )
-_MAX_CHAT_COMPLETION_TOKENS = 16_384
+
+
 _MAX_ATTACHMENT_BATCH_COMPLETION_TOKENS = 65_536
 
 
@@ -127,116 +148,6 @@ class TeacherJudgeItemwiseResult:
     error: str | None = None
 
 
-def _as_text_list(value: Any) -> list[Any]:
-    """Coerce a model-emitted list field: a bare string is one entry, junk is none."""
-    if isinstance(value, str):
-        return [value] if value.strip() else []
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _conversation_focus_from_content(
-    content: str,
-    *,
-    proposal: list[dict[str, Any]] | None,
-) -> dict[str, Any] | None:
-    """Keep only compact, model-stated requirement facts needed by the next turn."""
-    _leftover, payload = _reply_payload_object(content)
-    if payload is None:
-        return None
-    raw_focus = payload.get("conversation_focus")
-    if not isinstance(raw_focus, dict):
-        return None
-    raw_requirements = raw_focus.get("requirements")
-    if not isinstance(raw_requirements, list):
-        return None
-    requirements: list[dict[str, Any]] = []
-    for raw in raw_requirements[:4]:
-        if not isinstance(raw, dict):
-            continue
-        focus_key = str(raw.get("focus_key") or "").strip()[:40]
-        if not focus_key:
-            continue
-        known = _as_text_list(raw.get("known_information"))
-        missing = _as_text_list(raw.get("missing_information"))
-        target_item_id = str(raw.get("target_item_id") or "").strip() or None
-        requirements.append(
-            {
-                "focus_key": focus_key,
-                "status": (
-                    "ready"
-                    if proposal and raw.get("status") == "ready"
-                    else "needs_information"
-                    if any(str(value).strip() for value in missing)
-                    else "unsupported"
-                    if raw.get("status") == "unsupported"
-                    else "none"
-                ),
-                "known_information": [
-                    str(value).strip()[:80] for value in known if str(value).strip()
-                ][:3],
-                "missing_information": [
-                    str(value).strip()[:80] for value in missing if str(value).strip()
-                ][:3],
-                **({"target_item_id": target_item_id} if target_item_id else {}),
-            }
-        )
-    if not requirements:
-        return None
-    return {
-        "turn_kind": str(raw_focus.get("turn_kind") or "requirement")
-        if raw_focus.get("turn_kind") in {"question", "requirement", "follow_up"}
-        else "requirement",
-        "requirements": requirements,
-    }
-
-
-def _structured_requirement_needs_candidate(content: str) -> bool:
-    """Detect a concrete requirement that the model left without a candidate or gap."""
-    _leftover, payload = _reply_payload_object(content)
-    if payload is None:
-        return False
-    focus = payload.get("conversation_focus")
-    if not isinstance(focus, dict) or focus.get("turn_kind") not in {
-        "requirement",
-        "follow_up",
-    }:
-        return False
-    requirements = focus.get("requirements")
-    if not isinstance(requirements, list):
-        return False
-    return any(
-        isinstance(item, dict)
-        and item.get("status") not in {"needs_information", "unsupported"}
-        and not any(
-            str(value).strip()
-            for value in _as_text_list(item.get("missing_information"))
-        )
-        for item in requirements
-    )
-
-
-def _structured_requirement_target_item(content: str) -> str | None:
-    """Return the item id the structured focus points at, when editing intent."""
-    _leftover, payload = _reply_payload_object(content)
-    if payload is None:
-        return None
-    focus = payload.get("conversation_focus")
-    if not isinstance(focus, dict):
-        return None
-    requirements = focus.get("requirements")
-    if not isinstance(requirements, list):
-        return None
-    for requirement in requirements:
-        if not isinstance(requirement, dict):
-            continue
-        target = str(requirement.get("target_item_id") or "").strip()
-        if target:
-            return target
-    return None
-
-
 def _reply_claims_created(reply: str) -> bool:
     """Detect teacher-facing prose that claims a proposal was created.
 
@@ -248,257 +159,30 @@ def _reply_claims_created(reply: str) -> bool:
 
 logger = logging.getLogger(__name__)
 
-_LIST_CHECKLIST_TOOL_NAME = "list_checklist"
-_GET_CHECKLIST_ITEM_TOOL_NAME = "get_checklist_item"
-_CREATE_CHECKLIST_ITEM_TOOL_NAME = "create_checklist_item"
-_EDIT_CHECKLIST_ITEM_TOOL_NAME = "edit_checklist_item"
 
-# Fenced JSON is accepted only for the non-executable reply payload. Tool calls
-# must arrive through the native ``tool_calls`` field.
-_JSON_FENCE_RE = re.compile(
-    r"```(?:json|tool_code)?\s*(\{.*?\})\s*```",
-    re.DOTALL,
-)
-
-# All proposal modes use the same typed write schema.
-_CHECKLIST_STEP_TOOL_SCHEMA = typed_step_tool_schema()
-
-
-_PROPOSAL_FILL_PROPERTIES: dict[str, Any] = {
-    "title": {"type": "string", "description": "檢查項目名稱"},
-    "target_node_key": {
-        "type": ["string", "null"],
-        "description": (
-            "班級拓撲中要執行檢查的邏輯機器；可依提示使用 P1/P2，後端會保存為 node_key。"
-            "拓撲有兩台以上機器而老師沒有指定、名稱或角色也無法唯一對應時，"
-            "不要猜測任一台、不要呼叫此工具；改在 reply 詢問要檢查哪一台。"
-        ),
-    },
-    "peer_node_key": {
-        "type": ["string", "null"],
-        "description": (
-            "選填；由執行節點觀察的同班級邏輯機器。"
-            f"只有宣告 peer 時才能將 {PEER_IP_TOKEN} 作為完整 argv element"
-        ),
-    },
-    "checked": {
-        "type": "boolean",
-        "description": "是否已達成；只有老師明確要求或已有直接證據時才能改，新項目為 false",
-    },
-    "detectable": {
-        "type": "string",
-        "enum": ["auto", "partial", "manual"],
-        "description": "腳本取證支援：auto=可執行取證、partial=缺少資訊、manual=不支援",
-    },
-    "judgement_mode": {
-        "type": "string",
-        "enum": ["ai", "teacher"],
-        "description": "結果核對方式：ai=系統自動核對、teacher=導師依腳本證據核查",
-    },
-    "detection_method": {
-        "type": ["string", "null"],
-        "description": "腳本取證方式說明（detectable=auto/partial 時填寫）",
-    },
-    "fallback": {
-        "type": ["string", "null"],
-        "description": "manual 時的替代建議；auto 不得提供",
-    },
-    "missing_information": {
-        "type": "array",
-        "items": {"type": "string"},
-        "description": "partial 時逐項列出尚缺的資訊",
-    },
-    "check_steps": {
-        "type": "array",
-        "items": _CHECKLIST_STEP_TOOL_SCHEMA,
-        "description": "完整 typed check_steps；每步含 id、title、collector，ai 模式含 assertion，teacher 模式省略。此欄位整體替換，不能遺漏既有步驟。",
-    },
-}
-
-_LIST_CHECKLIST_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": _LIST_CHECKLIST_TOOL_NAME,
-        "description": (
-            "列出目前檢查表的所有項目（ID、標題、detectable、judgement_mode）。"
-            "需要修改、刪除或引用既有項目，或重新核查整張檢查表時使用。"
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-    },
-}
-
-_GET_CHECKLIST_ITEM_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": _GET_CHECKLIST_ITEM_TOOL_NAME,
-        "description": "以 ID 查詢單一檢查項目的完整內容；修改既有項目前必須先用它確認。",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "description": "list_checklist 回傳的項目 ID",
-                },
-            },
-            "required": ["id"],
-            "additionalProperties": False,
-        },
-    },
-}
-
-_CREATE_CHECKLIST_ITEM_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": _CREATE_CHECKLIST_ITEM_TOOL_NAME,
-        "description": (
-            "建立全新檢查項目的新增提案，老師確認套用後才會寫入檢查表。"
-            "只需填 title 與已知欄位；留空欄位使用系統預設；系統會自動指定項目 ID。"
-            "標題與既有項目重複時會被拒絕；請改用 edit_checklist_item 修改，"
-            "或改用更精確的標題後重新建立。"
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": _PROPOSAL_FILL_PROPERTIES,
-            "required": ["title"],
-            "additionalProperties": False,
-        },
-    },
-}
-
-_EDIT_CHECKLIST_ITEM_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": _EDIT_CHECKLIST_ITEM_TOOL_NAME,
-        "description": (
-            "對既有檢查項目送出修改提案，老師確認套用後才會寫入檢查表。"
-            "必須先用 get_checklist_item 確認項目 ID 並讀取完整內容，list_checklist 摘要不算完成讀取；"
-            "只填有變動的欄位，省略的欄位維持原值，要清空時明確填 null 或空陣列。"
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "id": {"type": "string", "description": "既有項目 ID"},
-                **_PROPOSAL_FILL_PROPERTIES,
-            },
-            "required": ["id"],
-            "additionalProperties": False,
-        },
-    },
-}
-
-_PROPOSAL_TOOLS: list[dict[str, Any]] = [
-    _LIST_CHECKLIST_TOOL,
-    _GET_CHECKLIST_ITEM_TOOL,
-    _CREATE_CHECKLIST_ITEM_TOOL,
-    _EDIT_CHECKLIST_ITEM_TOOL,
-]
-
-
-_PROPOSAL_TOOL_NAMES = frozenset(
-    tool["function"]["name"] for tool in _PROPOSAL_TOOLS
-)
-
-# Chat proposals only accept complete (auto) items, so the model never sees the
-# partial/manual vocabulary; the server fills detectability itself. Edit keeps
-# missing_information only so resolved gaps of a stored item can be cleared.
-_CHAT_HIDDEN_FILL_FIELDS = {
-    _CREATE_CHECKLIST_ITEM_TOOL_NAME: ("detectable", "missing_information", "fallback"),
-    _EDIT_CHECKLIST_ITEM_TOOL_NAME: ("detectable", "fallback"),
-}
-_CHAT_EDIT_MISSING_INFORMATION_DESCRIPTION = (
-    "既有項目尚未補齊的缺口；老師已補齊的缺口要移除，全部補齊時填 []。不得新增缺口。"
-)
-_CHAT_TOOL_DESCRIPTIONS = {
-    _CREATE_CHECKLIST_ITEM_TOOL_NAME: (
-        "為一條資訊完整的新檢查需求建立新增提案，老師確認套用後才寫入檢查表。"
-        "只在機器、檢查對象與判定方式都確定時呼叫；缺任何一項時不要呼叫，改在回覆詢問老師。"
-        "檔案路徑與 target_node_key 只能取自老師訊息、附件或對話，不得自行代入預設位置或自選機器。"
-        "同標題已存在時會被拒絕，請改用 edit_checklist_item。"
-    ),
-    _EDIT_CHECKLIST_ITEM_TOOL_NAME: (
-        "對既有檢查項目送出修改提案，老師確認套用後才寫入檢查表。"
-        "必須先呼叫 get_checklist_item 讀取完整內容；只在修改後資訊完整時呼叫，只填要變更的欄位。"
-    ),
-}
 _UNKNOWN_TOOL_ERROR = (
     "工具「{name}」不存在。可用工具只有 list_checklist、get_checklist_item、"
     "create_checklist_item、edit_checklist_item；最終回覆請直接在 content 輸出 JSON，不要呼叫工具。"
 )
+
+
 _AWAITING_TEACHER_ERROR = (
     "此項目需要老師補充資訊；本輪不要再呼叫工具，請在 reply 詢問老師，"
     "proposal_status 設為 needs_information。"
 )
+
+
 _STAGED_REVISIT_ERROR = (
     "本輪提案已建立，不需要再列出、讀取或修改；請停止呼叫工具，"
     "直接依 <final_answer> 輸出 JSON。"
 )
+
+
 _JSON_REPLY_REPAIR_INSTRUCTION = (
     "上一則回覆不是規定的 JSON。請把它的內容原意改寫成 <final_answer> 指定的 JSON 物件，只輸出 JSON。"
     "reply 保留原本要對老師說的話；proposal_status 依本輪工具結果：有 staged 提案為 ready，"
     "正在請老師補充資訊為 needs_information，平台不支援為 unsupported，其他為 none。"
 )
-_CHAT_JUDGEMENT_MODE_DESCRIPTION = (
-    "ai=依 assertion 自動判定；teacher=只收集結果給老師查看，不放 assertion"
-)
-_CHAT_DETECTION_METHOD_DESCRIPTION = "一句話說明系統如何取證"
-
-
-def _build_proposal_tools(
-    machine_entries: list[dict[str, Any]] | None = None,
-    *,
-    chat: bool = False,
-) -> list[dict[str, Any]]:
-    """Build request-scoped node enums without mutating shared tool schemas."""
-    tools = copy.deepcopy(_PROPOSAL_TOOLS)
-    if chat:
-        for tool in tools:
-            function = tool["function"]
-            description = _CHAT_TOOL_DESCRIPTIONS.get(function["name"])
-            if description is None:
-                continue
-            function["description"] = description
-            properties = function["parameters"]["properties"]
-            for field_name in _CHAT_HIDDEN_FILL_FIELDS[function["name"]]:
-                properties.pop(field_name, None)
-            properties["judgement_mode"] = {
-                **properties["judgement_mode"],
-                "description": _CHAT_JUDGEMENT_MODE_DESCRIPTION,
-            }
-            properties["detection_method"] = {
-                **properties["detection_method"],
-                "description": _CHAT_DETECTION_METHOD_DESCRIPTION,
-            }
-            if "missing_information" in properties:
-                properties["missing_information"] = {
-                    **properties["missing_information"],
-                    "description": _CHAT_EDIT_MISSING_INFORMATION_DESCRIPTION,
-                }
-    if machine_entries is None:
-        return tools
-    node_keys = [
-        str(entry.get("node_key") or "").strip()
-        for entry in machine_entries
-        if str(entry.get("node_key") or "").strip()
-    ]
-    aliases = "，".join(
-        f"{entry.get('display_label')}={entry.get('node_key')}"
-        for entry in machine_entries
-        if entry.get("display_label") and entry.get("node_key")
-    )
-    for tool in tools:
-        function = tool.get("function") or {}
-        properties = (function.get("parameters") or {}).get("properties") or {}
-        for field_name in ("target_node_key", "peer_node_key"):
-            field = properties.get(field_name)
-            if isinstance(field, dict):
-                field["enum"] = [*node_keys, None]
-                if aliases:
-                    field["description"] = f"{field.get('description', '')}；{aliases}"
-    return tools
 
 
 _READY_REMINDER_INSTRUCTION = (
@@ -510,314 +194,21 @@ _READY_REMINDER_INSTRUCTION = (
     "不得在沒有提案的情況下宣稱已建立提案。"
 )
 
+
 _MAX_READY_REMINDERS = 2
+
 
 _NO_RUBRIC_READY_REPLY = (
     "這項需求已具備自動檢查條件，但目前尚未選擇檢查表來源，"
     "因此無法建立可套用提案。請先選擇來源後再送出需求。"
 )
 
+
 # Only completed (past-tense) claims count; a follow-up such as
 # 「補充後我就整理成提案」 is a question, not a false creation claim.
 _REPLY_CREATION_CLAIM_RE = re.compile(
     r"已建立提案|已送出修改提案|提案已建立|已新增提案|已整理成提案|已(?:把|將).{0,40}?整理成提案"
 )
-
-
-def _normalize_check_steps(
-    raw_steps: Any,
-    template_key: str | None = None,
-    template_commands: list[TeacherJudgeTemplateCommand] | None = None,
-) -> list[TeacherJudgeRubricCheckStep]:
-    if not isinstance(raw_steps, list):
-        return []
-
-    if any(
-        isinstance(raw_step, dict) and isinstance(raw_step.get("collector"), dict)
-        for raw_step in raw_steps
-    ):
-        typed_or_legacy: list[TeacherJudgeRubricCheckStep] = []
-        for raw_step in raw_steps:
-            if not isinstance(raw_step, dict):
-                continue
-            if isinstance(raw_step.get("collector"), dict):
-                try:
-                    typed_or_legacy.append(TeacherJudgeRubricCheckStep(**raw_step))
-                except ValueError:
-                    continue
-            else:
-                typed_or_legacy.extend(
-                    _normalize_check_steps(
-                        [raw_step],
-                        template_key=template_key,
-                        template_commands=template_commands,
-                    )
-                )
-        return typed_or_legacy
-
-    if template_commands is not None:
-        general_command = next(
-            (
-                command
-                for command in template_commands
-                if command.command_key == "system.run_command"
-            ),
-            None,
-        )
-        canonical_steps: list[Any] = []
-        for raw_step in raw_steps:
-            if not isinstance(raw_step, dict):
-                canonical_steps.append(raw_step)
-                continue
-            canonical_step = dict(raw_step)
-            if (
-                general_command is not None
-                and str(raw_step.get("command_key") or "").strip()
-                == general_command.command_key
-            ):
-                canonical_step["template_key"] = general_command.template_key
-                raw_parameters = raw_step.get("parameters")
-                parameters = (
-                    dict(raw_parameters) if isinstance(raw_parameters, dict) else {}
-                )
-                for key in ("argv", "cwd", "timeout_seconds"):
-                    if key not in parameters and key in raw_step:
-                        parameters[key] = raw_step[key]
-                canonical_step["parameters"] = parameters
-            canonical_steps.append(canonical_step)
-
-        validated_items = validate_check_steps(
-            template_key or "",
-            [{"check_steps": canonical_steps}],
-            template_commands,
-        )
-        validated_steps = [
-            TeacherJudgeRubricCheckStep(**step)
-            for step in validated_items[0].get("check_steps", [])
-        ]
-        valid_raw_references = {
-            (step.template_key, step.command_key) for step in validated_steps
-        }
-        if general_command is None:
-            return validated_steps
-
-        recovered_steps: list[dict[str, Any]] = []
-        for raw_step in canonical_steps:
-            if not isinstance(raw_step, dict):
-                continue
-            raw_template_key = str(
-                raw_step.get("template_key") or template_key or ""
-            ).strip()
-            raw_command_key = str(raw_step.get("command_key") or "").strip()
-            if (raw_template_key, raw_command_key) in valid_raw_references:
-                continue
-            raw_parameters = raw_step.get("parameters")
-            recovered_parameters: dict[str, Any] = (
-                dict(raw_parameters) if isinstance(raw_parameters, dict) else {}
-            )
-            argv = recovered_parameters.get("argv")
-            if not non_empty_argv(argv):
-                continue
-            for key in ("path", "file_path", "target"):
-                recovered_parameters.pop(key, None)
-            recovered_parameters = {
-                key: value
-                for key, value in recovered_parameters.items()
-                if key in {"argv", "cwd", "timeout_seconds"}
-            }
-            recovered_steps.append(
-                {
-                    "template_key": general_command.template_key,
-                    "command_key": general_command.command_key,
-                    "parameters": recovered_parameters,
-                }
-            )
-
-        if recovered_steps:
-            recovered_items = validate_check_steps(
-                template_key or "",
-                [{"check_steps": recovered_steps}],
-                template_commands,
-            )
-            validated_steps.extend(
-                TeacherJudgeRubricCheckStep(**step)
-                for step in recovered_items[0].get("check_steps", [])
-            )
-        return validated_steps
-
-    normalized: list[TeacherJudgeRubricCheckStep] = []
-    for raw_step in raw_steps:
-        if not isinstance(raw_step, dict):
-            continue
-
-        command_key = str(raw_step.get("command_key") or "").strip()
-        step_template_key = str(
-            raw_step.get("template_key") or template_key or ""
-        ).strip()
-        raw_parameters = raw_step.get("parameters")
-        parameters = dict(raw_parameters) if isinstance(raw_parameters, dict) else {}
-        for key in ("argv", "cwd", "timeout_seconds"):
-            if key not in parameters and key in raw_step:
-                parameters[key] = raw_step[key]
-        parameters = sanitize_check_step_parameters(parameters)
-
-        if not command_key and "argv" in parameters:
-            argv = parameters.get("argv")
-            if not non_empty_argv(argv):
-                continue
-            timeout = coerce_timeout_seconds(parameters.get("timeout_seconds"))
-            normalized.append(
-                TeacherJudgeRubricCheckStep(
-                    argv=argv,
-                    cwd=(
-                        parameters.get("cwd").strip()
-                        if isinstance(parameters.get("cwd"), str)
-                        and parameters.get("cwd").strip()
-                        else None
-                    ),
-                    timeout_seconds=(timeout or DEFAULT_SYSTEM_COMMAND_TIMEOUT_SECONDS),
-                )
-            )
-            continue
-
-        if not command_key or not step_template_key:
-            continue
-
-        command_label = raw_step.get("command_label")
-
-        normalized.append(
-            TeacherJudgeRubricCheckStep(
-                template_key=step_template_key,
-                command_key=command_key,
-                command_label=str(command_label) if command_label else None,
-                parameters=parameters,
-            )
-        )
-
-    return normalized
-
-
-def _normalize_rubric_items(
-    raw_items: Any,
-    template_key: str | None = None,
-    template_commands: list[TeacherJudgeTemplateCommand] | None = None,
-    strip_auto_fallback: bool = True,
-) -> list[TeacherJudgeRubricItem]:
-    """Normalize item fields while preserving explicitly recorded information gaps."""
-    if not isinstance(raw_items, list):
-        return []
-
-    normalized: list[TeacherJudgeRubricItem] = []
-    for i, raw in enumerate(raw_items):
-        if not isinstance(raw, dict):
-            continue
-
-        item_id = str(raw.get("id") or f"item-{i + 1}")
-        title = str(raw.get("title") or raw.get("name") or "").strip() or "未命名項目"
-        checked = safe_bool(raw.get("checked", raw.get("is_checked")), default=False)
-
-        raw_detectable = raw.get("detectable")
-        if isinstance(raw_detectable, bool):
-            detectable_raw = "auto" if raw_detectable else "manual"
-        else:
-            detectable_raw = str(raw_detectable or "manual").strip().lower()
-        if detectable_raw not in {"auto", "partial", "manual"}:
-            detectable_raw = "manual"
-        detectable: Literal["auto", "partial", "manual"] = cast(
-            "Literal['auto', 'partial', 'manual']", detectable_raw
-        )
-        judgement_mode_raw = str(raw.get("judgement_mode") or "ai").strip().lower()
-        if judgement_mode_raw not in {"ai", "teacher"}:
-            judgement_mode_raw = "ai"
-        judgement_mode: Literal["ai", "teacher"] = cast(
-            "Literal['ai', 'teacher']", judgement_mode_raw
-        )
-
-        detection_method = raw.get("detection_method") or raw.get("detection")
-        fallback = raw.get("fallback") or raw.get("suggestion")
-        raw_missing_information = raw.get("missing_information")
-        missing_information = (
-            list(
-                dict.fromkeys(
-                    str(value).strip()
-                    for value in raw_missing_information
-                    if isinstance(value, str) and value.strip()
-                )
-            )
-            if isinstance(raw_missing_information, list)
-            else []
-        )
-        missing_information = sanitize_rubric_missing_information(missing_information)
-        check_steps = _normalize_check_steps(
-            raw.get("check_steps"),
-            template_key=template_key,
-            template_commands=template_commands,
-        )
-        system_command_steps = [
-            step for step in check_steps if step.command_key == "system.run_command"
-        ]
-        if system_command_steps:
-            for step in system_command_steps:
-                missing_information.extend(missing_step_information(step))
-        if template_commands is not None and detectable == "auto" and not check_steps:
-            detectable = "manual"
-            missing_information = []
-            detection_method = (
-                str(detection_method).strip()
-                if detection_method is not None
-                else "目前沒有可引用的有效 command_key，缺少自動取得客觀證據的能力"
-            )
-            fallback = fallback or "目前平台不支援此項目的安全腳本取證。"
-        if detectable == "auto" and (
-            detection_method is None or not str(detection_method).strip()
-        ):
-            detectable = "partial"
-            missing_information.append("腳本取證方式")
-        if detectable == "auto":
-            for step in check_steps:
-                missing_information.extend(missing_step_information(step))
-            if missing_information:
-                detectable = "partial"
-        if detectable == "partial" and not missing_information:
-            missing_information.append("完整的服務名稱、程式位置、連接埠或取證範圍")
-        missing_information = list(dict.fromkeys(missing_information))
-        if strip_auto_fallback and detectable == "auto":
-            fallback = None
-
-        normalized.append(
-            TeacherJudgeRubricItem(
-                id=item_id,
-                title=title,
-                checked=checked,
-                detectable=detectable,
-                judgement_mode=judgement_mode,
-                detection_method=str(detection_method)
-                if detection_method is not None
-                else None,
-                fallback=str(fallback) if fallback is not None else None,
-                missing_information=missing_information,
-                target_node_key=(str(raw.get("target_node_key") or "").strip() or None),
-                peer_node_key=(str(raw.get("peer_node_key") or "").strip() or None),
-                check_steps=check_steps,
-            )
-        )
-
-    return normalized
-
-
-def normalize_items_for_export(raw_items: Any) -> list[TeacherJudgeRubricItem]:
-    """Public helper for robust export parsing."""
-    # Export accepts legacy/teacher-authored payloads and must not silently
-    # discard an explicitly supplied fallback while normalizing field aliases.
-    return _normalize_rubric_items(raw_items, strip_auto_fallback=False)
-
-
-def _rubric_context_data(rubric_context: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(rubric_context or "{}")
-    except (json.JSONDecodeError, TypeError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
 
 
 def _teacher_turn_context(
@@ -828,17 +219,17 @@ def _teacher_turn_context(
     is_refine: bool,
     rubric_available: bool,
 ) -> TurnContext:
-    data = _rubric_context_data(rubric_context)
+    data = rubric_context_data(rubric_context)
     raw_items = data.get("items")
     item_ids = tuple(
         str(item.get("id"))
         for item in (raw_items if isinstance(raw_items, list) else [])
         if isinstance(item, dict) and item.get("id")
     )
-    allowed_actions = [_LIST_CHECKLIST_TOOL_NAME, _GET_CHECKLIST_ITEM_TOOL_NAME]
+    allowed_actions = [LIST_CHECKLIST_TOOL_NAME, GET_CHECKLIST_ITEM_TOOL_NAME]
     if rubric_available:
         allowed_actions.extend(
-            [_CREATE_CHECKLIST_ITEM_TOOL_NAME, _EDIT_CHECKLIST_ITEM_TOOL_NAME]
+            [CREATE_CHECKLIST_ITEM_TOOL_NAME, EDIT_CHECKLIST_ITEM_TOOL_NAME]
         )
     return TurnContext(
         role_id="teacher_judge",
@@ -869,13 +260,13 @@ async def _check_teacher_candidate(
     phase: str,
 ) -> AdherenceResult:
     result = await check_adherence(
-        teacher_judge_client,
+        chat_transport.teacher_judge_client,
         contract,
         _latest_teacher_request(messages),
         candidate,
         {"turn_context": turn_context.as_facts(), "evidence": facts},
         new_ai_request_id(),
-        model_name=settings.VLLM_MODEL_NAME,
+        model_name=chat_transport.settings.VLLM_MODEL_NAME,
         phase=phase,
     )
     if not result.allowed:
@@ -1085,36 +476,17 @@ def _proposal_status_claims_ready(status: Any) -> bool:
     return str(status or "").strip().lower() == "ready"
 
 
-def _raw_items_by_id(raw_items: Any) -> dict[str, dict[str, Any]]:
-    """Index model-emitted raw items by id.
-
-    Missing ids fall back to ``item-<n>`` exactly like
-    ``_normalize_rubric_items`` so raw rows line up with normalized items.
-    """
-    if not isinstance(raw_items, list):
-        return {}
-    return {
-        str(raw.get("id") or f"item-{index + 1}"): raw
-        for index, raw in enumerate(raw_items)
-        if isinstance(raw, dict)
-    }
-
-
-def _raw_detectable(raw: dict[str, Any] | None) -> str:
-    return str((raw or {}).get("detectable") or "").strip().lower()
-
-
 def _invalid_auto_item_titles(
     normalized_items: list[TeacherJudgeRubricItem],
     raw_items: Any,
 ) -> list[str]:
     """Return model-declared auto items rejected by command/schema validation."""
-    raw_by_id = _raw_items_by_id(raw_items)
+    raw_by_id = raw_items_by_id(raw_items)
     return [
         item.title
         for item in normalized_items
         if item.detectable == "manual"
-        and _raw_detectable(raw_by_id.get(item.id)) == "auto"
+        and raw_item_detectable(raw_by_id.get(item.id)) == "auto"
     ]
 
 
@@ -1129,14 +501,14 @@ def _manual_candidates_needing_capability_review(
         for command in template_commands or []
     ):
         return []
-    raw_by_id = _raw_items_by_id(raw_items)
+    raw_by_id = raw_items_by_id(raw_items)
     return [
         item.title
         for item in normalized_items
         if item.detectable == "manual"
         and not item.check_steps
         and not item.missing_information
-        and _raw_detectable(raw_by_id.get(item.id)) == "manual"
+        and raw_item_detectable(raw_by_id.get(item.id)) == "manual"
     ]
 
 
@@ -1155,12 +527,16 @@ _TEACHER_LOCATION_GAP_MARKERS = (
     "範圍",
     "對象",
 )
+
+
 _TEACHER_RESULT_GAP_MARKERS = (
     "預期答案",
     "預期結果",
     "預期內容",
     "通過方式",
 )
+
+
 _TEACHER_INTERNAL_GAP_MARKERS = (
     "取證",
     "command_key",
@@ -1538,361 +914,6 @@ def _proposal_summary_reply(
     return "\n".join(lines)
 
 
-def _merge_vllm_metrics(first: VLLMMetrics, second: VLLMMetrics) -> VLLMMetrics:
-    """Keep usage accounting accurate when one corrective generation is required."""
-    prompt_tokens = int(first.get("prompt_tokens") or 0) + int(
-        second.get("prompt_tokens") or 0
-    )
-    completion_tokens = int(first.get("completion_tokens") or 0) + int(
-        second.get("completion_tokens") or 0
-    )
-    elapsed_seconds = float(first.get("elapsed_seconds") or 0) + float(
-        second.get("elapsed_seconds") or 0
-    )
-    return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": int(first.get("total_tokens") or 0)
-        + int(second.get("total_tokens") or 0),
-        "elapsed_seconds": elapsed_seconds,
-        "tokens_per_second": completion_tokens / elapsed_seconds
-        if elapsed_seconds > 0
-        else 0.0,
-        "usage_reported": bool(first.get("usage_reported", True))
-        and bool(second.get("usage_reported", False)),
-        "response_model": second.get("response_model") or first.get("response_model"),
-    }
-
-
-def _charge_missing_completion_usage(
-    metrics: VLLMMetrics, reserved_tokens: int
-) -> VLLMMetrics:
-    if metrics.get("usage_reported", False):
-        return metrics
-    prompt_tokens = int(metrics.get("prompt_tokens") or 0)
-    charged = max(int(reserved_tokens), 0)
-    return {
-        **metrics,
-        "completion_tokens": charged,
-        "total_tokens": prompt_tokens + charged,
-        "tokens_per_second": (
-            charged / float(metrics.get("elapsed_seconds") or 0)
-            if float(metrics.get("elapsed_seconds") or 0) > 0
-            else 0.0
-        ),
-    }
-
-
-def _request_profile(payload: dict[str, Any]) -> VLLMRequestProfile:
-    """Map Teacher Judge's current request shape to the shared vLLM contract."""
-    if payload.get("tools"):
-        return VLLMRequestProfile.COMPLEX_AGENT
-    response_format = payload.get("response_format")
-    if isinstance(response_format, dict) and response_format.get("type") == "json_object":
-        return VLLMRequestProfile.STRUCTURED_OBJECT
-    return VLLMRequestProfile.CONFIGURED_TEXT
-
-
-async def _request_vllm_with_retry(
-    payload: dict[str, Any],
-    *,
-    profile: VLLMRequestProfile,
-    timeout: float,
-) -> dict[str, Any]:
-    """Retry one rejected/unconnected generation within the original deadline."""
-    started = perf_counter()
-    for attempt in range(2):
-        remaining = timeout - (perf_counter() - started)
-        if remaining <= 0:
-            raise httpx.ReadTimeout("Teacher Judge model request deadline exceeded")
-        try:
-            return await asyncio.wait_for(
-                teacher_judge_client.create_chat_completion(
-                    payload,
-                    profile=profile,
-                    timeout=remaining,
-                ),
-                timeout=remaining,
-            )
-        except asyncio.TimeoutError as exc:
-            raise httpx.ReadTimeout("Teacher Judge model request deadline exceeded") from exc
-        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout):
-            if attempt:
-                raise
-        except httpx.HTTPStatusError as exc:
-            # Authentication, invalid input, truncation and ambiguous read
-            # timeouts require a correction, rather than the same request.
-            if attempt or exc.response.status_code not in {429, 503}:
-                raise
-        logger.warning(
-            "Teacher Judge model request temporarily unavailable; retrying once"
-        )
-        await asyncio.sleep(min(0.25, max(timeout - (perf_counter() - started), 0)))
-    raise AssertionError("unreachable")  # pragma: no cover - 迴圈內必 return 或 raise
-
-
-async def _call_vllm_message(
-    payload: dict[str, Any], timeout: float = 120.0
-) -> tuple[dict[str, Any], VLLMMetrics]:
-    """Call vLLM chat/completions and preserve structured assistant data."""
-    url = f"{settings.VLLM_BASE_URL}/chat/completions"
-    started = perf_counter()
-
-    logger.debug(f"Calling vLLM API: {url}")
-
-    try:
-        failed_usage: dict[str, Any] = {}
-        request = payload
-        for attempt in range(2):
-            remaining = timeout - (perf_counter() - started)
-            if remaining <= 0:
-                raise httpx.ReadTimeout("Teacher Judge model request deadline exceeded")
-            try:
-                data = await _request_vllm_with_retry(
-                    request,
-                    profile=_request_profile(request),
-                    timeout=remaining,
-                )
-                break
-            except VLLMEmptyContentError as exc:
-                # No tool call was returned or executed. Correct only this generation;
-                # never replay earlier tools or silently treat an empty reply as success.
-                used = exc.usage.get("completion_tokens")
-                if attempt or type(used) is not int or used < 0:
-                    raise
-                remaining_tokens = int(payload.get("max_tokens") or 0) - used
-                if remaining_tokens <= 0:
-                    raise
-                failed_usage = exc.usage
-                request = {
-                    **payload,
-                    "max_tokens": remaining_tokens,
-                    "messages": [
-                        *payload["messages"],
-                        {
-                            "role": "system",
-                            "content": (
-                                "上一輪沒有提供可用的回覆。請依原本格式輸出非空的最終說明，"
-                                "或呼叫本輪允許的工具；不要只輸出思考內容。"
-                                "若無須修改，說明判斷依據；若資訊不足，具體列出需要教師補充的資訊。"
-                                "只能根據已取得的資料與工具結果回答，不得把未完成檢查說成通過。"
-                            ),
-                        },
-                    ],
-                }
-                logger.warning("Teacher Judge empty response; requesting one corrected reply")
-
-        elapsed = max(perf_counter() - started, 0.0)
-        raw_usage = data.get("usage")
-        usage_reported = isinstance(raw_usage, dict)
-        usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
-        prompt_tokens = int(usage.get("prompt_tokens") or 0) + int(
-            failed_usage.get("prompt_tokens") or 0
-        )
-        completion_tokens = int(usage.get("completion_tokens") or 0) + int(
-            failed_usage.get("completion_tokens") or 0
-        )
-        total_tokens = sum(
-            int(part.get("total_tokens") or (
-                int(part.get("prompt_tokens") or 0) + int(part.get("completion_tokens") or 0)
-            ))
-            for part in (failed_usage, usage)
-        )
-        tps = (completion_tokens / elapsed) if elapsed > 0 else 0.0
-
-        logger.info(
-            f"vLLM call successful: {total_tokens} tokens in {elapsed:.2f}s ({tps:.1f} t/s)"
-        )
-
-        choice = data["choices"][0]
-        if choice.get("finish_reason") == "length":
-            raise ValueError("Model output was truncated before completion")
-        message = choice.get("message") or {}
-        if not isinstance(message, dict):
-            raise ValueError("Model response message was not an object")
-        content = message.get("content")
-        if content is not None and not isinstance(content, str):
-            content = str(content)
-        message = {
-            **message,
-            "content": strip_think_tags(content) if isinstance(content, str) else None,
-        }
-        metrics = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": total_tokens,
-            "elapsed_seconds": round(elapsed, 3),
-            "tokens_per_second": round(tps, 2),
-            "usage_reported": usage_reported,
-            "response_model": str(data.get("model") or "")[:255] or None,
-        }
-        return message, cast("VLLMMetrics", metrics)
-    except httpx.TimeoutException as exc:
-        logger.error(f"vLLM API timeout after {timeout}s")
-        raise HTTPException(status_code=504, detail=t("service.vllm_timeout")) from exc
-    except httpx.HTTPStatusError as exc:
-        status = exc.response.status_code
-        logger.error(f"vLLM API returned status {status}")
-        raise HTTPException(
-            status_code=502, detail=t("service.vllm_error_status", status=status)
-        ) from exc
-    except Exception as exc:
-        logger.error(f"vLLM API call failed: {exc}", exc_info=True)
-        raise HTTPException(
-            status_code=502, detail=t("service.vllm_call_failed", exc=exc)
-        ) from exc
-
-
-async def _call_vllm(
-    payload: dict[str, Any], timeout: float = 120.0
-) -> tuple[str, VLLMMetrics]:
-    """Call vLLM chat/completions and return text for non-agent callers."""
-    message, metrics = await _call_vllm_message(payload, timeout=timeout)
-    message = _assistant_message(message)
-    content = message.get("content") or ""
-    return str(content), metrics
-
-
-def _assistant_message(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        message = dict(value)
-        message.setdefault("role", "assistant")
-        return message
-    return {"role": "assistant", "content": str(value or "")}
-
-
-def _tool_arguments(value: Any) -> dict[str, Any] | None:
-    if isinstance(value, dict):
-        return value
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = json.loads(value or "{}")
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
-_PROPOSAL_STATUS_VALUES = {"ready", "needs_information", "unsupported", "none"}
-
-_REPLY_PAYLOAD_KEYS_RE = re.compile(
-    r'"(?:reply|proposal_status|conversation_focus)"\s*:'
-)
-
-
-def _contains_embedded_tool_call(content: str) -> bool:
-    """辨識可執行協定外洩；只能拒絕，不能從 prose 恢復執行。"""
-
-    text = content or ""
-    if "<|tool_call|>" in text or "<tool_call>" in text:
-        return True
-    for match in _JSON_FENCE_RE.finditer(text):
-        try:
-            value = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(value, dict):  # pragma: no cover - fence 只擷取 {…}，必為 dict
-            continue
-        name = value.get("name")
-        if isinstance(value.get("tool_call"), dict):
-            name = value["tool_call"].get("name")
-        if name in {
-            _LIST_CHECKLIST_TOOL_NAME,
-            _GET_CHECKLIST_ITEM_TOOL_NAME,
-            _CREATE_CHECKLIST_ITEM_TOOL_NAME,
-            _EDIT_CHECKLIST_ITEM_TOOL_NAME,
-        }:
-            return True
-    return False
-
-
-def _is_reply_payload_object(value: Any) -> bool:
-    """Recognize the structured chat reply payload across model variants."""
-    if not isinstance(value, dict):
-        return False
-    reply = value.get("reply")
-    if isinstance(reply, str) and reply.strip():
-        return True
-    if value.get("proposal_status") in _PROPOSAL_STATUS_VALUES:
-        return True
-    return isinstance(value.get("conversation_focus"), dict)
-
-
-def _reply_payload_object(content: str) -> tuple[str, dict[str, Any] | None]:
-    """Extract the structured reply payload from raw, fenced or mixed text.
-
-    The prompt asks the model to answer with one plain JSON object (reply /
-    proposal_status / conversation_focus), but Qwen-family models sometimes
-    wrap it in a ```json fence or emit it next to leftover prose instead of
-    plain JSON. Return the text with every recognized payload blob removed
-    plus the first parsed payload, so internal fields never reach the reply.
-    """
-    text = (content or "").strip()
-    if not text:
-        return "", None
-    try:
-        parsed = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        parsed = None
-    if _is_reply_payload_object(parsed):
-        return "", parsed
-    payload: dict[str, Any] | None = None
-    leftover = text
-    for match in _JSON_FENCE_RE.finditer(text):
-        try:
-            parsed = json.loads(match.group(1))
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if _is_reply_payload_object(parsed):
-            if payload is None:
-                payload = parsed
-            leftover = leftover.replace(match.group(0), "")
-    if payload is not None:
-        return leftover.strip(), payload
-    decoder = json.JSONDecoder()
-    index = 0
-    while index < len(text):
-        brace = text.find("{", index)
-        if brace < 0:
-            break
-        try:
-            parsed, end = decoder.raw_decode(text, brace)
-        except ValueError:
-            index = brace + 1
-            continue
-        if _is_reply_payload_object(parsed):
-            # raw_decode returns an absolute end index, not a length.
-            leftover = (text[:brace] + text[end:]).strip()
-            return leftover, parsed
-        index = end
-    # Unparseable fence bodies still carrying internal payload keys are
-    # contract noise, not teacher-facing prose; drop them as a safety net.
-    for match in _JSON_FENCE_RE.finditer(text):
-        if _REPLY_PAYLOAD_KEYS_RE.search(match.group(1)):
-            leftover = leftover.replace(match.group(0), "")
-    return leftover.strip(), None
-
-
-def _parse_chat_reply_payload(content: str) -> tuple[str, str | None]:
-    """Extract the teacher-facing reply and normalized proposal_status."""
-    text = (content or "").strip()
-    leftover, payload = _reply_payload_object(text)
-    if payload is None:
-        return leftover, None
-    raw_status = payload.get("proposal_status")
-    status = (
-        raw_status.strip().lower()
-        if isinstance(raw_status, str)
-        and raw_status.strip().lower() in _PROPOSAL_STATUS_VALUES
-        else None
-    )
-    # Once a payload is recognized never fall back to the raw JSON text: that
-    # would leak proposal_status / conversation_focus to the teacher. The
-    # caller substitutes a neutral sentence when the reply ends up empty.
-    reply = str(payload.get("reply") or "").strip() or leftover
-    return reply, status
-
-
 def _canonicalize_proposal_machine_fields(
     raw_item: dict[str, Any],
     machine_entries: list[dict[str, Any]] | None,
@@ -2079,7 +1100,7 @@ def _dispatch_checklist_tool(
         **{entry["item"].id: entry["item"].model_dump(mode="json") for entry in staged_ops},
     }
 
-    if name == _LIST_CHECKLIST_TOOL_NAME:
+    if name == LIST_CHECKLIST_TOOL_NAME:
         if arguments:
             return {"error": "不支援的工具或參數"}
         listing = [
@@ -2095,7 +1116,7 @@ def _dispatch_checklist_tool(
         tool_calls.append({"tool": name, "status": "read", "item_count": len(listing)})
         return {"analysis_revision": analysis_revision, "items": listing}
 
-    if name == _GET_CHECKLIST_ITEM_TOOL_NAME:
+    if name == GET_CHECKLIST_ITEM_TOOL_NAME:
         if set(arguments) - {"id"}:
             return {"error": "不支援的工具或參數"}
         item_id = str(arguments.get("id") or "").strip()
@@ -2127,8 +1148,8 @@ def _dispatch_checklist_tool(
             "execution_readiness": {"ready": not blockers, "blockers": blockers},
         }
 
-    if name == _CREATE_CHECKLIST_ITEM_TOOL_NAME:
-        if set(arguments) - set(_PROPOSAL_FILL_PROPERTIES):
+    if name == CREATE_CHECKLIST_ITEM_TOOL_NAME:
+        if set(arguments) - set(PROPOSAL_FILL_PROPERTIES):
             return {"error": "不支援的工具或參數"}
         title = str(arguments.get("title") or "").strip()
         if not title:
@@ -2172,7 +1193,7 @@ def _dispatch_checklist_tool(
             issues = typed_step_issues(raw_item["check_steps"], item_id=item_id)
             if issues:
                 return _contract_tool_error(issues, item_id=item_id)
-        candidate_list = _normalize_rubric_items(
+        candidate_list = normalize_rubric_items(
             [raw_item],
             template_key=template_key,
             template_commands=template_commands,
@@ -2233,8 +1254,8 @@ def _dispatch_checklist_tool(
             "note": "新增提案候選已建立；老師確認套用後才會寫入檢查表。",
         }
 
-    if name == _EDIT_CHECKLIST_ITEM_TOOL_NAME:
-        if set(arguments) - {"id", *_PROPOSAL_FILL_PROPERTIES}:
+    if name == EDIT_CHECKLIST_ITEM_TOOL_NAME:
+        if set(arguments) - {"id", *PROPOSAL_FILL_PROPERTIES}:
             return {"error": "不支援的工具或參數"}
         item_id = str(arguments.get("id") or "").strip()
         if not item_id:
@@ -2290,7 +1311,7 @@ def _dispatch_checklist_tool(
                     "repair_hint": "保留此項目既有的絕對路徑與全部步驟。若未改變檢查內容，可省略修改；不要新增 cwd。",
                     "current_check_steps": current_raw.get("check_steps"),
                 }
-        candidate_list = _normalize_rubric_items(
+        candidate_list = normalize_rubric_items(
             [raw_candidate],
             template_key=template_key,
             template_commands=template_commands,
@@ -2304,7 +1325,7 @@ def _dispatch_checklist_tool(
         )
         if contract_error:
             return contract_error
-        current_normalized = _normalize_rubric_items(
+        current_normalized = normalize_rubric_items(
             [current_raw_by_id[item_id]] if item_id in current_raw_by_id else [],
             template_key=template_key,
             template_commands=template_commands,
@@ -2400,7 +1421,7 @@ async def _run_proposal_tool_loop(
     require_rubric: bool = False,
     ready_only: bool = True,
     finalizer: bool = False,
-    completion_token_budget: int = _MAX_CHAT_COMPLETION_TOKENS,
+    completion_token_budget: int = MAX_CHAT_COMPLETION_TOKENS,
 ) -> tuple[
     str,
     VLLMMetrics,
@@ -2415,7 +1436,7 @@ async def _run_proposal_tool_loop(
     the staged entries, and ``tool_outcomes`` records every tool invocation
     for teacher-facing status display.
     """
-    snapshot_items = _rubric_context_data(rubric_context).get("items")
+    snapshot_items = rubric_context_data(rubric_context).get("items")
     read_ids: set[str] = set()
     staged_ops: list[dict[str, Any]] = []
     rejected_ops: list[tuple[TeacherJudgeRubricItem, dict[str, Any], str]] = []
@@ -2428,12 +1449,12 @@ async def _run_proposal_tool_loop(
     base_request = dict(payload_data)
     base_request.pop("messages", None)
     if rubric_available:
-        base_request["tools"] = _build_proposal_tools(
+        base_request["tools"] = build_proposal_tools(
             machine_entries,
             chat=chat_mode,
         )
         base_request["tool_choice"] = (
-            {"type": "function", "function": {"name": _LIST_CHECKLIST_TOOL_NAME}}
+            {"type": "function", "function": {"name": LIST_CHECKLIST_TOOL_NAME}}
             if require_rubric
             else "auto"
         )
@@ -2453,7 +1474,7 @@ async def _run_proposal_tool_loop(
         "response_model": None,
     }
 
-    max_rounds = max(int(settings.VLLM_CHAT_MAX_TOOL_ROUNDS), 1)
+    max_rounds = max(int(chat_transport.settings.VLLM_CHAT_MAX_TOOL_ROUNDS), 1)
     completion_token_budget = max(int(completion_token_budget), 0)
     main_completion_budget = max(
         completion_token_budget - ADHERENCE_MAX_TOKENS * 2,
@@ -2487,20 +1508,20 @@ async def _run_proposal_tool_loop(
         if forced_tool_choice is not None:
             round_payload["tool_choice"] = forced_tool_choice
             forced_tool_choice = None
-        request = apply_thinking_control(round_payload, settings.VLLM_ENABLE_THINKING)
-        raw_message, round_metrics = await _call_vllm_message(
-            request, timeout=float(settings.VLLM_TIMEOUT)
+        request = apply_thinking_control(round_payload, chat_transport.settings.VLLM_ENABLE_THINKING)
+        raw_message, round_metrics = await chat_transport.call_vllm_message(
+            request, timeout=float(chat_transport.settings.VLLM_TIMEOUT)
         )
-        round_metrics = _charge_missing_completion_usage(
+        round_metrics = charge_missing_completion_usage(
             round_metrics, int(round_payload["max_tokens"])
         )
-        metrics = _merge_vllm_metrics(metrics, round_metrics)
-        assistant = _assistant_message(raw_message)
+        metrics = merge_vllm_metrics(metrics, round_metrics)
+        assistant = assistant_message(raw_message)
         cleaned_content = str(assistant.get("content") or "")
         assistant = {**assistant, "content": cleaned_content or None}
         tool_calls = assistant.get("tool_calls")
         if not tool_calls:
-            if _contains_embedded_tool_call(cleaned_content):
+            if contains_embedded_tool_call(cleaned_content):
                 logger.warning(
                     "Teacher Judge ignored a content-encoded tool call; native "
                     "tool_calls is required"
@@ -2530,16 +1551,16 @@ async def _run_proposal_tool_loop(
                 forced_tool_choice = {
                     "type": "function",
                     "function": {"name": (
-                        _GET_CHECKLIST_ITEM_TOOL_NAME
+                        GET_CHECKLIST_ITEM_TOOL_NAME
                         if pending_errors[retry].get("reason_code") == "checklist_item_not_read"
                         else pending_errors[retry]["tool"]
                     )},
                 }
                 continue
-            _, proposal_status = _parse_chat_reply_payload(final_content)
+            _, proposal_status = parse_chat_reply_payload(final_content)
             claims_ready = (
                 proposal_status == "ready"
-                or _structured_requirement_needs_candidate(final_content)
+                or structured_requirement_needs_candidate(final_content)
             )
             if finalizer:
                 blockers = _finalizer_completion_blockers(
@@ -2590,9 +1611,9 @@ async def _run_proposal_tool_loop(
                         forced_tool_choice = {
                             "type": "function",
                             "function": {"name": (
-                                _GET_CHECKLIST_ITEM_TOOL_NAME
+                                GET_CHECKLIST_ITEM_TOOL_NAME
                                 if any(issue["item_id"] not in read_ids for issue in repairable)
-                                else _EDIT_CHECKLIST_ITEM_TOOL_NAME
+                                else EDIT_CHECKLIST_ITEM_TOOL_NAME
                             )},
                         }
                         continue
@@ -2615,14 +1636,14 @@ async def _run_proposal_tool_loop(
                 # Second reminder: stop re-prompting prose and force the model
                 # through the proposal tool channel so the loop converges even
                 # for models that keep claiming Ready without calling tools.
-                target_item_id = _structured_requirement_target_item(final_content)
+                target_item_id = structured_requirement_target_item(final_content)
                 forced_tool_choice = {
                     "type": "function",
                     "function": {
                         "name": (
-                            _GET_CHECKLIST_ITEM_TOOL_NAME
+                            GET_CHECKLIST_ITEM_TOOL_NAME
                             if target_item_id
-                            else _CREATE_CHECKLIST_ITEM_TOOL_NAME
+                            else CREATE_CHECKLIST_ITEM_TOOL_NAME
                         )
                     },
                 }
@@ -2650,11 +1671,11 @@ async def _run_proposal_tool_loop(
             function = tool_call.get("function")
             function = function if isinstance(function, dict) else {}
             tool_name = str(function.get("name") or "")
-            parsed_arguments = _tool_arguments(function.get("arguments"))
+            parsed_arguments = tool_arguments(function.get("arguments"))
             arguments = parsed_arguments or {}
             attempt_key = f"{tool_name}:{arguments.get('id') or _normalized_title_key(arguments.get('title'))}"
             chat_block = None
-            if chat_mode and tool_name not in _PROPOSAL_TOOL_NAMES:
+            if chat_mode and tool_name not in PROPOSAL_TOOL_NAMES:
                 unknown_tool_calls += 1
                 logger.warning(
                     "Teacher Judge ignored unknown tool call: %s",
@@ -2675,10 +1696,10 @@ async def _run_proposal_tool_loop(
                     "retryable": False,
                 }
             elif chat_mode and staged_ops and (
-                tool_name == _LIST_CHECKLIST_TOOL_NAME
+                tool_name == LIST_CHECKLIST_TOOL_NAME
                 or (
                     tool_name
-                    in {_GET_CHECKLIST_ITEM_TOOL_NAME, _EDIT_CHECKLIST_ITEM_TOOL_NAME}
+                    in {GET_CHECKLIST_ITEM_TOOL_NAME, EDIT_CHECKLIST_ITEM_TOOL_NAME}
                     and str(arguments.get("id") or "")
                     in {str(entry["item"].id) for entry in staged_ops}
                 )
@@ -2803,15 +1824,15 @@ async def _run_proposal_tool_loop(
                     result["error"],
                 )
             else:
-                if tool_name == _LIST_CHECKLIST_TOOL_NAME:
+                if tool_name == LIST_CHECKLIST_TOOL_NAME:
                     # The initial index read is a prerequisite, not a permanent
                     # restriction on every subsequent model decision.
                     base_request["tool_choice"] = "auto"
                 write_accepted = bool(result.get("staged") or result.get("unchanged"))
                 for key, error in list(pending_errors.items()):
-                    read_repaired = tool_name in {_LIST_CHECKLIST_TOOL_NAME, _GET_CHECKLIST_ITEM_TOOL_NAME} and error.get("tool") == tool_name
+                    read_repaired = tool_name in {LIST_CHECKLIST_TOOL_NAME, GET_CHECKLIST_ITEM_TOOL_NAME} and error.get("tool") == tool_name
                     precondition_repaired = (
-                        tool_name == _GET_CHECKLIST_ITEM_TOOL_NAME
+                        tool_name == GET_CHECKLIST_ITEM_TOOL_NAME
                         and error.get("reason_code") == "checklist_item_not_read"
                         and error.get("item_id") == arguments.get("id")
                     )
@@ -2901,21 +1922,21 @@ async def _run_proposal_tool_loop(
         if remaining_tokens > 0 and not pending_errors:
             reply_payload["max_tokens"] = min(per_call_max_tokens, remaining_tokens)
             request = apply_thinking_control(
-                reply_payload, settings.VLLM_ENABLE_THINKING
+                reply_payload, chat_transport.settings.VLLM_ENABLE_THINKING
             )
-            raw_message, round_metrics = await _call_vllm_message(
-                request, timeout=float(settings.VLLM_TIMEOUT)
+            raw_message, round_metrics = await chat_transport.call_vllm_message(
+                request, timeout=float(chat_transport.settings.VLLM_TIMEOUT)
             )
-            round_metrics = _charge_missing_completion_usage(
+            round_metrics = charge_missing_completion_usage(
                 round_metrics, int(reply_payload["max_tokens"])
             )
-            metrics = _merge_vllm_metrics(metrics, round_metrics)
-            final_content = str(_assistant_message(raw_message).get("content") or "")
+            metrics = merge_vllm_metrics(metrics, round_metrics)
+            final_content = str(assistant_message(raw_message).get("content") or "")
     elif (
         reply_format
         and final_content.strip()
         and not pending_errors
-        and _reply_payload_object(final_content)[1] is None
+        and reply_payload_object(final_content)[1] is None
     ):
         # Chat final reply came back as prose: one no-tool JSON-mode round
         # restates it so proposal_status / focus are not lost.
@@ -2936,16 +1957,16 @@ async def _run_proposal_tool_loop(
             repair_payload.pop("tools", None)
             repair_payload.pop("tool_choice", None)
             logger.warning("Teacher Judge chat final reply was not JSON; restating it")
-            raw_message, round_metrics = await _call_vllm_message(
-                apply_thinking_control(repair_payload, settings.VLLM_ENABLE_THINKING),
-                timeout=float(settings.VLLM_TIMEOUT),
+            raw_message, round_metrics = await chat_transport.call_vllm_message(
+                apply_thinking_control(repair_payload, chat_transport.settings.VLLM_ENABLE_THINKING),
+                timeout=float(chat_transport.settings.VLLM_TIMEOUT),
             )
-            round_metrics = _charge_missing_completion_usage(
+            round_metrics = charge_missing_completion_usage(
                 round_metrics, int(repair_payload["max_tokens"])
             )
-            metrics = _merge_vllm_metrics(metrics, round_metrics)
-            repaired = str(_assistant_message(raw_message).get("content") or "")
-            if _reply_payload_object(repaired)[1] is not None:
+            metrics = merge_vllm_metrics(metrics, round_metrics)
+            repaired = str(assistant_message(raw_message).get("content") or "")
+            if reply_payload_object(repaired)[1] is not None:
                 final_content = repaired
 
     if pending_errors:
@@ -2966,7 +1987,7 @@ async def summarize_conversation(
     previous_summary: str = "",
 ) -> tuple[str, VLLMMetrics]:
     """Generate a compact memory summary without rubric-edit semantics."""
-    if not settings.VLLM_MODEL_NAME:
+    if not chat_transport.settings.VLLM_MODEL_NAME:
         raise HTTPException(status_code=503, detail=t("service.model_not_configured"))
 
     formatted: list[dict[str, str]] = [
@@ -2998,18 +2019,18 @@ async def summarize_conversation(
 
     payload = apply_thinking_control(
         {
-            "model": settings.VLLM_MODEL_NAME,
+            "model": chat_transport.settings.VLLM_MODEL_NAME,
             "messages": formatted,
             # A memory note does not need the full 4096-token chat budget.
-            "max_tokens": min(settings.VLLM_CHAT_MAX_TOKENS, 768),
+            "max_tokens": min(chat_transport.settings.VLLM_CHAT_MAX_TOKENS, 768),
             "temperature": 0.2,
-            "top_p": settings.VLLM_TOP_P,
-            "top_k": settings.VLLM_TOP_K,
-            "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
+            "top_p": chat_transport.settings.VLLM_TOP_P,
+            "top_k": chat_transport.settings.VLLM_TOP_K,
+            "repetition_penalty": chat_transport.settings.VLLM_REPETITION_PENALTY,
         },
-        settings.VLLM_ENABLE_THINKING,
+        chat_transport.settings.VLLM_ENABLE_THINKING,
     )
-    content, metrics = await _call_vllm(payload, timeout=float(settings.VLLM_TIMEOUT))
+    content, metrics = await chat_transport.call_vllm(payload, timeout=float(chat_transport.settings.VLLM_TIMEOUT))
     return content.strip(), metrics
 
 
@@ -3063,7 +2084,7 @@ async def chat_with_rubric(
     attachment_context: str | None = None,
     analysis_revision: int | None = None,
     rubric_available: bool = False,
-    completion_token_budget: int = _MAX_CHAT_COMPLETION_TOKENS,
+    completion_token_budget: int = MAX_CHAT_COMPLETION_TOKENS,
 ) -> TeacherJudgeChatResult:
     """
     Multi-turn chat with a request-scoped rubric exposed through tools.
@@ -3073,7 +2094,7 @@ async def chat_with_rubric(
     - updated_items: staged Ready operations from proposal tool calls, or None
       when no applicable change remains. Proposals never come from reply text.
     """
-    if not settings.VLLM_MODEL_NAME:
+    if not chat_transport.settings.VLLM_MODEL_NAME:
         raise HTTPException(status_code=503, detail=t("service.model_not_configured"))
 
     has_attachments = bool(
@@ -3158,13 +2179,13 @@ async def chat_with_rubric(
         )
 
     payload_data: dict[str, Any] = {
-        "model": settings.VLLM_MODEL_NAME,
+        "model": chat_transport.settings.VLLM_MODEL_NAME,
         "messages": formatted,
-        "max_tokens": settings.VLLM_CHAT_MAX_TOKENS,
-        "temperature": settings.VLLM_CHAT_TEMPERATURE,
-        "top_p": settings.VLLM_TOP_P,
-        "top_k": settings.VLLM_TOP_K,
-        "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
+        "max_tokens": chat_transport.settings.VLLM_CHAT_MAX_TOKENS,
+        "temperature": chat_transport.settings.VLLM_CHAT_TEMPERATURE,
+        "top_p": chat_transport.settings.VLLM_TOP_P,
+        "top_k": chat_transport.settings.VLLM_TOP_K,
+        "repetition_penalty": chat_transport.settings.VLLM_REPETITION_PENALTY,
         "response_format": {"type": "json_object"},
     }
     (
@@ -3218,12 +2239,12 @@ async def chat_with_rubric(
                 turn_context=turn_context,
                 phase="act",
             )
-            metrics = _merge_vllm_metrics(metrics, _adherence_metrics(action_result))
+            metrics = merge_vllm_metrics(metrics, _adherence_metrics(action_result))
             if not action_result.allowed:
                 staged_ops = []
                 action_adherence_blocked = True
 
-    reply_text, proposal_status = _parse_chat_reply_payload(content)
+    reply_text, proposal_status = parse_chat_reply_payload(content)
 
     # Proposals come exclusively from server-validated tool calls; any legacy
     # updated_items payload inside the final reply is intentionally ignored.
@@ -3323,11 +2344,11 @@ async def chat_with_rubric(
                 turn_context=turn_context,
                 phase="respond",
             )
-            metrics = _merge_vllm_metrics(metrics, _adherence_metrics(reply_result))
+            metrics = merge_vllm_metrics(metrics, _adherence_metrics(reply_result))
             if not reply_result.allowed:
                 reply_text = TEACHER_ADHERENCE_FALLBACK
 
-    conversation_focus = _conversation_focus_from_content(
+    conversation_focus = conversation_focus_from_content(
         content, proposal=updated_items,
     )
     model_focus = conversation_focus
@@ -3354,7 +2375,7 @@ async def chat_with_rubric(
                     "missing_information": item.missing_information,
                     "target_item_id": item.id if any(
                         str(raw.get("id")) == item.id
-                        for raw in (_rubric_context_data(rubric_context).get("items") or [])
+                        for raw in (rubric_context_data(rubric_context).get("items") or [])
                         if isinstance(raw, dict)
                     ) else None,
                 }
@@ -3394,7 +2415,7 @@ async def chat_with_rubric(
                     if any(
                         raw.get("id") == error.get("item_id")
                         for raw in (
-                            _rubric_context_data(rubric_context).get("items") or []
+                            rubric_context_data(rubric_context).get("items") or []
                         )
                         if isinstance(raw, dict)
                     )
@@ -3430,7 +2451,7 @@ async def chat_with_rubric(
                 str(error.get("title") or "")
                 for error in unresolved_errors.values()
                 if error.get("tool")
-                in (_CREATE_CHECKLIST_ITEM_TOOL_NAME, _EDIT_CHECKLIST_ITEM_TOOL_NAME)
+                in (CREATE_CHECKLIST_ITEM_TOOL_NAME, EDIT_CHECKLIST_ITEM_TOOL_NAME)
             ],
         )
 
@@ -3445,6 +2466,8 @@ async def chat_with_rubric(
 
 
 _ITEMWISE_MAX_ITEMS = 50
+
+
 _ITEMWISE_CONCURRENCY = 2
 
 
@@ -3502,11 +2525,11 @@ async def extract_attachment_requirements(
     teacher_message: str = "",
 ) -> tuple[list[dict[str, Any]], str | None, VLLMMetrics]:
     """Phase A: split attachment text into source items only; no judgements."""
-    if not settings.VLLM_MODEL_NAME:
+    if not chat_transport.settings.VLLM_MODEL_NAME:
         raise HTTPException(status_code=503, detail=t("service.model_not_configured"))
     payload = apply_thinking_control(
         {
-            "model": settings.VLLM_MODEL_NAME,
+            "model": chat_transport.settings.VLLM_MODEL_NAME,
             "messages": [
                 {"role": "system", "content": ATTACHMENT_EXTRACTION_SYSTEM_TEMPLATE},
                 {
@@ -3519,17 +2542,17 @@ async def extract_attachment_requirements(
                     ),
                 },
             ],
-            "max_tokens": min(settings.VLLM_MAX_TOKENS, 8192),
+            "max_tokens": min(chat_transport.settings.VLLM_MAX_TOKENS, 8192),
             "temperature": 0.0,
-            "top_p": settings.VLLM_TOP_P,
-            "top_k": settings.VLLM_TOP_K,
-            "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
+            "top_p": chat_transport.settings.VLLM_TOP_P,
+            "top_k": chat_transport.settings.VLLM_TOP_K,
+            "repetition_penalty": chat_transport.settings.VLLM_REPETITION_PENALTY,
             "response_format": {"type": "json_object"},
         },
-        settings.VLLM_ENABLE_THINKING,
+        chat_transport.settings.VLLM_ENABLE_THINKING,
     )
-    content, metrics = await _call_vllm(payload, timeout=float(settings.VLLM_TIMEOUT))
-    metrics = _charge_missing_completion_usage(metrics, int(payload["max_tokens"]))
+    content, metrics = await chat_transport.call_vllm(payload, timeout=float(chat_transport.settings.VLLM_TIMEOUT))
+    metrics = charge_missing_completion_usage(metrics, int(payload["max_tokens"]))
     sources, error = _parse_attachment_extraction(content)
     return sources, error, metrics
 
@@ -3546,7 +2569,7 @@ async def analyze_requirement_item(
     machine_entries: list[dict[str, Any]] | None = None,
     analysis_revision: int | None = None,
     rubric_available: bool = False,
-    completion_token_budget: int = _MAX_CHAT_COMPLETION_TOKENS,
+    completion_token_budget: int = MAX_CHAT_COMPLETION_TOKENS,
 ) -> TeacherJudgeChatResult:
     """Phase B core: reuse the single-requirement chat check for one source item."""
     parts = [
@@ -3715,7 +2738,7 @@ async def analyze_attachments_itemwise(
     rubric_available: bool = False,
 ) -> TeacherJudgeItemwiseResult:
     """Two-phase attachment analysis: extract items first, then judge each in isolation."""
-    if not settings.VLLM_MODEL_NAME:
+    if not chat_transport.settings.VLLM_MODEL_NAME:
         raise HTTPException(status_code=503, detail=t("service.model_not_configured"))
 
     sources, extraction_error, metrics = await extract_attachment_requirements(
@@ -3747,7 +2770,7 @@ async def analyze_attachments_itemwise(
     )
     per_item_token_budget = max(
         1024,
-        min(_MAX_CHAT_COMPLETION_TOKENS, remaining_batch_tokens // len(sources)),
+        min(MAX_CHAT_COMPLETION_TOKENS, remaining_batch_tokens // len(sources)),
     )
     semaphore = asyncio.Semaphore(_ITEMWISE_CONCURRENCY)
 
@@ -3785,12 +2808,12 @@ async def analyze_attachments_itemwise(
     )
     for _, item_metrics in pairs:
         if item_metrics:
-            metrics = _merge_vllm_metrics(metrics, item_metrics)
+            metrics = merge_vllm_metrics(metrics, item_metrics)
 
     # Independent row analysis cannot coordinate execution check ids. New items
     # receive server-owned ids before any proposal is shown; saved item ids stay
     # intact. Conflicting edits of the same saved item must not overwrite a row.
-    snapshot = _rubric_context_data(rubric_context)
+    snapshot = rubric_context_data(rubric_context)
     saved_items = snapshot.get("items")
     saved_items = saved_items if isinstance(saved_items, list) else []
     saved_by_id = {str(row.get("id") or ""): row for row in saved_items if isinstance(row, dict)}

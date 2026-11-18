@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
+from app.ai.teacher_judge import chat_transport
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.models.teacher_judge_file import TeacherJudgeFile
 from app.models.teacher_judge_session import TeacherJudgeSession
@@ -19,7 +20,7 @@ from app.models.teaching_class import TeachingClassWeek
 
 def patch_teacher_judge_vllm_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        teacher_judge_service,
+        chat_transport,
         "settings",
         SimpleNamespace(
             VLLM_MODEL_NAME="test-model",

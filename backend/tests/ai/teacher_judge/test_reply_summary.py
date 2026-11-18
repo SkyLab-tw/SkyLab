@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import service
+from app.ai.teacher_judge import chat_transport, service
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
 from tests.ai.teacher_judge.helpers import (
     patch_teacher_judge_vllm_settings,
@@ -233,7 +233,7 @@ def _create_args(index: int, title: str) -> dict[str, Any]:
 async def _chat(monkeypatch: pytest.MonkeyPatch, responses: list[Any]) -> Any:
     patch_teacher_judge_vllm_settings(monkeypatch)
     _calls, fake = scripted_vllm(responses)
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     return await service.chat_with_rubric(
         messages=[SimpleNamespace(role="user", content="多項檢查")],
         rubric_context=json.dumps({"items": []}),

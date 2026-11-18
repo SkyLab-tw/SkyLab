@@ -485,11 +485,12 @@ def _public_proposal(proposal: list[dict[str, Any]] | None) -> list[dict[str, An
 
 
 async def run_round(case: Case, round_no: int, service: Any) -> dict[str, Any]:
+    from app.ai.teacher_judge import chat_transport
     from app.ai.teacher_judge.machine_context import format_machine_context
     from app.ai.teacher_judge.schemas import TeacherJudgeRubricChatMessage
 
     capture = _LogCapture()
-    original_call = service._call_vllm_message
+    original_call = chat_transport.call_vllm_message
     model_requests = 0
 
     async def counted_call(*args: Any, **kwargs: Any) -> Any:
@@ -497,7 +498,7 @@ async def run_round(case: Case, round_no: int, service: Any) -> dict[str, Any]:
         model_requests += 1
         return await original_call(*args, **kwargs)
 
-    service._call_vllm_message = counted_call
+    chat_transport.call_vllm_message = counted_call
     teacher_logger = logging.getLogger("app.ai")
     previous_level = teacher_logger.level
     teacher_logger.setLevel(logging.INFO)
@@ -577,7 +578,7 @@ async def run_round(case: Case, round_no: int, service: Any) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - 實打要記錄任何失敗，不中斷其他 case
         record["error"] = f"{type(exc).__name__}: {exc}"[:500]
     finally:
-        service._call_vllm_message = original_call
+        chat_transport.call_vllm_message = original_call
         teacher_logger.removeHandler(capture)
         teacher_logger.setLevel(previous_level)
     record["model_requests"] = model_requests

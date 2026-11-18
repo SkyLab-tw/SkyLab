@@ -11,6 +11,7 @@ from sqlmodel import Session
 
 from app.ai.teacher_judge import (
     attachment_service,
+    chat_transport,
     file_service,
     script_artifact_service,
     script_run_service,
@@ -204,7 +205,7 @@ async def test_teacher_instruction_reaches_attachment_extraction_and_each_row(mo
         return service.TeacherJudgeChatResult(reply="需要路徑", proposal=None, metrics={}, proposal_status="needs_information")
 
     patch_teacher_judge_vllm_settings(monkeypatch)
-    monkeypatch.setattr(service, "_call_vllm_message", extract)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", extract)
     monkeypatch.setattr(service, "analyze_requirement_item", analyze)
     result = await service.analyze_attachments_itemwise(
         teacher_message=instruction, rubric_context="{}", attachment_context="Old document",

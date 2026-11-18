@@ -86,10 +86,10 @@ from app.ai.teacher_judge.prompt import (  # noqa: E402
     SESSION_REQUIREMENT_PROPOSAL_INSTRUCTION,
     SITUATION_NORMAL,
 )
+from app.ai.teacher_judge.proposal_tools import build_proposal_tools  # noqa: E402
 from app.ai.teacher_judge.service import (  # noqa: E402
     TEACHER_ACTION_CONTRACT,
     TEACHER_FREE_TEXT_CONTRACT,
-    _build_proposal_tools,
 )
 from app.ai.template_recommendation.chat_service import (  # noqa: E402
     build_chat_adherence_facts,
@@ -437,7 +437,7 @@ def _payload_for_case(
             # Match the production proposal loop: native tools and JSON response
             # formatting are not enabled on the same model turn.
             payload.pop("response_format", None)
-            payload["tools"] = _build_proposal_tools(
+            payload["tools"] = build_proposal_tools(
                 [{"node_key": "node-linux-a", "display_label": "P1"}]
             )
             payload["tool_choice"] = "auto"

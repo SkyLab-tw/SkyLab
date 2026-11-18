@@ -11,7 +11,12 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import machine_context, session_service, target_ip_resolver
+from app.ai.teacher_judge import (
+    machine_context,
+    rubric_normalization,
+    session_service,
+    target_ip_resolver,
+)
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.script_policy import PEER_IP_TOKEN
 from app.models.teacher_judge_file import TeacherJudgeFileStatus
@@ -58,11 +63,11 @@ def test_raw_items_by_id_matches_normalizer_fallback_ids() -> None:
         "junk",
         {"detectable": "manual"},
     ]
-    by_id = teacher_judge_service._raw_items_by_id(raw)
+    by_id = rubric_normalization.raw_items_by_id(raw)
     assert set(by_id) == {"a", "item-3"}
-    assert teacher_judge_service._raw_detectable(by_id["a"]) == "auto"
-    assert teacher_judge_service._raw_detectable(by_id.get("missing")) == ""
-    assert teacher_judge_service._raw_items_by_id("not-a-list") == {}
+    assert rubric_normalization.raw_item_detectable(by_id["a"]) == "auto"
+    assert rubric_normalization.raw_item_detectable(by_id.get("missing")) == ""
+    assert rubric_normalization.raw_items_by_id("not-a-list") == {}
 
 
 @pytest.mark.parametrize(

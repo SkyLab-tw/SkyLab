@@ -199,16 +199,20 @@ def test_attach_rounds_skip_chat_request_limit(runner) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_round_counts_model_requests_and_budget_log(runner) -> None:
+async def test_run_round_counts_model_requests_and_budget_log(runner, monkeypatch) -> None:
     import logging
     from types import SimpleNamespace
+
+    from app.ai.teacher_judge import chat_transport
 
     async def model_call(*_args, **_kwargs):
         return {}, {}
 
+    monkeypatch.setattr(chat_transport, "call_vllm_message", model_call)
+
     async def chat_with_rubric(*_args, **_kwargs):
         for _ in range(4):
-            await service._call_vllm_message({})
+            await chat_transport.call_vllm_message({})
         logging.getLogger("app.ai.teacher_judge.service").warning(
             "Teacher Judge tool round budget (6) exhausted with staged=0"
         )
@@ -221,13 +225,13 @@ async def test_run_round_counts_model_requests_and_budget_log(runner) -> None:
             metrics={},
         )
 
-    service = SimpleNamespace(_call_vllm_message=model_call, chat_with_rubric=chat_with_rubric)
+    service = SimpleNamespace(chat_with_rubric=chat_with_rubric)
     record = await runner.run_round(runner.CASES_BY_ID["P1-path"], 1, service)
 
     assert record.get("error") is None
     assert record["model_requests"] == 4
     assert record["tool_budget_exhausted"] is True
-    assert service._call_vllm_message is model_call
+    assert chat_transport.call_vllm_message is model_call
     assert runner.runtime_failures(runner.CASES_BY_ID["P1-path"], record)
 
 

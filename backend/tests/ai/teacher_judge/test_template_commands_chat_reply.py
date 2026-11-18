@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.ai.teacher_judge import chat_transport, rubric_normalization
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
 from app.ai.teacher_judge.template_command_service import (
@@ -22,7 +23,7 @@ from tests.ai.teacher_judge.helpers import (
 
 
 def test_backend_does_not_classify_issue_owner_from_missing_info_prose() -> None:
-    normalized = teacher_judge_service._normalize_rubric_items(
+    normalized = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -59,7 +60,7 @@ def test_backend_does_not_classify_issue_owner_from_missing_info_prose() -> None
 
 
 def test_generic_command_missing_target_uses_teacher_facing_description() -> None:
-    normalized = teacher_judge_service._normalize_rubric_items(
+    normalized = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -88,7 +89,7 @@ def test_generic_command_missing_target_uses_teacher_facing_description() -> Non
 
 
 def test_backend_does_not_infer_config_semantics_from_teacher_text() -> None:
-    normalized = teacher_judge_service._normalize_rubric_items(
+    normalized = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -181,7 +182,7 @@ async def test_chat_prompt_accepts_objectively_verifiable_main_py_checkpoint(
         captured_payload.update(payload)
         return await fake_call_vllm(payload, timeout=timeout)
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", capture_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", capture_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, updated_items, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -255,7 +256,7 @@ async def test_chat_prompt_accepts_generic_cat_env_checkpoint(
         captured_payload.update(payload)
         return await fake_call_vllm(payload, timeout=timeout)
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", capture_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", capture_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, updated_items, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -322,7 +323,7 @@ async def test_follow_up_natural_answer_is_audited_before_repeating_question(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -378,7 +379,7 @@ async def test_follow_up_audit_asks_only_the_remaining_real_ambiguity(
             {},
         )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -431,7 +432,7 @@ async def test_chat_prompt_treats_attachment_as_concrete_rubric_content(
             captured_payload.update(payload)
         return await fake_call_vllm(payload, timeout=timeout)
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", capture_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", capture_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, updated_items, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -468,7 +469,7 @@ def test_unavailable_reply_explains_invalid_catalog_reference() -> None:
             "check_steps": [{"template_key": "n8n", "command_key": "missing.command"}],
         }
     ]
-    normalized = teacher_judge_service._normalize_rubric_items(
+    normalized = rubric_normalization.normalize_rubric_items(
         raw_items,
         template_key="n8n",
         template_commands=[],

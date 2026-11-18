@@ -12,6 +12,12 @@ from app.ai.role_contracts import (
     AdherenceResult,
     AdherenceVerdict,
 )
+from app.ai.teacher_judge import (
+    chat_transport,
+    proposal_tools,
+    reply_payload,
+    rubric_normalization,
+)
 from app.ai.teacher_judge import service as teacher_judge_service
 from tests.ai.teacher_judge.helpers import (
     patch_teacher_judge_vllm_settings,
@@ -35,7 +41,7 @@ def _flat_raw(title: str) -> dict[str, object]:
 
 def test_stored_flat_argv_remains_readable() -> None:
     raw = _flat_raw("檢查 Python 版本")
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [raw], template_key="linux", template_commands=[]
     )
     assert items and items[0].detectable == "auto"
@@ -74,7 +80,7 @@ async def test_typed_proposal_keeps_model_reply_about_other_requirement(
             reply_message(model_reply, "ready"),
         ]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -98,7 +104,7 @@ async def test_typed_proposal_keeps_model_reply_about_other_requirement(
 
 
 def test_reply_payload_object_keeps_trailing_prose_intact() -> None:
-    leftover, parsed = teacher_judge_service._reply_payload_object(
+    leftover, parsed = reply_payload.reply_payload_object(
         '前言 {"proposal_status":"needs_information"} 請補充 /etc/nginx 路徑'
     )
     assert parsed == {"proposal_status": "needs_information"}
@@ -107,7 +113,7 @@ def test_reply_payload_object_keeps_trailing_prose_intact() -> None:
 
 
 def test_parse_chat_reply_payload_never_returns_raw_json() -> None:
-    reply, status = teacher_judge_service._parse_chat_reply_payload(
+    reply, status = reply_payload.parse_chat_reply_payload(
         '{"reply":"","proposal_status":"none"}'
     )
     assert "proposal_status" not in reply
@@ -120,7 +126,7 @@ async def test_empty_payload_reply_gets_neutral_sentence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _calls, fake_call_vllm = scripted_vllm([reply_message("", "none")])
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -149,7 +155,7 @@ async def test_blocked_free_reply_is_not_returned_or_persisted(
             AdherenceVerdict.BLOCK, AdherenceReason.ROLE_DRIFT
         )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     monkeypatch.setattr(teacher_judge_service, "check_adherence", blocked)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
@@ -200,7 +206,7 @@ async def test_blocked_action_does_not_form_teacher_proposal(
             AdherenceVerdict.BLOCK, AdherenceReason.ACTION_NOT_REQUESTED
         )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     monkeypatch.setattr(teacher_judge_service, "check_adherence", blocked)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
@@ -227,7 +233,7 @@ async def test_proposal_loop_respects_cumulative_completion_budget(
         max_tokens = int(payload["max_tokens"])
         max_tokens_seen.append(max_tokens)
         return tool_call_message(
-            teacher_judge_service._LIST_CHECKLIST_TOOL_NAME,
+            proposal_tools.LIST_CHECKLIST_TOOL_NAME,
             {},
         ), {
             "prompt_tokens": 1,
@@ -239,7 +245,7 @@ async def test_proposal_loop_respects_cumulative_completion_budget(
             "response_model": "test-model",
         }
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _, metrics, _, _, _ = await teacher_judge_service._run_proposal_tool_loop(
@@ -280,7 +286,7 @@ def test_conversation_focus_coerces_string_and_scalar_fields() -> None:
         ensure_ascii=False,
     )
 
-    focus = teacher_judge_service._conversation_focus_from_content(
+    focus = reply_payload.conversation_focus_from_content(
         content, proposal=None
     )
 
@@ -304,7 +310,7 @@ def test_structured_requirement_helpers_tolerate_non_list_fields() -> None:
             },
         }
     )
-    assert teacher_judge_service._structured_requirement_needs_candidate(numeric_gap)
+    assert reply_payload.structured_requirement_needs_candidate(numeric_gap)
 
     scalar_requirements = json.dumps(
         {
@@ -314,6 +320,6 @@ def test_structured_requirement_helpers_tolerate_non_list_fields() -> None:
         }
     )
     assert (
-        teacher_judge_service._structured_requirement_target_item(scalar_requirements)
+        reply_payload.structured_requirement_target_item(scalar_requirements)
         is None
     )
