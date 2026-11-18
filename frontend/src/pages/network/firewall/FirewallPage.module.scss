@@ -59,7 +59,6 @@
   position: relative;
 
   :global(.react-flow) { background: transparent; }
-  :global(.react-flow) svg { max-width: none; }
   :global(.react-flow__background) { background: transparent; }
   :global(.react-flow__edge path) {
     stroke-opacity: 1 !important;
@@ -409,14 +408,15 @@
 
 /* ── Handle（節點連接點） ──
    四面各一組（source 疊在 target 上），線從哪一側走由相對位置決定。
-   平常隱形以免畫布佈滿小圓點，滑到節點上或正在拉線時才浮現；
-   透明時仍保有 pointer-events，配合 connectionRadius 一樣拉得到。 */
+   有滑鼠時平常隱形以免畫布佈滿小圓點，滑到節點上或正在拉線時才浮現；
+   透明時仍保有 pointer-events，配合 connectionRadius 一樣拉得到。
+   觸控裝置沒有滑過，連接點常駐顯示（reveal-on-hover），點節點也不會要點兩下。 */
 .nodeHandle {
   background: var(--color-primary) !important;
   border-color: var(--color-primary) !important;
   width: 10px !important;
   height: 10px !important;
-  opacity: 0;
+  @include reveal-on-hover;
   transition: opacity $transition-base;
 }
 

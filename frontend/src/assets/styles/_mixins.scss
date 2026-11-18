@@ -544,6 +544,18 @@
   background: transparent;
 }
 
+/* ── 滑過才浮出的控制項（列尾刪除鈕、釘選鈕、拓撲連接點）──
+   只有能滑過的裝置（滑鼠、觸控板）平常隱形；觸控裝置沒有滑過，一律常駐顯示。
+   浮出條件照舊由呼叫端寫（父層 :hover／:focus-within 時 opacity: 1）。
+   不要直接寫 opacity: 0 再用 :hover 拉回 1：iOS（iPhone／iPad）點下去時若 hover 會讓隱藏的東西浮出來，
+   第一下只會被當成 hover，要再點一下才算點擊——連整列、整個節點都要點兩下。
+   用 JS 狀態做的滑過效果同理：只在 pointerType 不是 touch 時才設 hover 狀態 */
+@mixin reveal-on-hover {
+  @media (hover: hover) {
+    opacity: 0;
+  }
+}
+
 /* ── 聊天面板（AI 助手 AiFloatingChat、AI 導師檢查的檢查表助理）──
    標頭的圓形圖示鈕、圓角輸入框與送出／附件鈕，兩邊同一組，不各自手抄 */
 

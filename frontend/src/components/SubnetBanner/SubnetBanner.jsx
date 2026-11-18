@@ -57,8 +57,8 @@ export default function SubnetBanner() {
 
   return (
     <div className={styles.banner}>
-      <MIcon name="warning_amber" size={16} />
-      <span className={styles.text}>
+      <MIcon name="warning" size={16} />
+      <span>
         {isAdmin ? t("SubnetBanner.adminMessage") : t("SubnetBanner.userMessage")}
         {isAdmin && (
           <Link to="/ip-management" className={styles.link}>

@@ -442,6 +442,24 @@ Buttons always use the button mixin family (six variants) from `_mixins.scss`; *
   but a danger modifier **must show red text before hover**, and its hover must also include `:not(:disabled)`
 - Danger items inside dropdown menus (PowerMenu, the ⋮ ActionMenu in page headers) are menu styles and are not among these six variants
 
+#### Controls revealed on hover
+
+Controls that stay invisible until you hover their row — a row's delete button, the sidebar pin button, the connection handles on topology nodes —
+are always hidden with `@include reveal-on-hover`; the caller still writes when they appear (`opacity: 1` on the parent's `:hover` / `:focus-within`):
+
+```scss
+.removeBtn { @include btn-icon($danger: true); @include reveal-on-hover; }
+.row:hover .removeBtn,
+.row:focus-within .removeBtn { opacity: 1; }
+```
+
+- The mixin only hides the control on devices that can hover (mouse, trackpad: `(hover: hover)`); touch devices can't hover, so it is always shown there
+- **Don't write `opacity: 0` and bring it back to 1 on `:hover`**: on iOS (iPhone / iPad), if a tap's hover makes something hidden appear,
+  the first tap only counts as a hover and a second tap is needed to click — the whole row, node or sidebar item then needs two taps
+- Hover effects driven by JS state follow the same rule (for example the label that appears when you hover a topology connection): use `onPointerEnter` and don't set the hover state when `pointerType` is `touch`
+- A control that touch devices don't need can be removed there entirely (`@media (hover: none) { display: none; }`), such as unpinned pins in the sidebar:
+  pinning new items is left to devices with a mouse, while pinned items still show their pin and a tap unpins them
+
 #### Chat panels (AI assistant, checklist assistant)
 
 Both chat panels share one mixin family for the header icon buttons, the rounded composer and its send / attach buttons; do not copy them per page:
@@ -478,9 +496,10 @@ Form fields always use the form mixin family from `_mixins.scss`; **do not inven
 > Writing 8px padding makes it 40px; a search box whose border sits on the container uses `min-height: 36px`, not 38px.
 > The shared SegmentedControl is also fixed at 36px, so it sits on the same row as fields and buttons without extra height locking.
 
-- Optional settings at the bottom of a form (advanced settings) go in the shared `components/Disclosure`: a full-width clickable row with a white background and hairline border, 14px / 500, an optional primary icon on the left, an optional muted note on the right (such as "Optional") and a chevron that turns half a circle when open. The content sits 16px below the row, aligned with the fields above (not wrapped in the box). Don't use the browser's native ▶ marker or hand-style `<details>`; use `className` for layout (such as `grid-column: 1 / -1`) and `bodyClassName` for the field grid. Used by the class setup wizard and the first-run setup wizard
+- Optional settings at the bottom of a form (advanced settings) go in the shared `components/Disclosure`: a full-width clickable row with a white background and hairline border, 14px / 500, an optional primary icon on the left, an optional muted note on the right (such as "Optional") and a chevron that turns half a circle when open. The content sits 16px below the row, aligned with the fields above (not wrapped in the box), and the built-in `Collapse` animates its height and fade when it opens or closes. Don't use the browser's native ▶ marker or a hand-written `<details>` (its content just appears and disappears, with no animation); use `className` for layout (such as `grid-column: 1 / -1`) and `bodyClassName` for the field grid. Used by the class setup wizard and the first-run setup wizard
 - Inline disclosures for supplementary details (execution evidence, error details, tool history, limits and error codes) use the same component with `variant="inline"`: just "text + down chevron", no box, weight 500, font size inherited from the outer element (set 12 / 14px with `className`), muted until hovered or opened, when it turns primary and the chevron turns half a circle. The content follows directly and sets its own spacing. Used by AI Check, the AI API docs, the AI chat tool history and the crash screen. Collapsible card headers (class info card, check groups) are structured differently and don't use this component
-- When the expanded content doesn't follow the toggle (for example "Show inactive keys" merges rows into the table above, so it can't sit inside `<details>`), use the button version `components/Disclosure/DisclosureToggle` (`open` + `onToggle`), which looks the same as the inline disclosure. Don't use a ghost button for a "show more / inactive" toggle that sits on the page background: the ghost tints are meant for white cards, and on low-saturation themes (Milk Tea and similar) the page background is nearly the same color as the ghost hover, so the button seems to vanish on hover
+- When the expanded content doesn't follow the toggle (for example "Show inactive keys" merges rows into the table above, so it can't sit inside the disclosure), use the button version `components/Disclosure/DisclosureToggle` (`open` + `onToggle`), which looks the same as the inline disclosure. Don't use a ghost button for a "show more / inactive" toggle that sits on the page background: the ghost tints are meant for white cards, and on low-saturation themes (Milk Tea and similar) the page background is nearly the same color as the ghost hover, so the button seems to vanish on hover
+- A region whose open state you control yourself (a card collapsed from its title row, a list opened by a "Preview" chip) always goes in `components/Collapse/Collapse` (`open`): its height transitions with grid 0fr↔1fr while the content fades in and out, and collapsed content stays mounted but `inert`. Don't mount and unmount it with `{open && …}`, which has no animation. Inside a flex column with a gap, pass `gap` (px) so no extra blank strip is left when it is collapsed
 - A start / end pair of `input type="time"` needs about 130px per box to show "1:10 PM" plus the clock icon; when half a column is too narrow, let that row take the full width (with the card's `@container`) rather than shrinking the inputs until the text is cut off
 > Inside a container narrower than 240px (sidebar tabs) use its `compact` (8px segment padding) and `fullWidth` (fills the container, segments share the width) props
 > instead of overriding the component's internal buttons from page SCSS.

@@ -11,13 +11,15 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { useStoreApi } from "@xyflow/react";
 
-/* 一張畫布（一個 ReactFlow store）一份 */
+/* 一張畫布（一個 ReactFlow store）一份。
+   key 用 store 的 getState：useStoreApi() 每次呼叫都會 useMemo 出一個新的包裝物件，
+   拿它當 key 會變成每條線各一份登記表，標籤彼此看不到、照樣疊在一起 */
 const registries = new WeakMap();
 
 const sameRect = (a, b) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
-function registryFor(store) {
-  let registry = registries.get(store);
+function registryFor(storeKey) {
+  let registry = registries.get(storeKey);
   if (!registry) {
     const entries = new Map(); // edge id → { rank, rect }
     const listeners = new Set();
@@ -36,9 +38,14 @@ function registryFor(store) {
         return () => listeners.delete(listener);
       },
     };
-    registries.set(store, registry);
+    registries.set(storeKey, registry);
   }
   return registry;
+}
+
+/** 目前這張畫布的登記表（同一個 ReactFlowProvider 底下的每條線拿到同一份） */
+function useRegistry() {
+  return registryFor(useStoreApi().getState);
 }
 
 /**
@@ -46,7 +53,7 @@ function registryFor(store) {
  * 只有這些變了才觸發重繪，後面的標籤怎麼動都不影響自己。
  */
 export function useEarlierLabelRects(id, rank) {
-  const registry = registryFor(useStoreApi());
+  const registry = useRegistry();
   const cache = useRef({ key: "", rects: [] });
   const getSnapshot = () => {
     const rects = [];
@@ -62,7 +69,7 @@ export function useEarlierLabelRects(id, rank) {
 
 /** 登記這條線的標籤範圍；rect 給 null（不常駐、線藏起來）就撤掉 */
 export function usePublishLabelRect(id, rank, rect) {
-  const registry = registryFor(useStoreApi());
+  const registry = useRegistry();
   const x = rect?.x;
   const y = rect?.y;
   const w = rect?.w;

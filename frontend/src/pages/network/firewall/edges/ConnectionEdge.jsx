@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { EdgeLabelRenderer, getBezierPath, useStore } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
 import styles from "../FirewallPage.module.scss";
@@ -73,6 +73,14 @@ export default function ConnectionEdge(props) {
 
   const { t } = useTranslation("network");
   const [hovered, setHovered] = useState(false);
+  /* 只有滑鼠、觸控筆才算滑過：iOS 點下去時若 hover 讓隱藏的標籤浮出來，第一下只會被當成 hover，
+     要點兩下才選得到這條線（同 reveal-on-hover 的規則） */
+  const hoverHandlers = {
+    onPointerEnter: (event) => {
+      if (event.pointerType !== "touch") setHovered(true);
+    },
+    onPointerLeave: () => setHovered(false),
+  };
   const [basePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
@@ -120,16 +128,26 @@ export default function ConnectionEdge(props) {
     ? t("ConnectionEdge.aggregate", { count: data.aggregateCount })
     : data?.label || t("ConnectionEdge.allPorts");
 
-  /* 標籤尺寸：先用估計值排，畫出來量到實際寬高再重排一次 */
-  const labelRef = useRef(null);
+  /* 標籤尺寸：先用估計值排，畫出來量到實際寬高再重排一次。
+     標籤走 EdgeLabelRenderer 的 portal，第一次 render 時容器常常還沒好、元素不存在，
+     所以用 callback ref 等元素真的掛上才量；字型載入、文字改變造成的尺寸變化交給 ResizeObserver。
+     offsetWidth 不受畫布縮放（transform）影響，量到的就是畫布座標的尺寸 */
+  const [labelEl, setLabelEl] = useState(null);
   const [measured, setMeasured] = useState(null);
   useLayoutEffect(() => {
-    const el = labelRef.current;
-    if (!el) return;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    if (w && h && (w !== measured?.w || h !== measured?.h)) setMeasured({ w, h });
-  }, [label, measured]);
+    if (!labelEl) return undefined;
+    const measure = () => {
+      const w = labelEl.offsetWidth;
+      const h = labelEl.offsetHeight;
+      if (!w || !h) return;
+      setMeasured((prev) => (prev?.w === w && prev?.h === h ? prev : { w, h }));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(labelEl);
+    return () => observer.disconnect();
+  }, [labelEl, label]);
   const { w: labelW, h: labelH } = measured ?? estimateLabelSize(label);
 
   /* 機器拖得太近或剛好擋在線上時，標籤會被節點蓋掉：避開所有節點與前面已排好的標籤找空位
@@ -185,8 +203,7 @@ export default function ConnectionEdge(props) {
         strokeWidth={20}
         style={{ cursor }}
         onClick={select}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        {...hoverHandlers}
       />
 
       {/* 主流向路徑（動畫虛線） */}
@@ -225,7 +242,7 @@ export default function ConnectionEdge(props) {
 
       <EdgeLabelRenderer>
         <div
-          ref={labelRef}
+          ref={setLabelEl}
           className={`${styles.edgeLabelWrap} nodrag nopan`}
           style={{
             position: "absolute",
@@ -236,8 +253,7 @@ export default function ConnectionEdge(props) {
             opacity: showLabel ? 1 : 0,
             transition: "opacity 0.15s",
           }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
+          {...hoverHandlers}
         >
           <button
             type="button"

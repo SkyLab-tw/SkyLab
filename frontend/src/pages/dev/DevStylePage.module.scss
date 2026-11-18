@@ -446,7 +446,8 @@
 .chatAttach       { @include chat-composer-btn($primary: false); }
 .chatSend         { @include chat-composer-btn; }
 
-/* 釘選鈕（比照側邊欄導覽）：未釘選滑過該列才浮出、已釘選常駐傾斜釘子無底色 */
+/* 釘選鈕（比照側邊欄導覽）：未釘選滑過該列才浮出（只給能滑過的裝置；觸控裝置不放未釘選的釘子）、
+   已釘選常駐傾斜釘子無底色 */
 .pinRow {
   display: flex;
   align-items: center;
@@ -465,7 +466,11 @@
   transition: opacity $transition-base, background $transition-base, color $transition-base;
 
   &:not(.pinBtnPinned) {
-    opacity: 0;
+    @include reveal-on-hover;
+
+    @media (hover: none) {
+      display: none;
+    }
   }
 }
 

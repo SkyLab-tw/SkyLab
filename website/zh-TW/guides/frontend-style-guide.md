@@ -443,6 +443,24 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
   但危險修飾類**未 hover 前文字就要是紅色**，且 hover 同樣必加 `:not(:disabled)`
 - 下拉選單裡的危險項（PowerMenu、頁首的 ⋮ ActionMenu）屬選單樣式，不在此六款之列
 
+#### 滑過才浮出的控制項
+
+列尾的刪除鈕、側邊欄的釘選鈕、拓撲節點的連接點這類「平常隱形、滑到那一列才出現」的控制項，
+隱形一律用 `@include reveal-on-hover`，浮出條件照舊寫在呼叫端（父層 `:hover`／`:focus-within` 時 `opacity: 1`）：
+
+```scss
+.removeBtn { @include btn-icon($danger: true); @include reveal-on-hover; }
+.row:hover .removeBtn,
+.row:focus-within .removeBtn { opacity: 1; }
+```
+
+- mixin 只在能滑過的裝置（滑鼠、觸控板，`(hover: hover)`）把它藏起來；觸控裝置沒有滑過，一律常駐顯示
+- **不要直接寫 `opacity: 0` 再用 `:hover` 拉回 1**：iOS（iPhone／iPad）點下去時，若 hover 會讓隱藏的東西浮出來，
+  第一下只會被當成 hover，要再點一下才算點擊——整列、整個節點、整個側邊欄項目都會變成要點兩下
+- 用 JS 狀態做的滑過效果同理（例如拓撲連線滑過才出現標籤）：用 `onPointerEnter`，`pointerType` 是 `touch` 時不設 hover 狀態
+- 觸控裝置上不需要的控制項可以整顆收掉（`@media (hover: none) { display: none; }`），例如側邊欄未釘選的釘子：
+  新增釘選留給有滑鼠的裝置，已釘選的照常顯示、點了取消
+
 #### 聊天面板（AI 助手、檢查表助理）
 
 兩個聊天面板的標頭圖示鈕、圓角輸入框與送出／附件鈕共用同一組 mixin，不要各自手抄：
@@ -479,9 +497,10 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
 > 內距寫成 8px 就會變 40px；外框在容器上的搜尋框用 `min-height: 36px`，不要寫 38px。
 > 共用的 SegmentedControl 也固定 36px，跟欄位、按鈕放同一列不用另外鎖高度。
 
-- 表單底部可以不填的設定（進階設定）收進共用 `components/Disclosure`：整行可點的白底細框列、14px／500，左邊選填圖示（主色）、右邊選填淡色說明（如「選填」）＋箭頭（展開轉半圈），內容接在列下方 16px、跟上方欄位對齊（不包進框裡）。不要用瀏覽器原生 ▶ 三角形或手寫 `<details>` 樣式；排版用 `className`（例如 `grid-column: 1 / -1`），欄位 grid 用 `bodyClassName`。建班精靈、首次設定精靈在用
+- 表單底部可以不填的設定（進階設定）收進共用 `components/Disclosure`：整行可點的白底細框列、14px／500，左邊選填圖示（主色）、右邊選填淡色說明（如「選填」）＋箭頭（展開轉半圈），內容接在列下方 16px、跟上方欄位對齊（不包進框裡），展開收合時高度與淡入淡出動畫由內建的 `Collapse` 負責。不要用瀏覽器原生 ▶ 三角形或手寫 `<details>`（內容會直接出現／消失、沒有動畫）；排版用 `className`（例如 `grid-column: 1 / -1`），欄位 grid 用 `bodyClassName`。建班精靈、首次設定精靈在用
 - 補充資訊的行內收合（執行證據、錯誤詳情、工具紀錄、限制與錯誤代碼）用同一個元件的 `variant="inline"`：只有「文字＋向下箭頭」、沒有框，粗細 500、字級跟著外框（頁面用 `className` 設 12／14px），平常淡色、滑過或展開變主色，箭頭轉半圈；內容緊接在下面，間距由內容自己決定。AI 導師檢查、AI API 文件、AI 對話工具紀錄、當機畫面在用。卡片本身的收合標題（班級資訊卡、檢查項群組）結構不同，不套這個元件
-- 展開的內容不接在收合列下面時（例如「顯示已失效的金鑰」把列併進上方表格，包不進 `<details>`），用按鈕版 `components/Disclosure/DisclosureToggle`（`open`＋`onToggle`），樣子同行內收合。「顯示更多／已失效」這類切換放在頁面底上，不要用淡底鈕：淡底鈕的色階是給白色卡片用的，低飽和主題（奶茶等）的頁面背景跟它的 hover 色幾乎一樣，滑過去按鈕會像消失
+- 展開的內容不接在收合列下面時（例如「顯示已失效的金鑰」把列併進上方表格，包不進收合元件裡），用按鈕版 `components/Disclosure/DisclosureToggle`（`open`＋`onToggle`），樣子同行內收合。「顯示更多／已失效」這類切換放在頁面底上，不要用淡底鈕：淡底鈕的色階是給白色卡片用的，低飽和主題（奶茶等）的頁面背景跟它的 hover 色幾乎一樣，滑過去按鈕會像消失
+- 自己控制開合的區塊（卡片標題列收合、「預覽」晶片展開的清單）一律包 `components/Collapse/Collapse`（`open`），高度用 grid 0fr↔1fr 過渡、內容同時淡入淡出，收合後內容仍掛著但 `inert`；不要寫 `{open && …}` 直接掛載／卸載，那樣沒有動畫。放在有 gap 的 flex 欄裡要傳 `gap`（px），收合時才不會多留一段空白
 - 成對的起訖時間（`input type="time"`）每格要約 130px 才放得下「下午 01:10」＋時鐘圖示；半欄放不下時讓那一列各佔整列（用卡片的 `@container`，不要讓時間欄縮到字被切掉）
 > 放進 240px 以下的窄容器（側邊欄分頁）時用它的 `compact`（各段內距 8px）與 `fullWidth`（撐滿、各段平分）prop，
 > 不要在頁面 SCSS 覆寫元件內部的按鈕。

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./settings.module.scss";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -70,23 +70,57 @@ function useSchedulerGroups(t) {
       title: t("SettingsPage.resourceThresholdsTitle"),
       effect: "immediate",
       guideProps: { "data-guide": "scheduler-thresholds" },
-      fields: [
-        { key: "placement_peak_cpu_margin", label: t("SettingsPage.placementPeakCpuMargin"), step: 0.01 },
-        { key: "placement_peak_memory_margin", label: t("SettingsPage.placementPeakMemoryMargin"), step: 0.01 },
-        /* LoadAvg 一律以實體核計（不乘 CPU 超配倍率），三個欄位共用同一段說明 */
-        { key: "placement_loadavg_warn_per_core", label: t("SettingsPage.placementLoadavgWarnPerCore"), step: 0.1, hint: t("SettingsPage.placementLoadavgPerPhysicalCoreHint") },
-        { key: "placement_loadavg_max_per_core", label: t("SettingsPage.placementLoadavgMaxPerCore"), step: 0.1, hint: t("SettingsPage.placementLoadavgPerPhysicalCoreHint") },
-        { key: "placement_loadavg_penalty_weight", label: t("SettingsPage.placementLoadavgPenaltyWeight"), step: 0.01, hint: t("SettingsPage.placementLoadavgPerPhysicalCoreHint") },
-        { key: "placement_disk_contention_warn_share", label: t("SettingsPage.placementDiskContentionWarnShare"), step: 0.01 },
-        { key: "placement_disk_contention_high_share", label: t("SettingsPage.placementDiskContentionHighShare"), step: 0.01 },
-        { key: "placement_disk_penalty_weight", label: t("SettingsPage.placementDiskPenaltyWeight"), step: 0.01 },
-        { key: "placement_cpu_peak_warn_share", label: t("SettingsPage.placementCpuPeakWarnShare"), step: 0.01 },
-        { key: "placement_cpu_peak_high_share", label: t("SettingsPage.placementCpuPeakHighShare"), step: 0.01 },
-        { key: "placement_memory_peak_warn_share", label: t("SettingsPage.placementMemoryPeakWarnShare"), step: 0.01 },
-        { key: "placement_memory_peak_high_share", label: t("SettingsPage.placementMemoryPeakHighShare"), step: 0.01 },
-        { key: "placement_resource_weight_cpu", label: t("SettingsPage.placementResourceWeightCpu"), step: 0.01 },
-        { key: "placement_resource_weight_memory", label: t("SettingsPage.placementResourceWeightMemory"), step: 0.01 },
-        { key: "placement_resource_weight_disk", label: t("SettingsPage.placementResourceWeightDisk"), step: 0.01 },
+      /* 15 個閾值照資源分成 5 組、一組一列：列首放組名，三格只寫短名（餘裕／警戒…）。
+         完整名稱（「CPU 峰值餘裕」）留在輸入框的 aria-label，報讀時不會只聽到「餘裕」；
+         AI 助手 surfaces.py 也是用完整名稱對照，語系檔的這些鍵不能刪 */
+      rows: [
+        {
+          key: "cpuPeak",
+          title: t("SettingsPage.thresholdGroupCpuPeak"),
+          fields: [
+            { key: "placement_peak_cpu_margin", short: t("SettingsPage.thresholdColMargin"), label: t("SettingsPage.placementPeakCpuMargin"), step: 0.01 },
+            { key: "placement_cpu_peak_warn_share", short: t("SettingsPage.thresholdColWarnShare"), label: t("SettingsPage.placementCpuPeakWarnShare"), step: 0.01 },
+            { key: "placement_cpu_peak_high_share", short: t("SettingsPage.thresholdColHighShare"), label: t("SettingsPage.placementCpuPeakHighShare"), step: 0.01 },
+          ],
+        },
+        {
+          key: "memoryPeak",
+          title: t("SettingsPage.thresholdGroupMemoryPeak"),
+          fields: [
+            { key: "placement_peak_memory_margin", short: t("SettingsPage.thresholdColMargin"), label: t("SettingsPage.placementPeakMemoryMargin"), step: 0.01 },
+            { key: "placement_memory_peak_warn_share", short: t("SettingsPage.thresholdColWarnShare"), label: t("SettingsPage.placementMemoryPeakWarnShare"), step: 0.01 },
+            { key: "placement_memory_peak_high_share", short: t("SettingsPage.thresholdColHighShare"), label: t("SettingsPage.placementMemoryPeakHighShare"), step: 0.01 },
+          ],
+        },
+        {
+          key: "loadavg",
+          title: t("SettingsPage.thresholdGroupLoadavg"),
+          /* LoadAvg 一律以實體核計（不乘 CPU 超配倍率）：說明放組名下只出現一次 */
+          hint: t("SettingsPage.placementLoadavgPerPhysicalCoreHint"),
+          fields: [
+            { key: "placement_loadavg_warn_per_core", short: t("SettingsPage.thresholdColWarn"), label: t("SettingsPage.placementLoadavgWarnPerCore"), step: 0.1 },
+            { key: "placement_loadavg_max_per_core", short: t("SettingsPage.thresholdColMax"), label: t("SettingsPage.placementLoadavgMaxPerCore"), step: 0.1 },
+            { key: "placement_loadavg_penalty_weight", short: t("SettingsPage.thresholdColPenaltyWeight"), label: t("SettingsPage.placementLoadavgPenaltyWeight"), step: 0.01 },
+          ],
+        },
+        {
+          key: "disk",
+          title: t("SettingsPage.thresholdGroupDisk"),
+          fields: [
+            { key: "placement_disk_contention_warn_share", short: t("SettingsPage.thresholdColWarnShare"), label: t("SettingsPage.placementDiskContentionWarnShare"), step: 0.01 },
+            { key: "placement_disk_contention_high_share", short: t("SettingsPage.thresholdColMaxShare"), label: t("SettingsPage.placementDiskContentionHighShare"), step: 0.01 },
+            { key: "placement_disk_penalty_weight", short: t("SettingsPage.thresholdColPenaltyWeight"), label: t("SettingsPage.placementDiskPenaltyWeight"), step: 0.01 },
+          ],
+        },
+        {
+          key: "resourceWeight",
+          title: t("SettingsPage.thresholdGroupResourceWeight"),
+          fields: [
+            { key: "placement_resource_weight_cpu", short: t("SettingsPage.thresholdColCpu"), label: t("SettingsPage.placementResourceWeightCpu"), step: 0.01 },
+            { key: "placement_resource_weight_memory", short: t("SettingsPage.thresholdColRam"), label: t("SettingsPage.placementResourceWeightMemory"), step: 0.01 },
+            { key: "placement_resource_weight_disk", short: t("SettingsPage.thresholdColDisk"), label: t("SettingsPage.placementResourceWeightDisk"), step: 0.01 },
+          ],
+        },
       ],
     },
     {
@@ -102,6 +136,8 @@ function useSchedulerGroups(t) {
     },
     {
       title: t("SettingsPage.practiceExpiryTitle"),
+      /* 練習時段每次開快速練習時重讀、到期提醒前端直接讀設定：存檔後立刻套用 */
+      effect: "immediate",
       guideProps: { "data-guide": "scheduler-practice" },
       fields: [
         { key: "practice_session_hours", label: t("SettingsPage.practiceSessionHours") },
@@ -112,13 +148,55 @@ function useSchedulerGroups(t) {
   ], [t]);
 }
 
+const FIELD_COUNT_GRID = { 3: styles.numberGridThree, 4: styles.numberGridFour };
+
+/* 有 short 的欄位畫面只顯示短名，完整名稱給 aria-label（短名一定是完整名稱的一部分，符合 label-in-name） */
+function NumberField({ field, value, setField }) {
+  return (
+    <label className={styles.field}>
+      <span>{field.short ?? field.label}</span>
+      <input
+        type="number"
+        step={field.step ?? 1}
+        value={value}
+        aria-label={field.short ? field.label : undefined}
+        onChange={(e) => setField(field.key, Number(e.target.value))}
+      />
+      {field.hint && <em className={styles.fieldHint}>{field.hint}</em>}
+    </label>
+  );
+}
+
+/* 閾值卡的一列＝一組：組名（＋說明）在列首，三個欄位在右 */
+function ThresholdRow({ row, form, setField }) {
+  const id = useId();
+  const titleId = `${id}-title`;
+  const hintId = `${id}-hint`;
+  return (
+    <div
+      role="group"
+      className={styles.thresholdRow}
+      aria-labelledby={titleId}
+      aria-describedby={row.hint ? hintId : undefined}
+    >
+      <div className={styles.thresholdRowHead}>
+        <span id={titleId} className={styles.thresholdRowTitle}>{row.title}</span>
+        {row.hint && <span id={hintId} className={styles.fieldHint}>{row.hint}</span>}
+      </div>
+      {row.fields.map((f) => (
+        <NumberField key={f.key} field={f} value={form[f.key]} setField={setField} />
+      ))}
+    </div>
+  );
+}
+
 function SchedulerForm({ form, setField, onSave, saving, dirty, onRestore }) {
   const { t } = useTranslation("system");
   const SCHEDULER_GROUPS = useSchedulerGroups(t);
   return (
     <form className={styles.panelStack} onSubmit={onSave}>
       {SCHEDULER_GROUPS.map((group) => (
-        <div key={group.title} className={styles.card} {...group.guideProps}>
+        <div key={group.title} className={`${styles.card} ${styles.numberCard}`} {...group.guideProps}>
           <div className={styles.cardHead}>
             <h2 className={styles.cardTitle}>{group.title}</h2>
             {group.effect && (
@@ -127,20 +205,20 @@ function SchedulerForm({ form, setField, onSave, saving, dirty, onRestore }) {
               </span>
             )}
           </div>
-          <div className={styles.formGrid}>
-            {group.fields.map((f) => (
-              <label key={f.key} className={styles.field}>
-                <span>{f.label}</span>
-                <input
-                  type="number"
-                  step={f.step ?? 1}
-                  value={form[f.key]}
-                  onChange={(e) => setField(f.key, Number(e.target.value))}
-                />
-                {f.hint && <em className={styles.fieldHint}>{f.hint}</em>}
-              </label>
-            ))}
-          </div>
+          {group.rows ? (
+            <div className={styles.thresholdMatrix}>
+              {group.rows.map((row) => (
+                <ThresholdRow key={row.key} row={row} form={form} setField={setField} />
+              ))}
+            </div>
+          ) : (
+            /* 依欄位數挑欄數（4 個：一列四格／2×2；3 個：一列三格），不會剩一格落單 */
+            <div className={`${styles.numberGrid} ${FIELD_COUNT_GRID[group.fields.length] ?? ""}`}>
+              {group.fields.map((f) => (
+                <NumberField key={f.key} field={f} value={form[f.key]} setField={setField} />
+              ))}
+            </div>
+          )}
         </div>
       ))}
 

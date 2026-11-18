@@ -11,21 +11,20 @@
   display: flex;
   align-items: center;
   gap: $spacing-8;
+  width: 100%;
   min-height: 40px;
   padding: $spacing-8 12px;
   border: 1px solid var(--color-border);
   border-radius: $radius-8;
   color: var(--color-text-primary);
   background: var(--color-surface);
+  font-family: inherit;
   font-size: $font-size-14;
   font-weight: $font-weight-500;
-  list-style: none;
+  line-height: inherit;
+  text-align: left;
   cursor: pointer;
   transition: background $transition-base, color $transition-base;
-
-  &::-webkit-details-marker {
-    display: none;
-  }
 
   &:hover {
     background: var(--color-hover);
@@ -58,10 +57,11 @@
   transition: transform $transition-base;
 }
 
-.disclosure[open] > .summary > .chevron {
+.disclosure > .summary[aria-expanded="true"] > .chevron {
   transform: rotate(180deg);
 }
 
+/* boxed 的內容區（包在 Collapse 裡，邊距跟著一起收合）；inline 不掛這個 class */
 .body {
   margin-top: $spacing-16;
 }
@@ -108,7 +108,7 @@
   @include inline-row;
 }
 
-.inline[open] > .summary {
+.inline > .summary[aria-expanded="true"] {
   color: var(--color-primary);
 }
 
@@ -122,10 +122,6 @@
       transform: rotate(180deg);
     }
   }
-}
-
-.inline > .body {
-  margin-top: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

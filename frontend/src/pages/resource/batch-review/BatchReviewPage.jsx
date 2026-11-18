@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import styles from "./BatchReviewPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
+import Collapse from "../../../components/Collapse/Collapse";
 import { BatchProvisionService } from "../../../services/batchProvision";
 import {
   useAllBatchProvisionQuery,
@@ -542,18 +543,17 @@ export default function BatchReviewPage() {
                         </span>
                       )}
                       {Array.isArray(preview) && (
-                        <div ref={recurListRef} className={`${styles.recurCollapse} ${previewOpen ? styles.recurCollapseOpen : ""}`}>
-                          <div className={styles.recurCollapseInner}>
-                            <ul className={styles.recurWindows}>
-                              {preview.length === 0 && <li>{t("BatchReviewPage.noScheduledWindows")}</li>}
-                              {preview.map(([start, end]) => (
-                                <li key={start}>
-                                  {shortTime(start, t)} ～ {shortTime(end, t)}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
+                        /* gap 對應 .reasonBox 的 8px：收合時不多留一段空白 */
+                        <Collapse ref={recurListRef} open={previewOpen} gap={8}>
+                          <ul className={styles.recurWindows}>
+                            {preview.length === 0 && <li>{t("BatchReviewPage.noScheduledWindows")}</li>}
+                            {preview.map(([start, end]) => (
+                              <li key={start}>
+                                {shortTime(start, t)} ～ {shortTime(end, t)}
+                              </li>
+                            ))}
+                          </ul>
+                        </Collapse>
                       )}
                     </div>
                   )}
