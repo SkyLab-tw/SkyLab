@@ -782,11 +782,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
   @include table-tr-clickable; // 整列可點來展開／收合
 }
 
-/* 展開詳情時，詳情列接在後面，分隔線留到詳情列底下 */
-.rubricTableRow.rubricTableRowExpanded {
-  border-bottom: 0;
-}
-
 .rubricTableRow > td {
   @include table-td;
   padding-top: $spacing-16;
@@ -924,46 +919,35 @@ strong.reviewStatValue { font-size: $font-size-14; }
   @include btn-icon;
 }
 
-.rubricDetailRow > td {
-  padding: 0 $spacing-16 $spacing-16;
-  border-bottom: 1px solid var(--color-divider);
-}
-
-.rubricDetail {
-  display: grid;
-  gap: $spacing-16;
-  padding: $spacing-16;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-}
-
-/* 區塊標題是小標（12px 次要色），不跟項目標題（14px 粗體）搶層級 */
-.rubricDetailHead {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.rubricDetailTitle {
-  display: flex;
+/* 卡片版每格的「檢測方式 ⓘ」欄名；表格版由表頭顯示，這裡隱藏 */
+.rubricMethodLabel {
+  display: none;
   align-items: center;
   gap: 2px;
-
-  strong {
-    color: var(--color-text-secondary);
-    font-size: $font-size-12;
-    font-weight: 600;
-  }
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
 }
 
-/* 標題旁的 ⓘ：平常淡色無底，hover 淡底；展開說明時換主色 */
-.rubricDetailInfoBtn {
+/* 表頭「檢測方式 ⓘ」 */
+.methodLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.methodInfo {
+  display: inline-flex;
+}
+
+/* 欄名旁的 ⓘ：平常淡色無底，hover 淡底；提示開著時換主色 */
+.methodInfoBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
+  margin: -4px 0;
   padding: 0;
   border: 0;
   border-radius: $radius-pill;
@@ -985,20 +969,84 @@ strong.reviewStatValue { font-size: $font-size-14; }
   }
 }
 
-.rubricDetailNote {
-  margin: 0;
-  color: var(--color-text-muted);
+/* 點 ⓘ 跳出的小提示：位置由 useAnchoredMenu 寫進 inline style（左緣對齊 ⓘ），外觀同 ActionMenu 的玻璃 */
+.methodInfoPopover {
+  @include popover-glass;
+  position: fixed;
+  z-index: 150; // 同 ActionMenu：高於 sticky header(100)，低於 Dialog / Modal(200+)
+  box-sizing: border-box;
+  padding: $spacing-8 12px;
+  border-radius: $radius-8;
+  color: var(--color-text-primary);
   font-size: $font-size-12;
+  font-weight: $font-weight-400;
   line-height: 1.5;
+  white-space: normal;
+  cursor: default;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.13s ease, transform 0.13s ease;
 }
 
-.rubricDetailEmpty {
+/* 進場跟 ActionMenu 同一套：往下彈出由上滑入、往上彈出由下滑入，淡入 140ms */
+.methodInfoDown { animation: methodInfoInDown 0.14s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.methodInfoUp   { animation: methodInfoInUp   0.14s cubic-bezier(0.25, 0.8, 0.25, 1); }
+
+@keyframes methodInfoInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes methodInfoInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 離場 130ms，需與 MethodInfoTip 的 useDialogPresence 時間一致 */
+.methodInfoOut {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.methodInfoDown.methodInfoOut { transform: translateY(-6px); }
+.methodInfoUp.methodInfoOut   { transform: translateY(6px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .methodInfoPopover { transition: none; }
+  .methodInfoDown,
+  .methodInfoUp { animation: none; }
+}
+
+/* 展開後接在檢測方式底下：機器一行、步驟逐段，沒有框與欄名欄 */
+.rubricMethodDetail {
+  display: grid;
+  gap: $spacing-8;
+  margin-top: 4px;
+}
+
+.rubricMethodMachine {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--color-divider);
-  border-radius: $radius-8;
-  background: var(--color-surface);
   color: var(--color-text-secondary);
+  font-size: $font-size-12;
+  line-height: 1.5;
+
+  > :first-child { flex: none; margin-top: 1px; color: var(--color-text-muted); }
+
+  small {
+    color: var(--color-text-muted);
+    font-size: inherit;
+
+    &::before { content: " · "; }
+  }
+}
+
+.rubricMethodNote {
+  margin: 0;
+  color: var(--color-text-muted);
   font-size: $font-size-12;
   line-height: 1.5;
 }
@@ -1028,52 +1076,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
   overflow-wrap: anywhere;
 
   > span { min-width: 0; }
-}
-
-/* ── 詳細檢查設定：左欄名稱、右欄內容的對照清單（dl）；窄欄時改成上下排 ── */
-.detailFacts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 12px $spacing-16;
-  margin: 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-divider);
-
-  @container judge-rubric (max-width: 420px) {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: 2px;
-
-    .detailFact:not(:last-child) dd { margin-bottom: 10px; }
-  }
-}
-
-// 每組 dt／dd 包一層 div 方便條件顯示；display: contents 讓它們直接排進上面的兩欄
-.detailFact {
-  display: contents;
-
-  dt {
-    color: var(--color-text-muted);
-    font-size: $font-size-12;
-    font-weight: $font-weight-500;
-    line-height: 22px; // 對齊右欄 14px 字第一行
-    white-space: nowrap;
-  }
-
-  dd {
-    min-width: 0;
-    margin: 0;
-    color: var(--color-text-primary);
-    font-size: $font-size-14;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-
-  small {
-    display: block;
-    color: var(--color-text-muted);
-    font-size: $font-size-12;
-  }
 }
 
 /* 檢查步驟：一步一段（做什麼／整行指令或路徑／通過條件與時限）；兩步以上才編號 */
@@ -1131,6 +1133,10 @@ strong.reviewStatValue { font-size: $font-size-14; }
   color: var(--color-text-muted);
   font-size: $font-size-12;
 }
+
+// 圖示 16px＋間距 6px
+.stepTarget,
+.stepNotes { margin-left: 22px; }
 
 .chipRow {
   display: flex;
@@ -2505,7 +2511,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
 @include respond-below(md) {
   .rubricTable th,
   .rubricTableRow > td { padding-right: $spacing-8; padding-left: $spacing-8; }
-  .rubricDetailRow > td { padding-right: $spacing-8; padding-left: $spacing-8; }
 }
 
 /* 以實際欄寬切換卡片；側欄、縮放與拖拉助理欄都不能把表格擠出畫面。 */
@@ -2519,6 +2524,8 @@ strong.reviewStatValue { font-size: $font-size-14; }
     clip-path: inset(50%);
     white-space: nowrap;
   }
+  // 表頭只留給報讀器；表頭的 ⓘ 拿掉，不然 Tab 會停在看不見的按鈕上（卡片每格有自己的 ⓘ）
+  .rubricTable thead .methodInfo { display: none; }
   .rubricTable tbody { display: block; }
   /* 卡片頂列：左邊「序號＋狀態」是這一項的標籤，右邊「展開＋刪除」是動作，各自成組。
      序號和展開鈕在同一格，用 display: contents 拆開，各自排進卡片的格線 */
@@ -2547,23 +2554,10 @@ strong.reviewStatValue { font-size: $font-size-14; }
   .rubricTableRow > .rubricActionsCell { grid-column: 4; grid-row: 1; padding: 0; }
   .rubricTitleCell { grid-column: 1 / -1; grid-row: 2; }
   .tableField .rubricTitleInput { min-height: 44px; }
-  .rubricDescriptionCell {
-    grid-column: 1 / -1;
-    grid-row: 3;
-
-    &::before {
-      content: attr(data-label);
-      display: block;
-      color: var(--color-text-muted);
-      font-size: $font-size-12;
-      font-weight: $font-weight-500; // 跟詳細設定裡的欄名（dt）同字重
-    }
-  }
+  .rubricDescriptionCell { grid-column: 1 / -1; grid-row: 3; }
+  .rubricMethodLabel { display: flex; }
   .rubricMethodText { min-height: 0; padding: 4px 0; }
   .rubricTargetSummary { margin: 4px 0 0; }
-  .rubricDetailRow { display: block; }
-  .rubricDetailRow > td { display: block; box-sizing: border-box; width: 100%; padding: 0 $spacing-16 $spacing-16; }
-  .rubricDetail { padding: 12px; } // 比外層卡片的 16px 小一階；8px 會讓字貼著框線
   .detectGrid { grid-template-columns: minmax(0, 1fr); }
   .rubricActionBar { gap: $spacing-8; }
   .checkWorkPane .rubricActionBar { padding: $spacing-16; }

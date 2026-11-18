@@ -872,7 +872,7 @@ describe("RubricTable", () => {
     expect(versionHtml).not.toContain("缺少資訊");
   });
 
-  test("展開後用白話列出檢查機器、步驟、通過條件與判定方式", async () => {
+  test("展開後用白話列出檢查機器、步驟與通過條件，判定方式交給徽章", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -916,8 +916,9 @@ describe("RubricTable", () => {
     expect(container.textContent).toContain("檢查機器");
     expect(container.textContent).toContain("n8n（P1）");
     expect(container.textContent).toContain("workflow · LXC · 映像：Ubuntu 24.04");
-    expect(container.textContent).toContain("系統自動判定");
-    expect(container.textContent).toContain("檢查步驟");
+    // 右上徽章已寫「可自動檢查」，展開後不再多一行「系統自動判定」
+    expect(container.textContent).not.toContain("系統自動判定");
+    expect(container.querySelector('ol[aria-label="檢查步驟"]')).toBeTruthy();
     expect(container.textContent).toContain("執行指令");
     expect(container.textContent).toContain("python3 /home/student/project/main.py");
     expect(container.textContent).toContain("通過條件：結束代碼為 0");

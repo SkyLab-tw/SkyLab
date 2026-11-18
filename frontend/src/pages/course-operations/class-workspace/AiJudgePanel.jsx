@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
@@ -24,6 +25,7 @@ import { LayoutContext } from "../../../layout/layoutContext";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import useElementWidth from "../../../hooks/useElementWidth";
 import useFileDrop from "../../../hooks/useFileDrop";
+import useAnchoredMenu from "../../../hooks/useAnchoredMenu";
 import { useQueryErrorEffect, useQueryView } from "../../../hooks/useQueryLoadState";
 import {
   getActiveScriptSet,
@@ -867,7 +869,7 @@ function useRubricHeaders() {
   return [
     <>#<span className={styles.srOnly}>{t("AiJudgePanel.thDetails")}</span></>,
     t("AiJudgePanel.thCheckpoint"),
-    t("AiJudgePanel.thMethod"),
+    <span className={styles.methodLabel}>{t("AiJudgePanel.thMethod")}<MethodInfoTip /></span>,
     t("AiJudgePanel.thAutoSupport"),
     <span className={styles.srOnly}>{t("AiJudgePanel.thActions")}</span>,
   ];
@@ -915,13 +917,140 @@ function RubricTitleCell({ item, index, disabled, onChange }) {
   );
 }
 
-/* 檢查對象晶片是收合時的摘要；展開後詳細設定的檢查步驟會列出同一批路徑／指令，不再重複顯示 */
-function RubricMethodCell({ item, index, expanded }) {
+/* 「由 AI 產生、僅供檢視」：檢測方式與展開後的步驟都由 AI 產生、不能直接改，說明收進欄名旁的 ⓘ。
+   點一下（滑鼠、觸控、鍵盤都行）跳出小提示，點外面或按 Esc 收起；表格版在表頭、卡片版在每格的欄名旁 */
+function MethodInfoTip() {
+  const { t } = useTranslation("teaching");
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const tipId = useId();
+  const close = useCallback(() => setOpen(false), []);
+  // 收起時先播 130ms 離場動畫再卸載（時間同 ActionMenu，需與 .methodInfoOut 一致）
+  const presence = useDialogPresence(open, 130);
+  return (
+    <span className={styles.methodInfo}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={styles.methodInfoBtn}
+        aria-label={t("AiJudgePanel.methodInfoAria")}
+        aria-expanded={open}
+        aria-controls={open ? tipId : undefined}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <MIcon name="info" size={16} aria-hidden="true" />
+      </button>
+      {presence.open && <MethodInfoPopover id={tipId} triggerRef={triggerRef} onClose={close} closing={presence.closing} />}
+    </span>
+  );
+}
+
+const METHOD_INFO_WIDTH = 260;
+
+/* 跟 ActionMenu 一樣 portal 到 body、共用 useAnchoredMenu 定位：放在玻璃面板裡的話，
+   巢狀的 backdrop-filter 模糊不到底下的字，提示會透出後面的內容 */
+function MethodInfoPopover({ id, triggerRef, onClose, closing = false }) {
+  const { t } = useTranslation("teaching");
+  const { ref, pos } = useAnchoredMenu({ anchorRef: triggerRef, onClose, width: METHOD_INFO_WIDTH, align: "left" });
+  // 進出場方向跟著展開方向：往下彈出就由上滑入、往上縮回
+  const className = [
+    styles.methodInfoPopover,
+    pos?.openUp ? styles.methodInfoUp : styles.methodInfoDown,
+    closing ? styles.methodInfoOut : "",
+  ].filter(Boolean).join(" ");
+  return createPortal(
+    <span
+      ref={ref}
+      id={id}
+      role="note"
+      className={className}
+      style={pos ? { top: pos.top, left: pos.left, width: METHOD_INFO_WIDTH } : { top: 0, left: 0, width: METHOD_INFO_WIDTH, visibility: "hidden" }}
+      // portal 的 React 事件仍沿元件樹冒泡：點提示本身不觸發整列展開／收合
+      onClick={(event) => event.stopPropagation()}
+    >
+      {t("AiJudgePanel.detailDesc")}
+    </span>,
+    document.body,
+  );
+}
+
+/* 展開後接在檢測方式底下：在哪台機器、怎麼查。判定方式只在徽章看不出來時補一行
+   （徽章顯示「缺少資訊」時就看不出要不要導師核查）；少見的缺少資訊、腳本查不到時排在最後 */
+function RubricMethodDetail({ id, item, machineNodes, needsReview }) {
+  const { t } = useTranslation("teaching");
+  const checkSteps = item.check_steps ?? [];
+  const executionNode = checkSteps.length > 0 ? getExecutionNodeSummary(item, machineNodes) : null;
+  const missingInformation = Array.isArray(item.missing_information)
+    ? item.missing_information.filter(Boolean)
+    : [];
+  const isPartial = item.detectable === "partial";
+  const showJudgement = item.judgement_mode === "teacher" && (needsReview || isPartial);
+  if (!checkSteps.length && !isPartial && !showJudgement && !item.fallback) {
+    return item.detection_method ? null : <p id={id} className={styles.rubricMethodNote}>{t("AiJudgePanel.detailEmpty")}</p>;
+  }
+  return (
+    <div id={id} className={styles.rubricMethodDetail}>
+      {executionNode && (
+        <p className={styles.rubricMethodMachine}>
+          <MIcon name="dns" size={16} aria-hidden="true" />
+          <span className={styles.srOnly}>{t("AiJudgePanel.detailMachine")}</span>
+          <span>
+            {executionNode.label}
+            {executionNode.detail && <small>{executionNode.detail}</small>}
+          </span>
+        </p>
+      )}
+      {checkSteps.length > 0 && (
+        <ol className={checkSteps.length > 1 ? styles.stepListNumbered : styles.stepList} aria-label={t("AiJudgePanel.detailSteps")}>
+          {checkSteps.map((step, stepIndex) => {
+            const described = describeCheckStep(step);
+            return (
+              <li key={`${step.template_key}-${step.command_key}-${stepIndex}`} className={styles.stepItem}>
+                <span className={styles.stepAction}>
+                  <MIcon name={described.icon} size={16} aria-hidden="true" />
+                  {described.label}
+                </span>
+                {described.target && <code className={styles.stepTarget}>{described.target}</code>}
+                {described.notes.length > 0 && <span className={styles.stepNotes}>{described.notes.join(" · ")}</span>}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {isPartial && (
+        <p className={styles.rubricMethodNote}>
+          {t("AiJudgePanel.labelValue", {
+            label: t("AiJudgePanel.detectablePartial"),
+            value: missingInformation.length ? joinList(missingInformation) : t("AiJudgePanel.detailMissingFallback"),
+          })}
+        </p>
+      )}
+      {showJudgement && (
+        <p className={styles.rubricMethodNote}>
+          {t("AiJudgePanel.labelValue", { label: t("AiJudgePanel.detailJudgement"), value: t("AiJudgePanel.judgeTeacher") })}
+        </p>
+      )}
+      {item.fallback && (
+        <p className={styles.rubricMethodNote}>
+          {t("AiJudgePanel.labelValue", { label: t("AiJudgePanel.detailFallback"), value: item.fallback })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* 檢查對象晶片是收合時的摘要；展開後改成完整的機器與步驟，接在檢測方式底下 */
+function RubricMethodCell({ item, index, expanded, detailId, machineNodes, needsReview }) {
   const { t } = useTranslation("teaching");
   const targetSummaries = expanded ? [] : getRubricTargetSummaries(item);
   return (
     <div className={styles.tableField}>
       <span className={styles.srOnly}>{t("AiJudgePanel.rowMethodLabel", { index: index + 1 })}</span>
+      {/* 卡片版沒有表頭：欄名與 ⓘ 畫在格子裡（表格版隱藏，由表頭顯示） */}
+      <div className={styles.rubricMethodLabel}>
+        <span aria-hidden="true">{t("AiJudgePanel.thMethod")}</span>
+        <MethodInfoTip />
+      </div>
       <p className={`${styles.rubricMethodText} ${!item.detection_method ? styles.rubricMethodTextEmpty : ""}`}>
         {item.detection_method || t("AiJudgePanel.noMethod")}
       </p>
@@ -942,6 +1071,7 @@ function RubricMethodCell({ item, index, expanded }) {
           </div>
         </div>
       )}
+      {expanded && <RubricMethodDetail id={detailId} item={item} machineNodes={machineNodes} needsReview={needsReview} />}
     </div>
   );
 }
@@ -986,15 +1116,19 @@ const rubricColumns = rubricColumnHelper.columns([
     ),
     meta: { thProps: RUBRIC_TH_PROPS, tdClassName: styles.rubricTitleCell },
   }),
-  /* data-label 是窄螢幕卡片版的欄名；寫成函式，DataTableCells 切換語系重繪時才會拿到新語系的文字 */
   rubricColumnHelper.accessor("detection_method", {
     header: () => <RubricHeader index={2} />,
-    cell: ({ row, rowState }) => <RubricMethodCell item={row.original} index={rowState.index} expanded={rowState.expanded} />,
-    meta: {
-      thProps: RUBRIC_TH_PROPS,
-      tdClassName: styles.rubricDescriptionCell,
-      tdProps: () => ({ "data-label": jt("thMethod") }),
-    },
+    cell: ({ row, rowState }) => (
+      <RubricMethodCell
+        item={row.original}
+        index={rowState.index}
+        expanded={rowState.expanded}
+        detailId={rowState.detailId}
+        machineNodes={rowState.machineNodes}
+        needsReview={rowState.needsReview}
+      />
+    ),
+    meta: { thProps: RUBRIC_TH_PROPS, tdClassName: styles.rubricDescriptionCell },
   }),
   rubricColumnHelper.accessor("detectable", {
     header: () => <RubricHeader index={3} />,
@@ -1021,20 +1155,11 @@ const rubricColumns = rubricColumnHelper.columns([
 
 /* row 是 TanStack 的列，item 是它的原始資料（一併傳進來，編譯後的元件才會跟著資料重繪） */
 function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsReview, machineNodes = [] }) {
-  const { t } = useTranslation("teaching");
   const [expanded, setExpanded] = useState(false);
-  const [noteOpen, setNoteOpen] = useState(false);
-  const checkSteps = item.check_steps ?? [];
-  const executionNode = getExecutionNodeSummary(item, machineNodes);
   const detailId = `rubric-detail-${index}`;
-  const detailNoteId = `${detailId}-note`;
-  const missingInformation = Array.isArray(item.missing_information)
-    ? item.missing_information.filter(Boolean)
-    : [];
-  const hasDetails = Boolean(
-    item.detection_method || item.fallback || checkSteps.length || missingInformation.length,
-  );
+  /* item 放進 rowState：資料一改 rowState 就換新，編譯後的格子才會跟著重繪 */
   const rowState = {
+    item,
     index,
     expanded,
     detailId,
@@ -1043,6 +1168,7 @@ function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsR
     onDelete,
     disabled,
     needsReview,
+    machineNodes,
   };
 
   /* 整列可點來展開／收合（滑鼠的捷徑；鍵盤與報讀器走展開鈕）。
@@ -1054,98 +1180,9 @@ function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsR
   }
 
   return (
-    <>
-      <tr className={`${styles.rubricTableRow} ${expanded ? styles.rubricTableRowExpanded : ""}`} onClick={handleRowClick}>
-        <DataTableCells row={row} rowState={rowState} />
-      </tr>
-      {expanded && (
-        <tr className={styles.rubricDetailRow}>
-          <td id={detailId} colSpan={rubricColumns.length}>
-            <div className={styles.rubricDetail}>
-              {/* 「由 AI 產生、僅供檢視」每一項都一樣，收進標題旁的 ⓘ：滑鼠停留看 title，
-                  點一下（觸控、鍵盤）在標題下展開同一句 */}
-              <div className={styles.rubricDetailHead}>
-                <div className={styles.rubricDetailTitle}>
-                  <strong>{t("AiJudgePanel.detailTitle")}</strong>
-                  <button
-                    type="button"
-                    className={styles.rubricDetailInfoBtn}
-                    title={t("AiJudgePanel.detailDesc")}
-                    aria-label={t("AiJudgePanel.detailInfoAria")}
-                    aria-expanded={noteOpen}
-                    aria-controls={detailNoteId}
-                    onClick={() => setNoteOpen((current) => !current)}
-                  >
-                    <MIcon name="info" size={16} aria-hidden="true" />
-                  </button>
-                </div>
-                <p id={detailNoteId} className={styles.rubricDetailNote} hidden={!noteOpen}>
-                  {t("AiJudgePanel.detailDesc")}
-                </p>
-              </div>
-              {!hasDetails ? (
-                <p className={styles.rubricDetailEmpty}>{t("AiJudgePanel.detailEmpty")}</p>
-              ) : (
-                /* 左欄名稱、右欄內容的對照清單：缺什麼 → 在哪台機器 → 怎麼檢查 → 誰判定 → 腳本查不到時 */
-                <dl className={styles.detailFacts}>
-                  {item.detectable === "partial" && (
-                    <div className={styles.detailFact}>
-                      <dt>{t("AiJudgePanel.detectablePartial")}</dt>
-                      <dd>{missingInformation.length
-                        ? joinList(missingInformation)
-                        : t("AiJudgePanel.detailMissingFallback")}</dd>
-                    </div>
-                  )}
-                  {checkSteps.length > 0 && executionNode && (
-                    <div className={styles.detailFact}>
-                      <dt>{t("AiJudgePanel.detailMachine")}</dt>
-                      <dd>
-                        {executionNode.label}
-                        {executionNode.detail && <small>{executionNode.detail}</small>}
-                      </dd>
-                    </div>
-                  )}
-                  {checkSteps.length > 0 && (
-                    <div className={styles.detailFact}>
-                      <dt>{t("AiJudgePanel.detailSteps")}</dt>
-                      <dd>
-                        <ol className={checkSteps.length > 1 ? styles.stepListNumbered : styles.stepList}>
-                          {checkSteps.map((step, stepIndex) => {
-                            const described = describeCheckStep(step);
-                            return (
-                              <li key={`${step.template_key}-${step.command_key}-${stepIndex}`} className={styles.stepItem}>
-                                <span className={styles.stepAction}>
-                                  <MIcon name={described.icon} size={16} aria-hidden="true" />
-                                  {described.label}
-                                </span>
-                                {described.target && <code className={styles.stepTarget}>{described.target}</code>}
-                                {described.notes.length > 0 && <span className={styles.stepNotes}>{described.notes.join(" · ")}</span>}
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      </dd>
-                    </div>
-                  )}
-                  {checkSteps.length > 0 && (
-                    <div className={styles.detailFact}>
-                      <dt>{t("AiJudgePanel.detailJudgement")}</dt>
-                      <dd>{item.judgement_mode === "teacher" ? t("AiJudgePanel.judgeTeacher") : t("AiJudgePanel.judgeSystem")}</dd>
-                    </div>
-                  )}
-                  {item.fallback && (
-                    <div className={styles.detailFact}>
-                      <dt>{t("AiJudgePanel.detailFallback")}</dt>
-                      <dd>{item.fallback}</dd>
-                    </div>
-                  )}
-                </dl>
-              )}
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+    <tr className={styles.rubricTableRow} onClick={handleRowClick}>
+      <DataTableCells row={row} rowState={rowState} />
+    </tr>
   );
 }
 
