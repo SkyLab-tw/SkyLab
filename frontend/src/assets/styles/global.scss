@@ -1,5 +1,5 @@
 @use "themes";
-@use "backgrounds";
+@use "backgrounds" as bg;
 @use "reset";
 
 #root {
@@ -101,20 +101,32 @@
 
 /* ===== 全頁背景層 =====
    預設畫三色暈染，掛上 data-style / data-bg 後
-   由 _backgrounds.scss 的花色覆寫 background */
+   由 _backgrounds.scss 的花色覆寫 background。
+
+   上下各比視窗多畫一段出血（--bg-bleed）：iOS／iPadOS Safari 捲到底回彈時，
+   fixed 元素會跟著頁面一起被拉走；網址列收合時視窗變高，背景層也會慢一拍才長高。
+   只蓋滿視窗（inset: 0）的話，露出來的是 body 底色 --color-bg-base，
+   跟漸層底邊的黃綠暈染接不起來，畫面底部就多一條平的色塊。
+   花色幾何都寫成「視窗內」座標（_backgrounds.scss 的換算函式），視窗裡的外觀不變；
+   padding 讓 content-box 剛好等於視窗，自訂圖片的裁切以它為準。
+   出血半個視窗高：回彈拉出的距離有阻尼，用力拉也很少超過這個長度 */
 body {
   position: relative;
 
   &::before {
+    --bg-bleed: 50vh;
+
     content: "";
     position: fixed;
-    inset: 0;
+    inset: calc(-1 * var(--bg-bleed)) 0;
+    padding-block: var(--bg-bleed);
     pointer-events: none;
     z-index: 0;
-    background:
-      radial-gradient(ellipse 100% 60% at 100% 0%, var(--color-bg-gradient-blue) 0%, transparent 100%),
-      radial-gradient(ellipse 100% 80% at 0% 90%, var(--color-bg-gradient-yellow) 0%, transparent 100%),
-      radial-gradient(ellipse 150% 70% at 100% 100%, var(--color-bg-gradient-green) 0%, transparent 100%);
+    background: bg.glow-3(
+      var(--color-bg-gradient-blue),
+      var(--color-bg-gradient-yellow),
+      var(--color-bg-gradient-green)
+    );
     transition: opacity 0.3s ease;
   }
 }
