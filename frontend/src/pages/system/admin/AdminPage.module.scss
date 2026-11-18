@@ -44,15 +44,25 @@
   }
 }
 
-.registrationOption,
+/* 待審核註冊的標題列：標題靠左、「註冊設定」鈕靠右，窄到放不下時按鈕換到下一行 */
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-8 $spacing-16;
+}
+
 .pendingRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: $spacing-16;
+  padding-top: $spacing-8;
+  border-top: 1px solid var(--color-border);
 
-  > span,
-  > label {
+  > span {
     @include flex-column;
     gap: 4px;
     min-width: 0;
@@ -67,48 +77,55 @@
     font-size: $font-size-12;
     color: var(--color-text-muted);
   }
-}
-
-.registrationOption input[type="checkbox"] {
-  flex: none;
-  width: 18px;
-  height: 18px;
-}
-
-/* 學號信箱網域：文字欄＋儲存，窄螢幕換到說明下方 */
-.registrationOption:has(.domainField) {
-  flex-wrap: wrap;
-
-  /* 說明再長也先在自己欄內換行，欄位寬度不夠時才把輸入框換到下一行 */
-  > label {
-    flex: 1 1 280px;
-  }
-}
-
-.domainField {
-  display: flex;
-  flex: 0 1 320px;
-  gap: $spacing-8;
-  min-width: 0;
-
-  input {
-    @include form-control;
-    min-width: 0;
-  }
-
-  button {
-    flex: none;
-  }
-}
-
-.pendingRow {
-  flex-wrap: wrap;
-  padding-top: $spacing-8;
-  border-top: 1px solid var(--color-border);
 
   > div {
     display: flex;
     gap: $spacing-8;
+  }
+}
+
+/* 註冊設定對話框的開關：勾選框在左、對齊標題那一行，說明接在標題下方；
+   勾選框吃主色，跟 .checkRow 同一套 */
+.settingList {
+  @include flex-column;
+  gap: $spacing-16;
+}
+
+.settingOption {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-8;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 2px 0 0;
+    accent-color: var(--color-primary);
+    cursor: inherit;
+  }
+
+  > span {
+    @include flex-column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  strong {
+    font-size: $font-size-14;
+    font-weight: $font-weight-500;
+    color: var(--color-text-primary);
+  }
+
+  small {
+    font-size: $font-size-12;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+  }
+
+  &:has(input:disabled) {
+    cursor: default;
   }
 }
 

@@ -34,6 +34,7 @@ import { joinList } from "../../../utils/joinList";
 import { isPasswordStrong } from "../../../utils/passwordPolicy";
 import { runBatch } from "../../../utils/runBatch";
 import { GroupManagerDialog, GroupPickDialog } from "./UserGroupDialogs";
+import RegistrationSettingsDialog from "./RegistrationSettingsDialog";
 
 const ROLE_ICONS = {
   student: "school",
@@ -351,7 +352,15 @@ export default function AdminPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const [policySaving, setPolicySaving] = useState(false);
-  const [studentEmailDomainDraft, setStudentEmailDomainDraft] = useState(null);
+  /* 註冊設定對話框：開著時存的是開啟序號（0＝關），當 key 用——離場動畫還沒播完就再開，
+     才會換一個新草稿，不沿用上次沒存的修改（同 UserModal 的 modalSeq） */
+  const [registrationSettingsSeq, setRegistrationSettingsSeq] = useState(0);
+  const registrationSettingsPresence = useDialogPresence(registrationSettingsSeq);
+  const registrationSettingsOpenCount = useRef(0);
+  const openRegistrationSettings = () => {
+    registrationSettingsOpenCount.current += 1;
+    setRegistrationSettingsSeq(registrationSettingsOpenCount.current);
+  };
   const [reviewingId, setReviewingId] = useState(null);
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
@@ -372,7 +381,7 @@ export default function AdminPage() {
      增刪改經 useUserCacheUpdater 就地寫入，寫入前先取消還在路上的刷新 */
   const usersQuery = useAllUsersQuery();
   const pendingQuery = usePendingRegistrationsQuery();
-  /* 開關是按下就存、沒有草稿，跟著清單一起背景刷新 */
+  /* 跟著清單一起背景刷新；正在改的草稿在對話框裡，刷新不會蓋掉 */
   const policyQuery = useRegistrationPolicyQuery({ refetchInterval: LIST_REFRESH_INTERVAL });
   const userCache = useUserCacheUpdater();
   const users = usersQuery.data ?? EMPTY;
@@ -424,32 +433,20 @@ export default function AdminPage() {
   const groupPickPresence = useDialogPresence(groupPick);
   const [groupSaving, setGroupSaving] = useState(false);
 
+  /* 對話框送出的欄位疊在最新的政策上（背景刷新可能已帶回別的管理員改的值），成功才關閉；
+     失敗時對話框與草稿都留著，改一改可以直接再存 */
   async function saveRegistrationPolicy(patch) {
-    if (!registrationPolicy || policySaving) return false;
+    if (!registrationPolicy || policySaving) return;
     setPolicySaving(true);
     try {
       const saved = await UsersService.saveRegistrationPolicy({ ...registrationPolicy, ...patch });
       await userCache.setRegistrationPolicy(saved);
       toast.success(t("AdminPage.registrationSettingsSaved"));
-      return true;
+      setRegistrationSettingsSeq(0);
     } catch (err) {
       toast.error(err?.message ?? t("AdminPage.toastSaveFailed"));
-      return false;
     } finally {
       setPolicySaving(false);
-    }
-  }
-
-  /* 學號信箱網域是文字欄位：編輯中保留草稿（背景刷新不蓋掉），存檔成功才回到顯示已存的值 */
-  const savedStudentEmailDomain = registrationPolicy?.student_email_domain ?? "";
-  const studentEmailDomain = studentEmailDomainDraft ?? savedStudentEmailDomain;
-  const studentEmailDomainChanged = studentEmailDomain.trim() !== savedStudentEmailDomain;
-
-  async function saveStudentEmailDomain(event) {
-    event.preventDefault();
-    if (!studentEmailDomainChanged) return;
-    if (await saveRegistrationPolicy({ student_email_domain: studentEmailDomain.trim() || null })) {
-      setStudentEmailDomainDraft(null);
     }
   }
 
@@ -677,55 +674,16 @@ export default function AdminPage() {
         </button>
       </PageHeader>
 
-      <section className={styles.registrationPanel} aria-label={t("AdminPage.registrationSettingsTitle")} data-guide="admin-registration">
-        <h2>{t("AdminPage.registrationSettingsTitle")}</h2>
-        <label className={styles.registrationOption}>
-          <span>
-            <strong>{t("AdminPage.signupEnabled")}</strong>
-            <small>{t("AdminPage.signupEnabledHint")}</small>
-          </span>
-          <input type="checkbox" checked={Boolean(registrationPolicy?.signup_enabled)}
-            disabled={!registrationPolicy || policySaving}
-            onChange={(event) => saveRegistrationPolicy({ signup_enabled: event.target.checked })} />
-        </label>
-        <label className={styles.registrationOption}>
-          <span>
-            <strong>{t("AdminPage.approvalRequired")}</strong>
-            <small>{t("AdminPage.approvalRequiredHint")}</small>
-          </span>
-          <input type="checkbox" checked={Boolean(registrationPolicy?.approval_required)}
-            disabled={!registrationPolicy || policySaving}
-            onChange={(event) => saveRegistrationPolicy({ approval_required: event.target.checked })} />
-        </label>
-        <label className={styles.registrationOption}>
-          <span>
-            <strong>{t("AdminPage.googleSignupEnabled")}</strong>
-            <small>{t("AdminPage.googleSignupEnabledHint")}</small>
-          </span>
-          <input type="checkbox" checked={Boolean(registrationPolicy?.google_signup_enabled)}
-            disabled={!registrationPolicy || policySaving}
-            onChange={(event) => saveRegistrationPolicy({ google_signup_enabled: event.target.checked })} />
-        </label>
-        <form className={styles.registrationOption} onSubmit={saveStudentEmailDomain}>
-          <label htmlFor="admin-student-email-domain">
-            <strong>{t("AdminPage.studentEmailDomain")}</strong>
-            <small>{t("AdminPage.studentEmailDomainHint")}</small>
-          </label>
-          <div className={styles.domainField}>
-            <input id="admin-student-email-domain" type="text" inputMode="url" autoComplete="off" spellCheck={false}
-              placeholder="school.edu.tw" value={studentEmailDomain}
-              disabled={!registrationPolicy || policySaving}
-              onChange={(event) => setStudentEmailDomainDraft(event.target.value)} />
-            <button type="submit" className={styles.btnSecondary}
-              disabled={!registrationPolicy || policySaving || !studentEmailDomainChanged}>
-              {t("AdminPage.save")}
-            </button>
-          </div>
-        </form>
-      </section>
-
+      {/* 註冊設定平常不用動，收進對話框；開啟鈕放在待審核註冊的標題列，跟它管的審核放一起 */}
       <section className={styles.registrationPanel} aria-label={t("AdminPage.pendingRegistrationsTitle")} data-guide="admin-pending">
-        <h2>{t("AdminPage.pendingRegistrationsTitle")} ({pendingRegistrations.length})</h2>
+        <div className={styles.panelHeader}>
+          <h2>{t("AdminPage.pendingRegistrationsTitle")} ({pendingRegistrations.length})</h2>
+          <button type="button" className={styles.btnSecondary} data-guide="admin-registration"
+            disabled={!registrationPolicy} onClick={openRegistrationSettings}>
+            <MIcon name="settings" size={16} />
+            {t("AdminPage.registrationSettingsTitle")}
+          </button>
+        </div>
         {pendingRegistrations.length === 0 ? (
           <p className={styles.registrationEmpty}>{t("AdminPage.noPendingRegistrations")}</p>
         ) : pendingRegistrations.map((item) => (
@@ -887,6 +845,17 @@ export default function AdminPage() {
           onClose={() => setModal(null)}
           onSubmit={handleSubmit}
           onResetTotp={handleResetTotp}
+        />
+      )}
+
+      {registrationSettingsPresence.open && (
+        <RegistrationSettingsDialog
+          key={registrationSettingsPresence.item}
+          policy={registrationPolicy}
+          saving={policySaving}
+          closing={registrationSettingsPresence.closing}
+          onClose={() => setRegistrationSettingsSeq(0)}
+          onSave={saveRegistrationPolicy}
         />
       )}
 

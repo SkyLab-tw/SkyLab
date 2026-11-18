@@ -19,6 +19,8 @@
   "AdminPage.registrationApproved": "登録を承認しました",
   "AdminPage.registrationRejected": "登録を拒否しました",
   "AdminPage.registrationSettingsSaved": "登録設定を保存しました",
+  "AdminPage.registrationDiscardMessage": "登録設定に未保存の変更があります。閉じるとこれらの変更は失われます。",
+  "AdminPage.registrationDiscard": "変更を破棄",
   "AdminPage.registrationLoadFailed": "登録設定を読み込めませんでした",
   "AdminPage.addUser": "ユーザーを追加",
   "AdminPage.cancel": "キャンセル",

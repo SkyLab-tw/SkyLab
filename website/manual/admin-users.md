@@ -17,8 +17,9 @@ There is no separate "superuser" switch: an account with the **Administrator** r
 
 ### Turn self-registration on or off
 
-1. In the **Registration settings** panel, tick or untick **Allow self-registration**.
-2. The change is saved immediately (a "Registration settings saved" notice appears); there is no separate save button.
+1. Click **Registration settings** at the top right of the **Pending registrations** panel.
+2. Tick or untick **Allow self-registration**.
+3. Click **Save** (a "Registration settings saved" notice appears). If you close the dialog without saving, you are asked whether to discard your changes.
 
 When self-registration is on, any email address may register from the login page. Turning it off only stops email sign-ups; the approval and Google settings are kept, and existing accounts can still log in.
 
@@ -26,8 +27,8 @@ When self-registration is on, any email address may register from the login page
 
 ### Require approval for new accounts
 
-1. In **Registration settings**, tick **Require administrator approval**.
-2. The change is saved immediately.
+1. Open **Registration settings** and tick **Require administrator approval**.
+2. Click **Save**.
 
 While sign-up or Google account creation is open and approval is on, every new account (including school accounts) must be approved before it can be used. Accounts already waiting in the pending list still need a decision even if you turn approval off.
 
@@ -35,8 +36,8 @@ While sign-up or Google account creation is open and approval is on, every new a
 
 ### Allow or block account creation on first Google login
 
-1. In **Registration settings**, tick or untick **Allow account creation on first Google login**.
-2. The change is saved immediately.
+1. Open **Registration settings** and tick or untick **Allow account creation on first Google login**.
+2. Click **Save**.
 
 This switch is separate from self-registration and needs no mail server. When it is on, a Google address that has no account yet gets a student account the first time it signs in with Google, and waits for approval if approval is required. When it is off, only existing accounts can sign in with Google. It only has an effect when the deployment has Google login configured.
 
@@ -174,10 +175,10 @@ The list shows 50 users per page; use **Previous** and **Next** below the list t
 | Role | Student, Teacher or Administrator | You cannot change your own role |
 | Enable account | Whether the account may sign in | You cannot disable your own account; locked until registration is complete |
 | Require two-factor authentication | Forces the user to set up and keep an authenticator app | Shown with an explanation when ticked |
-| Allow self-registration | Lets anyone register from the login page | Saved immediately |
-| Require administrator approval | New registrations wait in Pending registrations | Saved immediately |
-| Allow account creation on first Google login | Lets a Google address without an account create a student account at its first sign-in | Saved immediately; independent of self-registration |
-| Student email domain | Domain added after a bare student ID in class roster and group CSV files, for example `school.edu.tw` | Saved with its **Save** button; a leading `@` and upper case are dropped; leave it empty to require full email addresses in every roster |
+| Allow self-registration | Lets anyone register from the login page | Saved when you click **Save** in Registration settings |
+| Require administrator approval | New registrations wait in Pending registrations | Saved when you click **Save** in Registration settings |
+| Allow account creation on first Google login | Lets a Google address without an account create a student account at its first sign-in | Saved when you click **Save** in Registration settings; independent of self-registration |
+| Student email domain | Domain added after a bare student ID in class roster and group CSV files, for example `school.edu.tw` | Saved when you click **Save** in Registration settings; a leading `@` and upper case are dropped; leave it empty to require full email addresses in every roster |
 | Group name | Name of a group in **Groups** | Required, up to 120 characters, unique regardless of case |
 
 Each row shows the name and email, an **LDAP** tag for directory-managed accounts, a **2FA** tag when two-factor authentication is set up, the role badge, the status (**Active**, **Inactive**, **Email not verified**, **Awaiting approval** or **Registration rejected**) and the creation date.

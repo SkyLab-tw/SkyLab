@@ -19,6 +19,8 @@
   "AdminPage.registrationApproved": "已核准註冊",
   "AdminPage.registrationRejected": "已拒絕註冊",
   "AdminPage.registrationSettingsSaved": "註冊設定已儲存",
+  "AdminPage.registrationDiscardMessage": "註冊設定還有尚未儲存的修改，關閉後這些修改會遺失。",
+  "AdminPage.registrationDiscard": "捨棄修改",
   "AdminPage.registrationLoadFailed": "無法載入註冊設定",
   "AdminPage.addUser": "新增使用者",
   "AdminPage.cancel": "取消",

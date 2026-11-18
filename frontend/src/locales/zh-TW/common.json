@@ -699,7 +699,7 @@
   "UserGuide.adminUsers.groups.title": "用群組整理帳號",
   "UserGuide.adminUsers.groups.text": "「群組管理」可以建立、改名、刪除群組（例如一個班），也能用 CSV 匯入成員。老師開班時可以直接把某個群組的學生匯入名單；群組只有管理員能維護。",
   "UserGuide.adminUsers.registration.title": "開放自行註冊與審核",
-  "UserGuide.adminUsers.registration.text": "這三個開關一切換就立即儲存，沒有另外的儲存鈕。「允許自行註冊」控制登入頁能否申請新帳號；「允許 Google 首次登入自動建帳」另外控制沒有帳號的 Google 信箱能否在首次登入時自動建帳；開啟「註冊後需管理員審核」時，新帳號要在下方核准後才能使用。關閉註冊不影響既有帳號登入。",
+  "UserGuide.adminUsers.registration.text": "按這裡打開註冊設定，改完按「儲存」才會生效。「允許自行註冊」控制登入頁能否申請新帳號；「允許 Google 首次登入自動建帳」另外控制沒有帳號的 Google 信箱能否在首次登入時自動建帳；開啟「註冊後需管理員審核」時，新帳號要在這個區塊核准後才能使用。關閉註冊不影響既有帳號登入。",
   "UserGuide.adminUsers.pending.title": "處理待審核的註冊",
   "UserGuide.adminUsers.pending.text": "這裡列出等待管理員核准的新帳號。按「核准」後對方即可登入；按「拒絕」則帳號無法使用。沒有待審核帳號時這裡會顯示空白提示。",
   "UserGuide.adminUsers.summary.title": "帳號數量一覽",

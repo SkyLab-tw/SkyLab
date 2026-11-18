@@ -19,6 +19,8 @@
   "AdminPage.registrationApproved": "Registration approved",
   "AdminPage.registrationRejected": "Registration rejected",
   "AdminPage.registrationSettingsSaved": "Registration settings saved",
+  "AdminPage.registrationDiscardMessage": "Your changes to the registration settings have not been saved and will be lost if you close.",
+  "AdminPage.registrationDiscard": "Discard changes",
   "AdminPage.registrationLoadFailed": "Could not load registration settings",
   "AdminPage.addUser": "Add User",
   "AdminPage.cancel": "Cancel",
