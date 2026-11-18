@@ -251,7 +251,8 @@ function getDetectableInfo(detectable) {
 const STEP_ACTIONS = {
   command: { get label() { return jt("stepRunCommand"); }, icon: "terminal" },
   file_text: { get label() { return jt("stepReadFile"); }, icon: "description" },
-  file_stat: { get label() { return jt("stepCheckFile"); }, icon: "folder" },
+  /* 查單一檔案在不在、權限大小：用檔案圖示，資料夾會被看成在查目錄 */
+  file_stat: { get label() { return jt("stepCheckFile"); }, icon: "insert_drive_file" },
   localhost_http: { get label() { return jt("stepOpenUrl"); }, icon: "language" },
   peer_ping: { get label() { return jt("stepPeerPing"); }, icon: "hub" },
 };
@@ -291,7 +292,7 @@ export function describeCheckStep(step) {
 
 const TARGET_TYPE_INFO = {
   file_text: { get label() { return jt("targetFileText"); }, icon: "description" },
-  file_stat: { get label() { return jt("targetFile"); }, icon: "folder" },
+  file_stat: { get label() { return jt("targetFile"); }, icon: "insert_drive_file" },
   command: { get label() { return jt("chipCommand"); }, icon: "terminal" },
   localhost_http: { label: "HTTP", icon: "language" },
   peer_ping: { get label() { return jt("targetPeer"); }, icon: "hub" },
@@ -914,9 +915,10 @@ function RubricTitleCell({ item, index, disabled, onChange }) {
   );
 }
 
-function RubricMethodCell({ item, index }) {
+/* 檢查對象晶片是收合時的摘要；展開後詳細設定的檢查步驟會列出同一批路徑／指令，不再重複顯示 */
+function RubricMethodCell({ item, index, expanded }) {
   const { t } = useTranslation("teaching");
-  const targetSummaries = getRubricTargetSummaries(item);
+  const targetSummaries = expanded ? [] : getRubricTargetSummaries(item);
   return (
     <div className={styles.tableField}>
       <span className={styles.srOnly}>{t("AiJudgePanel.rowMethodLabel", { index: index + 1 })}</span>
@@ -987,7 +989,7 @@ const rubricColumns = rubricColumnHelper.columns([
   /* data-label 是窄螢幕卡片版的欄名；寫成函式，DataTableCells 切換語系重繪時才會拿到新語系的文字 */
   rubricColumnHelper.accessor("detection_method", {
     header: () => <RubricHeader index={2} />,
-    cell: ({ row, rowState }) => <RubricMethodCell item={row.original} index={rowState.index} />,
+    cell: ({ row, rowState }) => <RubricMethodCell item={row.original} index={rowState.index} expanded={rowState.expanded} />,
     meta: {
       thProps: RUBRIC_TH_PROPS,
       tdClassName: styles.rubricDescriptionCell,
@@ -1021,9 +1023,11 @@ const rubricColumns = rubricColumnHelper.columns([
 function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsReview, machineNodes = [] }) {
   const { t } = useTranslation("teaching");
   const [expanded, setExpanded] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
   const checkSteps = item.check_steps ?? [];
   const executionNode = getExecutionNodeSummary(item, machineNodes);
   const detailId = `rubric-detail-${index}`;
+  const detailNoteId = `${detailId}-note`;
   const missingInformation = Array.isArray(item.missing_information)
     ? item.missing_information.filter(Boolean)
     : [];
@@ -1058,11 +1062,26 @@ function RubricTableRow({ row, item, index, onChange, onDelete, disabled, needsR
         <tr className={styles.rubricDetailRow}>
           <td id={detailId} colSpan={rubricColumns.length}>
             <div className={styles.rubricDetail}>
+              {/* 「由 AI 產生、僅供檢視」每一項都一樣，收進標題旁的 ⓘ：滑鼠停留看 title，
+                  點一下（觸控、鍵盤）在標題下展開同一句 */}
               <div className={styles.rubricDetailHead}>
-                <div>
+                <div className={styles.rubricDetailTitle}>
                   <strong>{t("AiJudgePanel.detailTitle")}</strong>
-                  <span>{t("AiJudgePanel.detailDesc")}</span>
+                  <button
+                    type="button"
+                    className={styles.rubricDetailInfoBtn}
+                    title={t("AiJudgePanel.detailDesc")}
+                    aria-label={t("AiJudgePanel.detailInfoAria")}
+                    aria-expanded={noteOpen}
+                    aria-controls={detailNoteId}
+                    onClick={() => setNoteOpen((current) => !current)}
+                  >
+                    <MIcon name="info" size={16} aria-hidden="true" />
+                  </button>
                 </div>
+                <p id={detailNoteId} className={styles.rubricDetailNote} hidden={!noteOpen}>
+                  {t("AiJudgePanel.detailDesc")}
+                </p>
               </div>
               {!hasDetails ? (
                 <p className={styles.rubricDetailEmpty}>{t("AiJudgePanel.detailEmpty")}</p>

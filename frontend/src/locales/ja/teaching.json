@@ -887,6 +887,7 @@
   "AiJudgePanel.deleteItemConfirmTitle": "チェック項目を削除しますか？",
   "AiJudgePanel.deleteItemTitle": "項目を削除",
   "AiJudgePanel.detailDesc": "AI が生成した閲覧専用の内容です。変更はAI チェックに依頼してください。",
+  "AiJudgePanel.detailInfoAria": "チェックの詳細設定について",
   "AiJudgePanel.detailEmpty": "AI からチェック方法がまだ提示されていないため、この項目は当面手動で確認します。",
   "AiJudgePanel.detailFallback": "スクリプトで確認できない場合",
   "AiJudgePanel.detailMissingFallback": "サービス名、プログラムの場所、ポート、収集範囲を補足してください。",

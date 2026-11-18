@@ -938,19 +938,58 @@ strong.reviewStatValue { font-size: $font-size-14; }
   background: var(--color-surface);
 }
 
+/* 區塊標題是小標（12px 次要色），不跟項目標題（14px 粗體）搶層級 */
 .rubricDetailHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: $spacing-16;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
 
-  > div {
-    display: grid;
-    gap: 3px;
+.rubricDetailTitle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  strong {
+    color: var(--color-text-secondary);
+    font-size: $font-size-12;
+    font-weight: 600;
+  }
+}
+
+/* 標題旁的 ⓘ：平常淡色無底，hover 淡底；展開說明時換主色 */
+.rubricDetailInfoBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: $radius-pill;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color $transition-base, background $transition-base;
+
+  &:hover {
+    color: var(--color-text-secondary);
+    background: var(--color-hover);
   }
 
-  strong { font-size: $font-size-14; font-weight: $font-weight-700; }
-  span { color: var(--color-text-muted); font-size: $font-size-12; line-height: 1.5; }
+  &[aria-expanded="true"] { color: var(--color-primary-on-surface); }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+}
+
+.rubricDetailNote {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  line-height: 1.5;
 }
 
 .rubricDetailEmpty {
@@ -1074,15 +1113,16 @@ strong.reviewStatValue { font-size: $font-size-14; }
   > :first-child { color: var(--color-text-secondary); }
 }
 
+/* 跟檢測方式下的檢查對象晶片（.rubricTargetItem）同一款：圓角 8、內距 2／8、行高 1.45 */
 .stepTarget {
   max-width: 100%;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 2px 8px;
+  border-radius: $radius-8;
   background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent);
   color: var(--color-text-primary);
   font-family: $font-family-mono;
   font-size: $font-size-12;
-  line-height: 1.6;
+  line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -2466,7 +2506,6 @@ strong.reviewStatValue { font-size: $font-size-14; }
   .rubricTable th,
   .rubricTableRow > td { padding-right: $spacing-8; padding-left: $spacing-8; }
   .rubricDetailRow > td { padding-right: $spacing-8; padding-left: $spacing-8; }
-  .rubricDetailHead { flex-direction: column; }
 }
 
 /* 以實際欄寬切換卡片；側欄、縮放與拖拉助理欄都不能把表格擠出畫面。 */
@@ -2517,13 +2556,14 @@ strong.reviewStatValue { font-size: $font-size-14; }
       display: block;
       color: var(--color-text-muted);
       font-size: $font-size-12;
+      font-weight: $font-weight-500; // 跟詳細設定裡的欄名（dt）同字重
     }
   }
   .rubricMethodText { min-height: 0; padding: 4px 0; }
   .rubricTargetSummary { margin: 4px 0 0; }
   .rubricDetailRow { display: block; }
   .rubricDetailRow > td { display: block; box-sizing: border-box; width: 100%; padding: 0 $spacing-16 $spacing-16; }
-  .rubricDetail { padding: $spacing-8; }
+  .rubricDetail { padding: 12px; } // 比外層卡片的 16px 小一階；8px 會讓字貼著框線
   .detectGrid { grid-template-columns: minmax(0, 1fr); }
   .rubricActionBar { gap: $spacing-8; }
   .checkWorkPane .rubricActionBar { padding: $spacing-16; }
