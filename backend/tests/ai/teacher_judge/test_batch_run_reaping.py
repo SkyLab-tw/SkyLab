@@ -153,7 +153,7 @@ def test_reaper_leaves_a_run_that_progressed_after_it_was_selected(db_session: S
         db_session, artifact, status=TeacherJudgeScriptRunStatus.running, updated_at=RECENT
     )
 
-    executor._mark_run_executor_failed(
+    executor.mark_run_executor_failed(
         run_id,
         "reaped",
         stale_before=NOW - timedelta(hours=executor.STALE_RUN_HOURS),
@@ -203,7 +203,7 @@ async def test_run_reaped_during_execution_is_not_overwritten_as_completed(
 
     def ssh(*, target: dict[str, Any], script_content: str) -> executor.RemoteScriptResult:
         # 模擬回收在 SSH 期間把 run 收成 failed
-        executor._mark_run_executor_failed(run_id, "reaped while running")
+        executor.mark_run_executor_failed(run_id, "reaped while running")
         return _valid_result()
 
     _fake_execution(monkeypatch, ssh)

@@ -146,7 +146,7 @@ async def call_vllm_message(
     url = f"{settings.VLLM_BASE_URL}/chat/completions"
     started = perf_counter()
 
-    logger.debug(f"Calling vLLM API: {url}")
+    logger.debug("Calling vLLM API: %s", url)
 
     try:
         failed_usage: dict[str, Any] = {}
@@ -215,7 +215,10 @@ async def call_vllm_message(
         tps = (completion_tokens / elapsed) if elapsed > 0 else 0.0
 
         logger.info(
-            f"vLLM call successful: {total_tokens} tokens in {elapsed:.2f}s ({tps:.1f} t/s)"
+            "vLLM call successful: %s tokens in %.2fs (%.1f t/s)",
+            total_tokens,
+            elapsed,
+            tps,
         )
 
         choice = data["choices"][0]
@@ -242,16 +245,16 @@ async def call_vllm_message(
         }
         return message, cast("VLLMMetrics", metrics)
     except httpx.TimeoutException as exc:
-        logger.error(f"vLLM API timeout after {timeout}s")
+        logger.error("vLLM API timeout after %ss", timeout)
         raise HTTPException(status_code=504, detail=t("service.vllm_timeout")) from exc
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
-        logger.error(f"vLLM API returned status {status}")
+        logger.error("vLLM API returned status %s", status)
         raise HTTPException(
             status_code=502, detail=t("service.vllm_error_status", status=status)
         ) from exc
     except Exception as exc:
-        logger.error(f"vLLM API call failed: {exc}", exc_info=True)
+        logger.error("vLLM API call failed: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=502, detail=t("service.vllm_call_failed", exc=exc)
         ) from exc

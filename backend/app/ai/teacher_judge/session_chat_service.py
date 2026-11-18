@@ -41,6 +41,7 @@ from app.ai.teacher_judge.machine_context import (
     machine_context_entries,
     rubric_item_machine_issues,
 )
+from app.ai.teacher_judge.proposal_replies import NO_RUBRIC_READY_REPLY
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeRubricChatMessage,
@@ -691,10 +692,7 @@ def build_chat_assistant(
     # Without a selected rubric the conversation is general assistance only;
     # do not let an unconstrained model response create an unreviewed proposal.
     if file is None and proposal:
-        reply = (
-            "這項需求已具備自動檢查條件，但目前尚未選擇檢查表來源，"
-            "因此無法建立可套用提案。請先選擇來源後再送出需求。"
-        )
+        reply = NO_RUBRIC_READY_REPLY
         proposal = None
     if proposal and file is not None:
         validate_proposal_machine_nodes(session, teaching_class_id, proposal)

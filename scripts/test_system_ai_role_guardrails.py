@@ -79,12 +79,8 @@ from app.ai.role_contracts import (  # noqa: E402
     candidate_decision_schema,
     validate_candidate_ids,
 )
-from app.ai.teacher_judge.prompt import (  # noqa: E402
-    CANONICAL_CHECK_STEP_CONTRACT_INSTRUCTION,
-    CHAT_SYSTEM_TEMPLATE,
-    MACHINE_CONTEXT_ONLY_TEMPLATE,
-    SESSION_REQUIREMENT_PROPOSAL_INSTRUCTION,
-    SITUATION_NORMAL,
+from app.ai.teacher_judge.chat_prompt import (  # noqa: E402
+    build_chat_payload as build_teacher_chat_payload,
 )
 from app.ai.teacher_judge.proposal_tools import build_proposal_tools  # noqa: E402
 from app.ai.teacher_judge.service import (  # noqa: E402
@@ -237,21 +233,18 @@ def collect_inventory() -> dict[str, Any]:
 
 
 def _teacher_prompt() -> str:
-    context = MACHINE_CONTEXT_ONLY_TEMPLATE.format(
-        machine_context="P1=node-linux-a（唯一允許的測試目標）"
+    """與 production 非 refine 對話相同的 system prompt（含提案工具段落）。"""
+    payload = build_teacher_chat_payload(
+        [],
+        is_refine=False,
+        template_key="linux",
+        template_commands=None,
+        environment_keys=None,
+        machine_context="P1=node-linux-a（唯一允許的測試目標）",
+        attachment_context=None,
+        rubric_available=True,
     )
-    prompt = (
-        CHAT_SYSTEM_TEMPLATE.replace("{attachment_context}", "（本次沒有附件）")
-        .replace("{situation_instruction}", SITUATION_NORMAL)
-        .replace(
-            "{proposal_mode_instruction}", SESSION_REQUIREMENT_PROPOSAL_INSTRUCTION
-        )
-        .replace(
-            "{template_command_context}",
-            context,
-        )
-    )
-    return prompt + "\n\n" + CANONICAL_CHECK_STEP_CONTRACT_INSTRUCTION
+    return payload["messages"][0]["content"]
 
 
 def _case_catalog() -> tuple[list[ProbeCase], dict[str, list[str]]]:

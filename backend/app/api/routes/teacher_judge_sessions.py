@@ -59,9 +59,9 @@ from app.ai.teacher_judge.script_artifact_service import (
     list_artifact_sets,
 )
 from app.ai.teacher_judge.script_executor_service import (
-    _mark_run_executor_failed,
     execute_script_run,
     execute_script_run_batch,
+    mark_run_executor_failed,
 )
 from app.ai.teacher_judge.script_run_service import (
     create_script_run,
@@ -218,7 +218,7 @@ def _save_script_set_failure(
 def _mark_dispatch_failed(session: SessionDep, run_ids: list[str]) -> None:
     """背景執行器沒接下任務：把這些 run 標成 executor_unavailable，並讓 session 重讀。"""
     for run_id in run_ids:
-        _mark_run_executor_failed(
+        mark_run_executor_failed(
             uuid.UUID(run_id),
             "背景執行器未接受任務。",
             reason_code="executor_unavailable",

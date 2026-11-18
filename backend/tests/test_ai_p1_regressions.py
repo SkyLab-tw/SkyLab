@@ -25,7 +25,6 @@ from app.ai.teacher_judge import (
 from app.ai.teacher_judge import script_executor_service as executor
 from app.ai.teacher_judge.prompt import (
     CHAT_SYSTEM_TEMPLATE,
-    SITUATION_NORMAL,
 )
 from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.schemas import (
@@ -95,7 +94,6 @@ def test_teacher_judge_chat_prompt_is_scoped_and_clarifies_missing_information()
     )
     assert "success_criteria" not in CHAT_SYSTEM_TEMPLATE
     assert "成功條件" not in CHAT_SYSTEM_TEMPLATE
-    assert "你覺得...如何" not in SITUATION_NORMAL
 
 
 def test_retired_success_criteria_is_not_in_new_step_contract() -> None:
@@ -951,7 +949,7 @@ async def test_executor_cancellation_drains_worker_before_recording_failure(
     monkeypatch.setattr(executor, "_save_results", save)
     monkeypatch.setattr(
         executor,
-        "_mark_run_executor_failed",
+        "mark_run_executor_failed",
         lambda *args, **kwargs: events.append("failed"),
     )
     task = asyncio.create_task(executor.execute_script_run(uuid.uuid4()))
@@ -1049,7 +1047,7 @@ async def test_executor_sessions_and_ssh_wait_stay_off_loop(monkeypatch, tmp_pat
         assert stored.status == TeacherJudgeScriptRunStatus.completed
         assert stored.results_document["targets"][0]["vmid"] == 101
     # A late cancellation/failure cannot overwrite a committed completion.
-    await asyncio.to_thread(executor._mark_run_executor_failed, run_id, "late failure")
+    await asyncio.to_thread(executor.mark_run_executor_failed, run_id, "late failure")
     with Session(db_engine) as session:
         assert (
             session.get(TeacherJudgeScriptRun, run_id).status

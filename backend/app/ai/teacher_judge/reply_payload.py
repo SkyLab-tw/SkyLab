@@ -6,12 +6,7 @@ import json
 import re
 from typing import Any
 
-from app.ai.teacher_judge.proposal_tools import (
-    CREATE_CHECKLIST_ITEM_TOOL_NAME,
-    EDIT_CHECKLIST_ITEM_TOOL_NAME,
-    GET_CHECKLIST_ITEM_TOOL_NAME,
-    LIST_CHECKLIST_TOOL_NAME,
-)
+from app.ai.teacher_judge.proposal_tools import PROPOSAL_TOOL_NAMES
 
 
 def _as_text_list(value: Any) -> list[Any]:
@@ -157,12 +152,7 @@ def contains_embedded_tool_call(content: str) -> bool:
         name = value.get("name")
         if isinstance(value.get("tool_call"), dict):
             name = value["tool_call"].get("name")
-        if name in {
-            LIST_CHECKLIST_TOOL_NAME,
-            GET_CHECKLIST_ITEM_TOOL_NAME,
-            CREATE_CHECKLIST_ITEM_TOOL_NAME,
-            EDIT_CHECKLIST_ITEM_TOOL_NAME,
-        }:
+        if name in PROPOSAL_TOOL_NAMES:
             return True
     return False
 
