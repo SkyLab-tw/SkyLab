@@ -23,6 +23,7 @@ import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useUnsavedChanges, useUnsavedChangesGuard } from "../../../contexts/UnsavedChangesContext";
 import { LayoutContext } from "../../../layout/layoutContext";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import useAutoGrowTextarea from "../../../hooks/useAutoGrowTextarea";
 import useElementWidth from "../../../hooks/useElementWidth";
 import useFileDrop from "../../../hooks/useFileDrop";
 import useAnchoredMenu from "../../../hooks/useAnchoredMenu";
@@ -1339,31 +1340,7 @@ export function ChatPanel({
 
   // 輸入框從一行開始，隨內容長高；到上限（.chatComposer textarea 的 max-height）就停，
   // 之後在框內捲動。「＋」與送出鈕才會跟第一行文字對齊
-  const resizeComposer = useCallback(() => {
-    const textarea = textareaRef.current;
-    // 看不見的時候（所在分頁隱藏）量到的高度是 0，等看得到再量
-    if (!textarea || textarea.offsetParent === null) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, []);
-
-  useLayoutEffect(() => {
-    resizeComposer();
-  }, [input, resizeComposer]);
-
-  // 拖拉欄寬、縮放視窗會改變換行；從隱藏變成看得到也算寬度改變。寬度變了就重新量
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea || typeof ResizeObserver === "undefined") return undefined;
-    let width = textarea.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (textarea.clientWidth === width) return;
-      width = textarea.clientWidth;
-      resizeComposer();
-    });
-    observer.observe(textarea);
-    return () => observer.disconnect();
-  }, [resizeComposer]);
+  useAutoGrowTextarea(textareaRef, input);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
