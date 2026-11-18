@@ -49,7 +49,11 @@ def test_chat_modules_reach_seams_only_through_chat_transport(module_name: str) 
     bound: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            bound += [a.name for a in node.names if (a.asname or a.name) in SEAM_NAMES]
+            bound += [
+                a.name
+                for a in node.names
+                if a.name in SEAM_NAMES or a.asname in SEAM_NAMES
+            ]
         elif isinstance(node, ast.Name) and node.id in SEAM_NAMES:
             bound.append(node.id)
     assert bound == []
