@@ -442,6 +442,24 @@ Buttons always use the button mixin family (six variants) from `_mixins.scss`; *
   but a danger modifier **must show red text before hover**, and its hover must also include `:not(:disabled)`
 - Danger items inside dropdown menus (PowerMenu, the ⋮ ActionMenu in page headers) are menu styles and are not among these six variants
 
+#### Controls revealed on hover
+
+Controls that stay invisible until you hover their row — a row's delete button, the sidebar pin button, the connection handles on topology nodes —
+are always hidden with `@include reveal-on-hover`; the caller still writes when they appear (`opacity: 1` on the parent's `:hover` / `:focus-within`):
+
+```scss
+.removeBtn { @include btn-icon($danger: true); @include reveal-on-hover; }
+.row:hover .removeBtn,
+.row:focus-within .removeBtn { opacity: 1; }
+```
+
+- The mixin only hides the control on devices that can hover (mouse, trackpad: `(hover: hover)`); touch devices can't hover, so it is always shown there
+- **Don't write `opacity: 0` and bring it back to 1 on `:hover`**: on iOS (iPhone / iPad), if a tap's hover makes something hidden appear,
+  the first tap only counts as a hover and a second tap is needed to click — the whole row, node or sidebar item then needs two taps
+- Hover effects driven by JS state follow the same rule (for example the label that appears when you hover a topology connection): use `onPointerEnter` and don't set the hover state when `pointerType` is `touch`
+- A control that touch devices don't need can be removed there entirely (`@media (hover: none) { display: none; }`), such as unpinned pins in the sidebar:
+  pinning new items is left to devices with a mouse, while pinned items still show their pin and a tap unpins them
+
 #### Chat panels (AI assistant, checklist assistant)
 
 Both chat panels share one mixin family for the header icon buttons, the rounded composer and its send / attach buttons; do not copy them per page:

@@ -443,6 +443,24 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
   但危險修飾類**未 hover 前文字就要是紅色**，且 hover 同樣必加 `:not(:disabled)`
 - 下拉選單裡的危險項（PowerMenu、頁首的 ⋮ ActionMenu）屬選單樣式，不在此六款之列
 
+#### 滑過才浮出的控制項
+
+列尾的刪除鈕、側邊欄的釘選鈕、拓撲節點的連接點這類「平常隱形、滑到那一列才出現」的控制項，
+隱形一律用 `@include reveal-on-hover`，浮出條件照舊寫在呼叫端（父層 `:hover`／`:focus-within` 時 `opacity: 1`）：
+
+```scss
+.removeBtn { @include btn-icon($danger: true); @include reveal-on-hover; }
+.row:hover .removeBtn,
+.row:focus-within .removeBtn { opacity: 1; }
+```
+
+- mixin 只在能滑過的裝置（滑鼠、觸控板，`(hover: hover)`）把它藏起來；觸控裝置沒有滑過，一律常駐顯示
+- **不要直接寫 `opacity: 0` 再用 `:hover` 拉回 1**：iOS（iPhone／iPad）點下去時，若 hover 會讓隱藏的東西浮出來，
+  第一下只會被當成 hover，要再點一下才算點擊——整列、整個節點、整個側邊欄項目都會變成要點兩下
+- 用 JS 狀態做的滑過效果同理（例如拓撲連線滑過才出現標籤）：用 `onPointerEnter`，`pointerType` 是 `touch` 時不設 hover 狀態
+- 觸控裝置上不需要的控制項可以整顆收掉（`@media (hover: none) { display: none; }`），例如側邊欄未釘選的釘子：
+  新增釘選留給有滑鼠的裝置，已釘選的照常顯示、點了取消
+
 #### 聊天面板（AI 助手、檢查表助理）
 
 兩個聊天面板的標頭圖示鈕、圓角輸入框與送出／附件鈕共用同一組 mixin，不要各自手抄：

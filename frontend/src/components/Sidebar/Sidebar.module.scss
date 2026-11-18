@@ -305,7 +305,8 @@
   height: 22px;
   border-radius: $radius-8;
   color: var(--color-text-muted);
-  opacity: 0;
+  /* 未釘選：有滑鼠時滑到該列才浮出（只給能滑過的裝置，iOS 才不會要點兩下才進得了頁面） */
+  @include reveal-on-hover;
   cursor: pointer;
   transition: opacity $transition-base, color $transition-base, background $transition-base;
 
@@ -314,6 +315,14 @@
     background: color-mix(in srgb, var(--color-text-primary) 12%, transparent);
     color: var(--color-text);
     opacity: 1;
+  }
+
+  /* 觸控裝置沒有滑過：未釘選的釘子不放（看不見卻點得到，點到列尾會誤釘），新增釘選留給有滑鼠的裝置；
+     已釘選的照常顯示，點了取消 */
+  @media (hover: none) {
+    &:not(.pinBtnPinned) {
+      display: none;
+    }
   }
 
   /* 已釘選：常駐顯示（未 hover 也看得到），作為狀態標記兼取消入口。

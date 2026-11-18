@@ -73,6 +73,14 @@ export default function ConnectionEdge(props) {
 
   const { t } = useTranslation("network");
   const [hovered, setHovered] = useState(false);
+  /* 只有滑鼠、觸控筆才算滑過：iOS 點下去時若 hover 讓隱藏的標籤浮出來，第一下只會被當成 hover，
+     要點兩下才選得到這條線（同 reveal-on-hover 的規則） */
+  const hoverHandlers = {
+    onPointerEnter: (event) => {
+      if (event.pointerType !== "touch") setHovered(true);
+    },
+    onPointerLeave: () => setHovered(false),
+  };
   const [basePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
@@ -185,8 +193,7 @@ export default function ConnectionEdge(props) {
         strokeWidth={20}
         style={{ cursor }}
         onClick={select}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        {...hoverHandlers}
       />
 
       {/* 主流向路徑（動畫虛線） */}
@@ -236,8 +243,7 @@ export default function ConnectionEdge(props) {
             opacity: showLabel ? 1 : 0,
             transition: "opacity 0.15s",
           }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
+          {...hoverHandlers}
         >
           <button
             type="button"
