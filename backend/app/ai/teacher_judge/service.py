@@ -22,27 +22,13 @@ from app.ai.teacher_judge._types import VLLMMetrics
 from app.ai.teacher_judge.automation_support import (
     missing_step_information,
 )
+from app.ai.teacher_judge.chat_prompt import build_chat_payload
 from app.ai.teacher_judge.chat_transport import (
     MAX_CHAT_COMPLETION_TOKENS,
     merge_vllm_metrics,
 )
-from app.ai.teacher_judge.machine_context import (
-    PEER_IP_TOKEN,
-)
 from app.ai.teacher_judge.prompt import (
-    CHAT_ALLOWED_TOOLS_SECTION,
-    CHAT_ATTACHMENT_DATA_INSTRUCTION,
-    CHAT_CHECK_STEP_CONTRACT_INSTRUCTION,
-    CHAT_NO_TOOLS_SECTION,
-    CHAT_PROPOSAL_SYSTEM_TEMPLATE,
-    CHAT_SYSTEM_TEMPLATE,
-    CHAT_TEMPLATE_COMMANDS_TEMPLATE,
-    DIRECT_RUBRIC_UPDATE_INSTRUCTION,
-    FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION,
-    MACHINE_CONTEXT_ONLY_TEMPLATE,
-    SITUATION_REFINE,
     SUMMARY_SYSTEM_PROMPT,
-    TEMPLATE_COMMAND_CONTEXT_TEMPLATE,
 )
 from app.ai.teacher_judge.proposal_replies import (
     NO_RUBRIC_READY_REPLY,
@@ -74,9 +60,7 @@ from app.ai.teacher_judge.rubric_normalization import (
 )
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricChatMessage,
-)
-from app.ai.teacher_judge.template_command_service import (
-    format_template_commands_for_prompt,
+    TeacherJudgeRubricItem,
 )
 from app.ai.utils import apply_thinking_control
 from app.core.i18n import t
@@ -132,6 +116,8 @@ class TeacherJudgeItemwiseResult:
 
 
 logger = logging.getLogger(__name__)
+
+_RejectedOps = list[tuple[TeacherJudgeRubricItem, dict[str, Any], str]]
 
 
 def _teacher_turn_context(
@@ -265,46 +251,261 @@ async def summarize_conversation(
         },
         chat_transport.settings.VLLM_ENABLE_THINKING,
     )
-    content, metrics = await chat_transport.call_vllm(payload, timeout=float(chat_transport.settings.VLLM_TIMEOUT))
+    content, metrics = await chat_transport.call_vllm(
+        payload, timeout=float(chat_transport.settings.VLLM_TIMEOUT)
+    )
     return content.strip(), metrics
 
 
-def _chat_proposal_system_prompt(
+async def _gate_staged_ops(
+    messages: list[TeacherJudgeRubricChatMessage],
+    staged_ops: list[dict[str, Any]],
     *,
-    rubric_available: bool,
-    template_key: str,
-    environment_keys: list[str] | None,
-    template_commands: list[TeacherJudgeTemplateCommand] | None,
-    machine_context: str,
-    attachment_context: str,
-) -> str:
-    """Render the chat-proposal system prompt (chat and attachment items only)."""
-    command_block = (
-        "\n"
-        + CHAT_TEMPLATE_COMMANDS_TEMPLATE.replace(
-            "{template_commands}",
-            format_template_commands_for_prompt(template_commands),
-        )
-        if template_commands
-        else ""
+    tool_outcomes: list[dict[str, Any]],
+    metrics: VLLMMetrics,
+    completion_token_budget: int,
+    turn_context: TurnContext,
+) -> tuple[list[dict[str, Any]], VLLMMetrics, bool]:
+    """Action adherence: staged operations survive only if the check allows them."""
+    if not staged_ops:
+        return staged_ops, metrics, False
+    action_candidate = [
+        {
+            "operation": entry["operation"],
+            "item": entry["item"].model_dump(mode="json"),
+        }
+        for entry in staged_ops
+    ]
+    remaining_tokens = completion_token_budget - int(
+        metrics.get("completion_tokens") or 0
     )
-    replacements = {
-        "{tool_section}": (
-            CHAT_ALLOWED_TOOLS_SECTION if rubric_available else CHAT_NO_TOOLS_SECTION
-        ),
-        "{template_key}": template_key,
-        "{environment_keys}": ", ".join(environment_keys or [template_key]),
-        "\n{template_commands}": command_block,
-        "{machine_context}": machine_context,
-        "{check_step_contract}": CHAT_CHECK_STEP_CONTRACT_INSTRUCTION.replace(
-            "{peer_ip_token}", PEER_IP_TOKEN
-        ),
-        "{attachment_context}": attachment_context,
+    if remaining_tokens < ADHERENCE_MAX_TOKENS:
+        return [], metrics, True
+    action_result = await _check_teacher_candidate(
+        contract=TEACHER_ACTION_CONTRACT,
+        messages=messages,
+        candidate=action_candidate,
+        facts={"tool_outcomes": tool_outcomes},
+        turn_context=turn_context,
+        phase="act",
+    )
+    metrics = merge_vllm_metrics(metrics, _adherence_metrics(action_result))
+    if not action_result.allowed:
+        return [], metrics, True
+    return staged_ops, metrics, False
+
+
+def _empty_reply_text(
+    staged_ops: list[dict[str, Any]],
+    rejected_ops: _RejectedOps,
+    *,
+    is_refine: bool,
+    template_commands: list[TeacherJudgeTemplateCommand] | None,
+) -> str:
+    """Neutral text for a recognized payload with an empty reply.
+
+    The later branches can still override it.
+    """
+    if staged_ops:
+        staged_titles = "、".join(
+            f"「{title}」"
+            for title in dict.fromkeys(entry["item"].title for entry in staged_ops)
+        )
+        return f"我已把{staged_titles}整理成提案。請先查看提案內容，確認後再套用。"
+    if is_refine:
+        raise HTTPException(
+            status_code=502,
+            detail="本次未取得有效的檢查說明，無法確認是否需要修改；請重新核對檢查表。",
+        )
+    latest_rejections = dedupe_rejected_ops_keep_latest(rejected_ops)
+    return proposal_unavailable_reply(
+        [entry[0] for entry in latest_rejections],
+        [entry[1] for entry in latest_rejections],
+        template_commands,
+    )
+
+
+def _explain_unbacked_claim(
+    reply_text: str,
+    proposal_status: str | None,
+    *,
+    rejected_ops: _RejectedOps,
+    tool_outcomes: list[dict[str, Any]],
+    rubric_available: bool,
+    template_commands: list[TeacherJudgeTemplateCommand] | None,
+) -> tuple[str, _RejectedOps]:
+    """Replace a Ready or creation claim that no server-side staged outcome backs.
+
+    Returns the corrected reply and the (deduplicated) rejections to keep using.
+    """
+    logger.warning(
+        "Teacher Judge proposal fallback triggered: proposal_status=%s "
+        "prose_claim=%s staged=0 rejected=%d tool_outcomes=%d",
+        proposal_status,
+        reply_claims_created(reply_text),
+        len(rejected_ops),
+        len(tool_outcomes),
+    )
+    if rejected_ops:
+        rejected_ops = dedupe_rejected_ops_keep_latest(rejected_ops)
+        logger.warning(
+            "Teacher Judge rejected %s proposal candidates after validation: %s",
+            len(rejected_ops),
+            "; ".join(f"{entry[0].title}: {entry[2]}" for entry in rejected_ops),
+        )
+        return (
+            proposal_unavailable_reply(
+                [entry[0] for entry in rejected_ops],
+                [entry[1] for entry in rejected_ops],
+                template_commands,
+            ),
+            rejected_ops,
+        )
+    if rubric_available:
+        return proposal_unavailable_reply([], [], template_commands), rejected_ops
+    logger.warning("Teacher Judge ready claim ignored: no rubric source selected")
+    return NO_RUBRIC_READY_REPLY, rejected_ops
+
+
+async def _check_reply(
+    messages: list[TeacherJudgeRubricChatMessage],
+    reply_text: str,
+    proposal_status: str | None,
+    *,
+    updated_items: list[dict[str, Any]] | None,
+    tool_outcomes: list[dict[str, Any]],
+    metrics: VLLMMetrics,
+    completion_token_budget: int,
+    turn_context: TurnContext,
+) -> tuple[str, VLLMMetrics]:
+    """Free-text adherence check of the final reply."""
+    remaining_tokens = completion_token_budget - int(
+        metrics.get("completion_tokens") or 0
+    )
+    if remaining_tokens < ADHERENCE_MAX_TOKENS:
+        return TEACHER_ADHERENCE_FALLBACK, metrics
+    reply_result = await _check_teacher_candidate(
+        contract=TEACHER_FREE_TEXT_CONTRACT,
+        messages=messages,
+        candidate=reply_text,
+        facts={
+            "proposal_status": proposal_status,
+            "staged_item_ids": [
+                str(item.get("id") or "") for item in (updated_items or [])
+            ],
+            "tool_outcomes": tool_outcomes,
+        },
+        turn_context=turn_context,
+        phase="respond",
+    )
+    metrics = merge_vllm_metrics(metrics, _adherence_metrics(reply_result))
+    if not reply_result.allowed:
+        return TEACHER_ADHERENCE_FALLBACK, metrics
+    return reply_text, metrics
+
+
+def _mark_action_blocked(tool_outcomes: list[dict[str, Any]]) -> None:
+    for outcome in tool_outcomes:
+        if outcome.get("status") == "staged":
+            outcome.update(
+                {
+                    "status": "error",
+                    "reason_code": "teacher_judge_action_adherence_blocked",
+                    "reason": "本次修改未通過需求一致性驗證，未建立可套用提案。",
+                    "retryable": False,
+                }
+            )
+
+
+def _missing_location_focus(
+    rejected_ops: _RejectedOps,
+    staged_ops: list[dict[str, Any]],
+    snapshot_items: list[Any],
+) -> tuple[str, dict[str, Any]] | None:
+    """Server-fact question for rejected items that lack an execution location.
+
+    The question must survive a model reply that returned logs, nothing, or an
+    adherence fallback.
+    """
+    staged_title_set = {entry["item"].title for entry in staged_ops}
+    location_rejections = [
+        item
+        for item, _raw, _reason in dedupe_rejected_ops_keep_latest(rejected_ops)
+        if item.title not in staged_title_set
+        and any(missing_step_information(step) for step in item.check_steps)
+        and any(
+            has_gap_marker(gap, ("工作目錄", "路徑"))
+            for gap in item.missing_information
+        )
+    ]
+    if not location_rejections:
+        return None
+    questions = "\n".join(
+        teacher_missing_gap_reply(item) for item in location_rejections
+    )
+    return questions, {
+        "turn_kind": "follow_up",
+        "requirements": [
+            {
+                "focus_key": item.id,
+                "status": "needs_information",
+                "known_information": [item.title],
+                "missing_information": item.missing_information,
+                "target_item_id": item.id
+                if any(
+                    str(raw.get("id")) == item.id
+                    for raw in snapshot_items
+                    if isinstance(raw, dict)
+                )
+                else None,
+            }
+            for item in location_rejections
+        ],
     }
-    prompt = CHAT_PROPOSAL_SYSTEM_TEMPLATE
-    for placeholder, value in replacements.items():
-        prompt = prompt.replace(placeholder, value)
-    return prompt
+
+
+def _unresolved_tool_errors(
+    tool_outcomes: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    return {
+        str(
+            outcome.get("attempt_key") or outcome.get("item_id") or outcome.get("title")
+        ): outcome
+        for outcome in tool_outcomes
+        if outcome.get("reason")
+        and not outcome.get("resolved")
+        and outcome.get("status") in {"error", "rejected", "duplicate"}
+        and (
+            outcome.get("reason_code") == "check_plan_contract_invalid"
+            or outcome.get("status") == "error"
+        )
+    }
+
+
+def _tool_error_focus(
+    unresolved_errors: dict[str, dict[str, Any]],
+    snapshot_items: list[Any],
+) -> dict[str, Any]:
+    return {
+        "turn_kind": "follow_up",
+        "requirements": [
+            {
+                "focus_key": str(error.get("item_id") or key),
+                "status": "analysis_error",
+                "known_information": [error["title"]],
+                "missing_information": [],
+                "target_item_id": error.get("item_id")
+                if any(
+                    raw.get("id") == error.get("item_id")
+                    for raw in snapshot_items
+                    if isinstance(raw, dict)
+                )
+                else None,
+                "reason_code": error.get("reason_code") or "tool_arguments_invalid",
+            }
+            for key, error in list(unresolved_errors.items())[:8]
+        ],
+    }
 
 
 async def chat_with_rubric(
@@ -332,97 +533,16 @@ async def chat_with_rubric(
     if not chat_transport.settings.VLLM_MODEL_NAME:
         raise HTTPException(status_code=503, detail=t("service.model_not_configured"))
 
-    has_attachments = bool(
-        attachment_context and attachment_context != "（本次訊息沒有附件）"
+    payload_data = build_chat_payload(
+        messages,
+        is_refine=is_refine,
+        template_key=template_key,
+        template_commands=template_commands,
+        environment_keys=environment_keys,
+        machine_context=machine_context,
+        attachment_context=attachment_context,
+        rubric_available=rubric_available,
     )
-    prompt_attachment_context = (
-        "本次附件已完成解析，完整內容會在下一則附件資料訊息提供；請優先讀取該資料。"
-        if has_attachments
-        else "（本次訊息沒有附件）"
-    )
-    resolved_machine_context = (
-        machine_context or "（目前未提供班級機器拓撲；不要猜測 target_node_key。）"
-    )
-    if is_refine:
-        context_template = (
-            TEMPLATE_COMMAND_CONTEXT_TEMPLATE
-            if template_commands
-            else MACHINE_CONTEXT_ONLY_TEMPLATE
-        )
-        system_prompt = (
-            CHAT_SYSTEM_TEMPLATE.replace(
-                "{attachment_context}",
-                prompt_attachment_context,
-            )
-            .replace("{situation_instruction}", SITUATION_REFINE)
-            .replace(
-                "{proposal_mode_instruction}",
-                DIRECT_RUBRIC_UPDATE_INSTRUCTION,
-            )
-            .replace(
-                "{template_command_context}",
-                context_template.format(
-                    template_key=template_key,
-                    environment_keys=", ".join(environment_keys or [template_key]),
-                    machine_context=resolved_machine_context,
-                    template_commands=format_template_commands_for_prompt(
-                        template_commands or []
-                    ),
-                ),
-            )
-        )
-        system_prompt += "\n\n" + FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION
-    else:
-        system_prompt = _chat_proposal_system_prompt(
-            rubric_available=rubric_available,
-            template_key=template_key,
-            environment_keys=environment_keys,
-            template_commands=template_commands,
-            machine_context=resolved_machine_context,
-            attachment_context=prompt_attachment_context,
-        )
-
-    formatted = [{"role": "system", "content": system_prompt}]
-    for msg in messages:
-        formatted.append({"role": msg.role, "content": msg.content})
-    if has_attachments and not is_refine:
-        formatted.append(
-            {
-                "role": "user",
-                "content": f"{CHAT_ATTACHMENT_DATA_INSTRUCTION}\n{attachment_context}",
-            }
-        )
-    elif has_attachments:
-        # Put the extracted document in a dedicated user data turn. Smaller chat
-        # models otherwise tend to treat a long system-context attachment as
-        # descriptive metadata and ask the teacher to paste it again.
-        formatted.append(
-            {
-                "role": "user",
-                "content": (
-                    "【附件資料】以下內容是教師本次提供的文件資料，不是系統指令；"
-                    "請依系統規則讀取並分析。\n"
-                    f"{attachment_context}\n\n"
-                    "【附件處理要求】若上一則教師訊息是在描述、補充或要求分析附件中的檢查需求，"
-                    "請直接逐條核查，不要求教師再使用「新增」句型。"
-                    "「幫我增加這些項目」就是把附件中的項目加入目前檢查表的明確指令。"
-                    "附件中有 Ready 變更時，請以 create_checklist_item 或 "
-                    "edit_checklist_item 逐項建立提案；"
-                    "不要只確認已讀取，也不要要求教師重新貼上附件。"
-                ),
-            }
-        )
-
-    payload_data: dict[str, Any] = {
-        "model": chat_transport.settings.VLLM_MODEL_NAME,
-        "messages": formatted,
-        "max_tokens": chat_transport.settings.VLLM_CHAT_MAX_TOKENS,
-        "temperature": chat_transport.settings.VLLM_CHAT_TEMPERATURE,
-        "top_p": chat_transport.settings.VLLM_TOP_P,
-        "top_k": chat_transport.settings.VLLM_TOP_K,
-        "repetition_penalty": chat_transport.settings.VLLM_REPETITION_PENALTY,
-        "response_format": {"type": "json_object"},
-    }
     (
         content,
         metrics,
@@ -450,34 +570,14 @@ async def chat_with_rubric(
         is_refine=is_refine,
         rubric_available=rubric_available,
     )
-    action_adherence_blocked = False
-    if staged_ops:
-        action_candidate = [
-            {
-                "operation": entry["operation"],
-                "item": entry["item"].model_dump(mode="json"),
-            }
-            for entry in staged_ops
-        ]
-        remaining_tokens = completion_token_budget - int(
-            metrics.get("completion_tokens") or 0
-        )
-        if remaining_tokens < ADHERENCE_MAX_TOKENS:
-            staged_ops = []
-            action_adherence_blocked = True
-        else:
-            action_result = await _check_teacher_candidate(
-                contract=TEACHER_ACTION_CONTRACT,
-                messages=messages,
-                candidate=action_candidate,
-                facts={"tool_outcomes": tool_outcomes},
-                turn_context=turn_context,
-                phase="act",
-            )
-            metrics = merge_vllm_metrics(metrics, _adherence_metrics(action_result))
-            if not action_result.allowed:
-                staged_ops = []
-                action_adherence_blocked = True
+    staged_ops, metrics, action_adherence_blocked = await _gate_staged_ops(
+        messages,
+        staged_ops,
+        tool_outcomes=tool_outcomes,
+        metrics=metrics,
+        completion_token_budget=completion_token_budget,
+        turn_context=turn_context,
+    )
 
     reply_text, proposal_status = parse_chat_reply_payload(content)
 
@@ -488,29 +588,13 @@ async def chat_with_rubric(
         for entry in staged_ops
     ] or ([] if is_refine else None)
 
-    # A recognized payload with an empty reply must not become an empty chat
-    # bubble; the branches below can still override this neutral sentence.
     if not reply_text:
-        if staged_ops:
-            staged_titles = "、".join(
-                f"「{title}」"
-                for title in dict.fromkeys(entry["item"].title for entry in staged_ops)
-            )
-            reply_text = (
-                f"我已把{staged_titles}整理成提案。請先查看提案內容，確認後再套用。"
-            )
-        elif is_refine:
-            raise HTTPException(
-                status_code=502,
-                detail="本次未取得有效的檢查說明，無法確認是否需要修改；請重新核對檢查表。",
-            )
-        else:
-            latest_rejections = dedupe_rejected_ops_keep_latest(rejected_ops)
-            reply_text = proposal_unavailable_reply(
-                [entry[0] for entry in latest_rejections],
-                [entry[1] for entry in latest_rejections],
-                template_commands,
-            )
+        reply_text = _empty_reply_text(
+            staged_ops,
+            rejected_ops,
+            is_refine=is_refine,
+            template_commands=template_commands,
+        )
 
     # Tools are the only proposal channel: a ready or prose creation claim
     # without any server-side staged/rejected outcome is false by definition,
@@ -519,118 +603,45 @@ async def chat_with_rubric(
         proposal_status
     ) or reply_claims_created(reply_text)
     if not is_refine and updated_items is None and claims_ready:
-        logger.warning(
-            "Teacher Judge proposal fallback triggered: proposal_status=%s "
-            "prose_claim=%s staged=0 rejected=%d tool_outcomes=%d",
+        reply_text, rejected_ops = _explain_unbacked_claim(
+            reply_text,
             proposal_status,
-            reply_claims_created(reply_text),
-            len(rejected_ops),
-            len(tool_outcomes),
+            rejected_ops=rejected_ops,
+            tool_outcomes=tool_outcomes,
+            rubric_available=rubric_available,
+            template_commands=template_commands,
         )
-        if rejected_ops:
-            rejected_ops = dedupe_rejected_ops_keep_latest(rejected_ops)
-            logger.warning(
-                "Teacher Judge rejected %s proposal candidates after validation: %s",
-                len(rejected_ops),
-                "; ".join(f"{entry[0].title}: {entry[2]}" for entry in rejected_ops),
-            )
-            reply_text = proposal_unavailable_reply(
-                [entry[0] for entry in rejected_ops],
-                [entry[1] for entry in rejected_ops],
-                template_commands,
-            )
-        elif rubric_available:
-            reply_text = proposal_unavailable_reply([], [], template_commands)
-        else:
-            logger.warning(
-                "Teacher Judge ready claim ignored: no rubric source selected"
-            )
-            reply_text = NO_RUBRIC_READY_REPLY
 
     if action_adherence_blocked:
-        for outcome in tool_outcomes:
-            if outcome.get("status") == "staged":
-                outcome.update({
-                    "status": "error",
-                    "reason_code": "teacher_judge_action_adherence_blocked",
-                    "reason": "本次修改未通過需求一致性驗證，未建立可套用提案。",
-                    "retryable": False,
-                })
+        _mark_action_blocked(tool_outcomes)
         reply_text = TEACHER_ADHERENCE_FALLBACK
         proposal_status = "none"
     else:
-        remaining_tokens = completion_token_budget - int(
-            metrics.get("completion_tokens") or 0
+        reply_text, metrics = await _check_reply(
+            messages,
+            reply_text,
+            proposal_status,
+            updated_items=updated_items,
+            tool_outcomes=tool_outcomes,
+            metrics=metrics,
+            completion_token_budget=completion_token_budget,
+            turn_context=turn_context,
         )
-        if remaining_tokens < ADHERENCE_MAX_TOKENS:
-            reply_text = TEACHER_ADHERENCE_FALLBACK
-        else:
-            reply_result = await _check_teacher_candidate(
-                contract=TEACHER_FREE_TEXT_CONTRACT,
-                messages=messages,
-                candidate=reply_text,
-                facts={
-                    "proposal_status": proposal_status,
-                    "staged_item_ids": [
-                        str(item.get("id") or "") for item in (updated_items or [])
-                    ],
-                    "tool_outcomes": tool_outcomes,
-                },
-                turn_context=turn_context,
-                phase="respond",
-            )
-            metrics = merge_vllm_metrics(metrics, _adherence_metrics(reply_result))
-            if not reply_result.allowed:
-                reply_text = TEACHER_ADHERENCE_FALLBACK
 
     conversation_focus = conversation_focus_from_content(
-        content, proposal=updated_items,
+        content,
+        proposal=updated_items,
     )
     model_focus = conversation_focus
+    snapshot_items = rubric_context_data(rubric_context).get("items") or []
     # Missing execution locations are server facts. Preserve their question
     # even when the model returns logs, an empty reply, or an adherence fallback.
-    staged_titles = {entry["item"].title for entry in staged_ops}
-    location_rejections = [
-        item for item, _raw, _reason in dedupe_rejected_ops_keep_latest(rejected_ops)
-        if item.title not in staged_titles
-        and any(missing_step_information(step) for step in item.check_steps)
-        and any(has_gap_marker(gap, ("工作目錄", "路徑")) for gap in item.missing_information)
-    ]
-    if location_rejections:
-        questions = "\n".join(teacher_missing_gap_reply(item) for item in location_rejections)
-        reply_text = questions
+    missing_location = _missing_location_focus(rejected_ops, staged_ops, snapshot_items)
+    if missing_location is not None:
+        reply_text, conversation_focus = missing_location
         proposal_status = "needs_information"
-        conversation_focus = {
-            "turn_kind": "follow_up",
-            "requirements": [
-                {
-                    "focus_key": item.id,
-                    "status": "needs_information",
-                    "known_information": [item.title],
-                    "missing_information": item.missing_information,
-                    "target_item_id": item.id if any(
-                        str(raw.get("id")) == item.id
-                        for raw in (rubric_context_data(rubric_context).get("items") or [])
-                        if isinstance(raw, dict)
-                    ) else None,
-                }
-                for item in location_rejections
-            ],
-        }
 
-    unresolved_errors = {
-        str(
-            outcome.get("attempt_key") or outcome.get("item_id") or outcome.get("title")
-        ): outcome
-        for outcome in tool_outcomes
-        if outcome.get("reason")
-        and not outcome.get("resolved")
-        and outcome.get("status") in {"error", "rejected", "duplicate"}
-        and (
-            outcome.get("reason_code") == "check_plan_contract_invalid"
-            or outcome.get("status") == "error"
-        )
-    }
+    unresolved_errors = _unresolved_tool_errors(tool_outcomes)
     if unresolved_errors:
         # This is a server-owned result, so it survives model/adherence prose.
         if not action_adherence_blocked:
@@ -638,28 +649,7 @@ async def chat_with_rubric(
                 list(unresolved_errors.values()), staged=bool(staged_ops)
             )
         proposal_status = "ready" if staged_ops else "none"
-        conversation_focus = {
-            "turn_kind": "follow_up",
-            "requirements": [
-                {
-                    "focus_key": str(error.get("item_id") or key),
-                    "status": "analysis_error",
-                    "known_information": [error["title"]],
-                    "missing_information": [],
-                    "target_item_id": error.get("item_id")
-                    if any(
-                        raw.get("id") == error.get("item_id")
-                        for raw in (
-                            rubric_context_data(rubric_context).get("items") or []
-                        )
-                        if isinstance(raw, dict)
-                    )
-                    else None,
-                    "reason_code": error.get("reason_code") or "tool_arguments_invalid",
-                }
-                for key, error in list(unresolved_errors.items())[:8]
-            ],
-        }
+        conversation_focus = _tool_error_focus(unresolved_errors, snapshot_items)
 
     if (
         not is_refine

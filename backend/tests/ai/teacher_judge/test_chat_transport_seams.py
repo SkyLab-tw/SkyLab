@@ -32,6 +32,7 @@ CHAT_MODULES = [
         "proposal_tools",
         "rubric_normalization",
         "proposal_rules",
+        "chat_prompt",
         "proposal_replies",
         "proposal_dispatch",
         "proposal_tool_calls",

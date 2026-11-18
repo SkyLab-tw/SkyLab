@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from app.ai.teacher_judge import (
+    chat_prompt,
     machine_context,
     proposal_rules,
     rubric_normalization,
@@ -47,7 +48,7 @@ def test_package_init_does_not_eagerly_load_service() -> None:
 
 def test_peer_ip_token_has_one_definition() -> None:
     assert machine_context.PEER_IP_TOKEN is PEER_IP_TOKEN
-    assert teacher_judge_service.PEER_IP_TOKEN is PEER_IP_TOKEN
+    assert chat_prompt.PEER_IP_TOKEN is PEER_IP_TOKEN
 
 
 def test_proposal_status_claims_ready_reads_only_structured_status() -> None:
