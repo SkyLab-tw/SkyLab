@@ -20,6 +20,7 @@ from app.ai.teacher_judge.deterministic_compiler import (
     canonicalize_check_plan,
     compile_check_plan,
 )
+from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionMessageCreateRequest,
@@ -56,11 +57,11 @@ def test_known_path_conflict_is_repairable_independently_of_assertion(operation,
         arguments = {key: value for key, value in item.items() if key != "id"}
         tool = "create_checklist_item"
     else:
-        proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+        proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, ToolTurnState(**state))
         arguments = {"id": item["id"]}
         tool = "edit_checklist_item"
     arguments.update(detectable="partial", missing_information=["檔案的絕對路徑"])
-    result = proposal_dispatch.execute_checklist_tool(tool, arguments, **state)
+    result = proposal_dispatch.execute_checklist_tool(tool, arguments, ToolTurnState(**state))
     assert result["reason_code"] == "check_plan_contract_invalid"
     assert result["teacher_input_required"] is False
     assert result["retryable"] is True
@@ -72,8 +73,8 @@ def test_index_never_authorizes_edit(finalizer):
     item = file_item()
     state = tool_state(item)
     state["finalizer"] = finalizer
-    proposal_dispatch.execute_checklist_tool("list_checklist", {}, **state)
-    result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {"id": item["id"], "title": "updated"}, **state)
+    proposal_dispatch.execute_checklist_tool("list_checklist", {}, ToolTurnState(**state))
+    result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {"id": item["id"], "title": "updated"}, ToolTurnState(**state))
     assert result["reason_code"] == "checklist_item_not_read"
     assert result["teacher_input_required"] is False
 

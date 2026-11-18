@@ -18,6 +18,7 @@ from app.ai.teacher_judge import (
     session_chat_service,
 )
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
+from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricAnalysis
 from app.ai.teacher_judge.session_service import (
     apply_proposal_operations_to_analysis,
@@ -78,11 +79,11 @@ async def review(monkeypatch, item, responses):
 def test_list_does_not_authorize_finalizer_edit_without_reading_path():
     item = file_item()
     state = tool_state(item)
-    listing = proposal_dispatch.execute_checklist_tool("list_checklist", {}, **state)
+    listing = proposal_dispatch.execute_checklist_tool("list_checklist", {}, ToolTurnState(**state))
     assert "check_steps" not in listing["items"][0]
     result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {
         "id": item["id"], "detectable": "partial", "missing_information": [PATH_GAP],
-    }, **state)
+    }, ToolTurnState(**state))
     assert result["reason_code"] == "checklist_item_not_read"
     assert result["teacher_input_required"] is False
     assert result["retryable"] is True
@@ -95,11 +96,11 @@ def test_list_does_not_authorize_finalizer_edit_without_reading_path():
 def test_located_plan_rejects_prose_gap_as_repairable_contract_error(gap):
     item = file_item()
     state = tool_state(item)
-    detail = proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+    detail = proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, ToolTurnState(**state))
     assert detail["execution_readiness"]["ready"] is True
     result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {
         "id": item["id"], "detectable": "partial", "missing_information": [gap],
-    }, **state)
+    }, ToolTurnState(**state))
     assert result["reason_code"] == "check_plan_contract_invalid"
     assert result["teacher_input_required"] is False
     assert result["retryable"] is True
@@ -173,12 +174,12 @@ async def test_path_conflict_repairs_only_false_gap_and_preserves_date_scope(mon
 def test_finalizer_cannot_replace_known_absolute_path_with_unlocated_relative_path():
     item = file_item()
     state = tool_state(item)
-    proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+    proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, ToolTurnState(**state))
     steps = copy.deepcopy(item["check_steps"])
     steps[0]["collector"]["path"] = "test.txt"
     result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {
         "id": item["id"], "check_steps": steps, "detectable": "auto",
-    }, **state)
+    }, ToolTurnState(**state))
     assert result["reason_code"] == "check_plan_contract_invalid"
     assert result["teacher_input_required"] is False
     assert result["issues"][0]["step_id"] == "file.content"

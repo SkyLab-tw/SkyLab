@@ -20,6 +20,7 @@ from app.ai.teacher_judge import (
     rubric_normalization,
 )
 from app.ai.teacher_judge import service as svc
+from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricChatMessage,
     TeacherJudgeRubricCheckStep,
@@ -452,16 +453,18 @@ def _dispatch(
     result = proposal_dispatch._dispatch_checklist_tool(
         name,
         arguments,
-        snapshot_items=snapshot if snapshot is not None else [],
-        analysis_revision=1,
-        template_key="linux",
-        template_commands=template_commands,
-        machine_entries=machine_entries,
-        ready_only=True,
-        read_ids=read_ids if read_ids is not None else set(),
-        staged_ops=staged if staged is not None else [],
-        rejected_ops=[],
-        tool_calls=tool_calls,
+        ToolTurnState(
+            snapshot_items=snapshot if snapshot is not None else [],
+            analysis_revision=1,
+            template_key="linux",
+            template_commands=template_commands,
+            machine_entries=machine_entries,
+            ready_only=True,
+            read_ids=read_ids if read_ids is not None else set(),
+            staged_ops=staged if staged is not None else [],
+            rejected_ops=[],
+            tool_calls=tool_calls,
+        ),
     )
     return result, tool_calls
 

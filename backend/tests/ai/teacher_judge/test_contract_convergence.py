@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from app.ai.teacher_judge import file_service, proposal_dispatch, service
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.deterministic_compiler import compile_check_plan
+from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeRubricCheckStep,
@@ -33,11 +34,11 @@ def test_legacy_steps_are_read_only_at_every_proposal_boundary(operation, step):
         arguments = {key: value for key, value in item.items() if key != "id"}
         tool = "create_checklist_item"
     else:
-        proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+        proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, ToolTurnState(**state))
         arguments = {"id": item["id"]}
         tool = "edit_checklist_item"
     arguments.update(check_steps=[step], judgement_mode="teacher")
-    result = proposal_dispatch.execute_checklist_tool(tool, arguments, **state)
+    result = proposal_dispatch.execute_checklist_tool(tool, arguments, ToolTurnState(**state))
     assert result["reason_code"] == "check_plan_contract_invalid"
     assert result["teacher_input_required"] is False
     assert result["retryable"] is True
@@ -90,10 +91,10 @@ def test_redeclaring_plan_does_not_silently_remove_unrelated_scope(finalizer):
     item.update(detectable="partial", missing_information=["要收集記錄的日期範圍"])
     state = tool_state(item)
     state.update(finalizer=finalizer, ready_only=not finalizer)
-    proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+    proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, ToolTurnState(**state))
     result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {
         "id": item["id"], "detectable": "auto", "check_steps": item["check_steps"],
-    }, **state)
+    }, ToolTurnState(**state))
     assert not any(entry["item"].detectable == "auto" for entry in state["staged_ops"])
     assert result["unchanged"] is True
     assert item["missing_information"] == ["要收集記錄的日期範圍"]
@@ -147,7 +148,7 @@ def test_two_machine_labels_preserve_same_absolute_path_through_save_and_compile
     for label in ("P1", "P2"):
         arguments = {key: copy.deepcopy(value) for key, value in original.items() if key != "id"}
         arguments.update(title=f"讀取 /root/test/test.txt 內容於 {label}", target_node_key=label)
-        result = proposal_dispatch.execute_checklist_tool("create_checklist_item", arguments, **state)
+        result = proposal_dispatch.execute_checklist_tool("create_checklist_item", arguments, ToolTurnState(**state))
         assert result["staged"] == "add"
     analysis = TeacherJudgeRubricAnalysis(items=[entry["item"] for entry in state["staged_ops"]])
     assert get_script_generation_blockers(analysis, [], require_typed_plan=True) == []

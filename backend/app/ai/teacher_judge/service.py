@@ -55,7 +55,10 @@ from app.ai.teacher_judge.prompt import (
     SUMMARY_SYSTEM_PROMPT,
     TEMPLATE_COMMAND_CONTEXT_TEMPLATE,
 )
-from app.ai.teacher_judge.proposal_dispatch import execute_checklist_tool
+from app.ai.teacher_judge.proposal_dispatch import (
+    ToolTurnState,
+    execute_checklist_tool,
+)
 from app.ai.teacher_judge.proposal_replies import (
     NO_RUBRIC_READY_REPLY,
     dedupe_rejected_ops_keep_latest,
@@ -310,6 +313,19 @@ async def _run_proposal_tool_loop(
     staged_ops: list[dict[str, Any]] = []
     rejected_ops: list[tuple[TeacherJudgeRubricItem, dict[str, Any], str]] = []
     tool_outcomes: list[dict[str, Any]] = []
+    turn = ToolTurnState(
+        snapshot_items=snapshot_items,
+        analysis_revision=analysis_revision,
+        template_key=template_key,
+        template_commands=template_commands,
+        ready_only=ready_only,
+        read_ids=read_ids,
+        staged_ops=staged_ops,
+        rejected_ops=rejected_ops,
+        tool_calls=tool_outcomes,
+        machine_entries=machine_entries,
+        finalizer=finalizer,
+    )
 
     # Chat (and attachment-item) proposals; refine/Finalizer keep their loop.
     chat_mode = ready_only and not finalizer
@@ -619,21 +635,7 @@ async def _run_proposal_tool_loop(
                     }
                 )
             else:
-                result = execute_checklist_tool(
-                    tool_name,
-                    arguments,
-                    snapshot_items=snapshot_items,
-                    analysis_revision=analysis_revision,
-                    template_key=template_key,
-                    template_commands=template_commands,
-                    machine_entries=machine_entries,
-                    ready_only=ready_only,
-                    finalizer=finalizer,
-                    read_ids=read_ids,
-                    staged_ops=staged_ops,
-                    rejected_ops=rejected_ops,
-                    tool_calls=tool_outcomes,
-                )
+                result = execute_checklist_tool(tool_name, arguments, turn)
             if isinstance(result, dict) and result.get("error"):
                 error_counts[attempt_key] = error_counts.get(attempt_key, 0) + 1
                 fingerprint_issues = [

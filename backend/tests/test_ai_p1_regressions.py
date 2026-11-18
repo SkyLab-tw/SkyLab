@@ -27,6 +27,7 @@ from app.ai.teacher_judge.prompt import (
     CHAT_SYSTEM_TEMPLATE,
     SITUATION_NORMAL,
 )
+from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricChatMessage,
     TeacherJudgeRubricCheckStep,
@@ -155,15 +156,17 @@ def test_create_tool_rejection_explains_invalid_step_to_model_only() -> None:
                 }
             ],
         },
-        snapshot_items=[],
-        analysis_revision=1,
-        template_key="linux",
-        template_commands=None,
-        ready_only=True,
-        read_ids=read_ids,
-        staged_ops=staged_ops,
-        rejected_ops=rejected_ops,
-        tool_calls=tool_calls,
+        ToolTurnState(
+            snapshot_items=[],
+            analysis_revision=1,
+            template_key="linux",
+            template_commands=None,
+            ready_only=True,
+            read_ids=read_ids,
+            staged_ops=staged_ops,
+            rejected_ops=rejected_ops,
+            tool_calls=tool_calls,
+        ),
     )
 
     assert "error" in result
@@ -194,15 +197,17 @@ def test_create_tool_blocks_duplicate_title_of_existing_item() -> None:
     result = proposal_dispatch.execute_checklist_tool(
         proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查 ssh 服務狀態"},
-        snapshot_items=snapshot_items,
-        analysis_revision=1,
-        template_key="linux",
-        template_commands=None,
-        ready_only=True,
-        read_ids=read_ids,
-        staged_ops=staged_ops,
-        rejected_ops=rejected_ops,
-        tool_calls=tool_calls,
+        ToolTurnState(
+            snapshot_items=snapshot_items,
+            analysis_revision=1,
+            template_key="linux",
+            template_commands=None,
+            ready_only=True,
+            read_ids=read_ids,
+            staged_ops=staged_ops,
+            rejected_ops=rejected_ops,
+            tool_calls=tool_calls,
+        ),
     )
 
     assert "error" in result
@@ -225,28 +230,32 @@ def test_create_tool_blocks_second_same_title_in_same_turn() -> None:
     first = proposal_dispatch.execute_checklist_tool(
         proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查磁碟空間", "detectable": "manual"},
-        snapshot_items=[],
-        analysis_revision=1,
-        template_key="linux",
-        template_commands=None,
-        ready_only=False,
-        read_ids=read_ids,
-        staged_ops=staged_ops,
-        rejected_ops=rejected_ops,
-        tool_calls=tool_calls,
+        ToolTurnState(
+            snapshot_items=[],
+            analysis_revision=1,
+            template_key="linux",
+            template_commands=None,
+            ready_only=False,
+            read_ids=read_ids,
+            staged_ops=staged_ops,
+            rejected_ops=rejected_ops,
+            tool_calls=tool_calls,
+        ),
     )
     second = proposal_dispatch.execute_checklist_tool(
         proposal_tools.CREATE_CHECKLIST_ITEM_TOOL_NAME,
         {"title": "檢查磁碟空間 "},
-        snapshot_items=[],
-        analysis_revision=1,
-        template_key="linux",
-        template_commands=None,
-        ready_only=False,
-        read_ids=read_ids,
-        staged_ops=staged_ops,
-        rejected_ops=rejected_ops,
-        tool_calls=tool_calls,
+        ToolTurnState(
+            snapshot_items=[],
+            analysis_revision=1,
+            template_key="linux",
+            template_commands=None,
+            ready_only=False,
+            read_ids=read_ids,
+            staged_ops=staged_ops,
+            rejected_ops=rejected_ops,
+            tool_calls=tool_calls,
+        ),
     )
 
     assert first.get("staged") == "add"
