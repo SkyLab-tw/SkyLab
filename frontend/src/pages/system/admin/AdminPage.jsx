@@ -390,7 +390,8 @@ export default function AdminPage() {
   const registrationPolicy = policyQuery.data ?? null;
   const pendingRegistrations = pendingQuery.data?.data ?? EMPTY;
   /* 待審核註冊卡的開合記在本機（預設展開），重整或下次回來維持上次的選擇 */
-  const [pendingOpen, togglePendingOpen] = usePersistedGroupExpansion("admin", "pending-registrations");
+  /* 待審核註冊平常不必看：預設收起，標題上的人數就夠提醒；使用者展開過才記住 */
+  const [pendingOpen, togglePendingOpen] = usePersistedGroupExpansion("admin", "pending-registrations", { defaultExpanded: false });
   /* 載入失敗只在手上沒資料時提示（背景刷新失敗維持靜默、沿用舊資料）。首載失敗看 useQueryView／useLoadError：
      沒資料時 v5 每次重抓都把 status 改回 pending、清掉 error，直接看 isError 會在每次背景重試時閃回整頁載入中、
      重跳同一則 toast；useLoadError 的錯誤在重試期間不清掉，依訊息字串觸發，同一串失敗只提示一次 */

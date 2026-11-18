@@ -104,38 +104,42 @@ describe("AdminPage pending registrations panel", () => {
   const toggle = () => host.querySelector("[aria-controls='admin-pending-list']");
   const pendingNames = () => [...host.querySelectorAll("#admin-pending-list strong")].map((el) => el.textContent);
 
-  test("collapses from its title, keeps the count and settings button, and remembers the choice", async () => {
+  test("starts collapsed with the count and settings button, expands from its title, and remembers the choice", async () => {
     mocks.getRegistrationPolicy.mockResolvedValue({ signup_enabled: true, approval_required: true, google_signup_enabled: false });
     mocks.listPendingRegistrations.mockResolvedValue({
       data: [{ id: "p1", email: "a@example.edu", full_name: "Student A", registration_status: "pending_review" }],
     });
+    const remount = async () => {
+      act(() => root.unmount());
+      root = createRoot(host);
+      await act(async () => { root.render(withQueryClient(<AdminPage />)); });
+      await flush();
+    };
     await act(async () => { root.render(withQueryClient(<AdminPage />)); });
     await flush();
 
-    expect(toggle().getAttribute("aria-expanded")).toBe("true");
-    expect(pendingNames()).toEqual(["Student A"]);
-
+    /* 預設收起：內容留在 DOM 播動畫，但 inert（點不到、Tab 不進去）；標題的人數與註冊設定鈕照常可用 */
     const list = () => host.querySelector("#admin-pending-list");
-    expect(list().hasAttribute("inert")).toBe(false);
-
-    /* 收起後內容留著播淡出與高度動畫，但 inert：點不到、Tab 不進去 */
-    await act(async () => { toggle().click(); });
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
     expect(list().hasAttribute("inert")).toBe(true);
     expect(toggle().textContent).toContain("(1)");
     expect(openButton().disabled).toBe(false);
 
-    /* 重新掛載（離開頁面再回來、重整）仍是收起的 */
-    act(() => root.unmount());
-    root = createRoot(host);
-    await act(async () => { root.render(withQueryClient(<AdminPage />)); });
-    await flush();
-    expect(toggle().getAttribute("aria-expanded")).toBe("false");
-    expect(list().hasAttribute("inert")).toBe(true);
-
     await act(async () => { toggle().click(); });
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
     expect(list().hasAttribute("inert")).toBe(false);
     expect(pendingNames()).toEqual(["Student A"]);
+
+    /* 重新掛載（離開頁面再回來、重整）維持展開 */
+    await remount();
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(list().hasAttribute("inert")).toBe(false);
+
+    /* 再收起後回來又是收起的 */
+    await act(async () => { toggle().click(); });
+    await remount();
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(list().hasAttribute("inert")).toBe(true);
   });
 });
 

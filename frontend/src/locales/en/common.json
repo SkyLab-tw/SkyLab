@@ -701,7 +701,7 @@
   "UserGuide.adminUsers.registration.title": "Self-registration and approval",
   "UserGuide.adminUsers.registration.text": "Open the registration settings here; changes take effect only after you press \"Save\". \"Allow self-registration\" controls whether new accounts can sign up from the login page. \"Allow account creation on first Google login\" separately controls whether a Google address without an account gets one on its first login. With \"Require administrator approval\" on, new accounts can only be used after you approve them below. Turning registration off does not stop existing accounts from signing in.",
   "UserGuide.adminUsers.pending.title": "Handle pending registrations",
-  "UserGuide.adminUsers.pending.text": "New accounts waiting for administrator approval are listed here. \"Approve\" lets them sign in; \"Reject\" leaves the account unusable. When nothing is pending, this area shows an empty notice. Click the title to collapse or expand this panel; it stays that way the next time you come back.",
+  "UserGuide.adminUsers.pending.text": "New accounts waiting for administrator approval are listed here. \"Approve\" lets them sign in; \"Reject\" leaves the account unusable. When nothing is pending, this area shows an empty notice. The panel starts collapsed, with the pending count in the title; click the title to expand or collapse it, and it stays that way the next time you come back.",
   "UserGuide.adminUsers.summary.title": "Account counts at a glance",
   "UserGuide.adminUsers.summary.text": "Total users, active accounts, teachers and admins are counted across all accounts and are not affected by the search below.",
   "UserGuide.adminUsers.row.title": "Each row is one account",
