@@ -24,6 +24,7 @@ from app.ai.teacher_judge.automation_support import (
     ensure_script_generation_supported,
     get_script_generation_blockers,
 )
+from app.ai.teacher_judge.chat_assistant import build_chat_assistant
 from app.ai.teacher_judge.config import settings as teacher_judge_settings
 from app.ai.teacher_judge.file_service import create_blank_file
 from app.ai.teacher_judge.machine_context import (
@@ -83,7 +84,6 @@ from app.ai.teacher_judge.session_chat_service import (
     ChatContext,
     ChatGeneration,
     admit_chat_message,
-    build_chat_assistant,
     load_chat_context,
     persist_chat_reply,
     recover_chat_failure,

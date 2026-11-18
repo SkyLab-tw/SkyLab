@@ -11,11 +11,11 @@ import pytest
 from fastapi import HTTPException
 
 from app.ai.teacher_judge import (
+    chat_assistant,
     chat_transport,
     file_service,
     proposal_tools,
     service,
-    session_chat_service,
     session_service,
 )
 from app.ai.teacher_judge import session_chat_service as chat_flow
@@ -304,7 +304,7 @@ async def test_route_keeps_failed_finalizer_unready_even_if_saved_plan_is_valid(
     calls = install_responses(monkeypatch, responses)
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *_args: None)
     monkeypatch.setattr(chat_flow, "machine_context_entries", lambda *_args: [{"node_key": "web", "display_label": "P1"}])
-    monkeypatch.setattr(session_chat_service, "load_class_machine_nodes", lambda *_args: [SimpleNamespace(node_key="web")])
+    monkeypatch.setattr(chat_assistant, "load_class_machine_nodes", lambda *_args: [SimpleNamespace(node_key="web")])
     response = await teacher_judge_sessions.create_message(
         class_id, session.id,
         TeacherJudgeSessionMessageCreateRequest(content="重新核對完整檢查表", is_refine=True, analysis_revision=1),

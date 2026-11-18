@@ -10,12 +10,12 @@ from types import SimpleNamespace
 import pytest
 
 from app.ai.teacher_judge import (
+    chat_assistant,
     chat_transport,
     file_service,
     proposal_dispatch,
     script_artifact_service,
     service,
-    session_chat_service,
 )
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
@@ -243,7 +243,7 @@ async def test_path_conflict_repair_survives_readiness_save_and_artifact(
         ))
         db.add(file)
         db.commit()
-        workflow = session_chat_service.refine_readiness_workflow(
+        workflow = chat_assistant.refine_readiness_workflow(
             db, teaching_class_id=class_id, session_id=uuid.uuid4(), file=file,
             proposal=result.proposal, template_commands=[],
             analysis_revision=1, tool_calls=result.tool_calls,

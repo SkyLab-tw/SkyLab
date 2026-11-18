@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.ai.teacher_judge import (
+    chat_assistant,
     proposal_dispatch,
     proposal_tools,
     service,
-    session_chat_service,
 )
 from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
@@ -187,8 +187,8 @@ async def test_finalizer_repairs_assertion_without_requesting_known_path(monkeyp
     assert get_script_generation_blockers(candidate, [], require_typed_plan=True) == []
     script, _policy, _review, _plan = compile_check_plan(candidate, target_node_key="linux")
     assert "/root/test/test.txt" in script
-    monkeypatch.setattr(session_chat_service, "load_class_machine_nodes", lambda *args: [])
-    workflow = session_chat_service.refine_readiness_workflow(
+    monkeypatch.setattr(chat_assistant, "load_class_machine_nodes", lambda *args: [])
+    workflow = chat_assistant.refine_readiness_workflow(
         None, teaching_class_id=uuid.uuid4(), session_id=uuid.uuid4(),
         file=SimpleNamespace(id=uuid.uuid4(), analysis_json={"items": [item]}),
         proposal=result.proposal, template_commands=[], analysis_revision=1,
@@ -200,8 +200,8 @@ async def test_finalizer_repairs_assertion_without_requesting_known_path(monkeyp
 @pytest.mark.parametrize("status", ["error", "rejected", "duplicate"])
 def test_unresolved_tool_failure_blocks_finalizer_consistently(monkeypatch, status):
     item = file_item()
-    monkeypatch.setattr(session_chat_service, "load_class_machine_nodes", lambda *args: [])
-    workflow = session_chat_service.refine_readiness_workflow(
+    monkeypatch.setattr(chat_assistant, "load_class_machine_nodes", lambda *args: [])
+    workflow = chat_assistant.refine_readiness_workflow(
         None, teaching_class_id=uuid.uuid4(), session_id=uuid.uuid4(),
         file=SimpleNamespace(id=uuid.uuid4(), analysis_json={"items": [item]}),
         proposal=[], template_commands=[], analysis_revision=1,
