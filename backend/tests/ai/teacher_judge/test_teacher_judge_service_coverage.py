@@ -12,6 +12,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.ai.teacher_judge import (
+    attachment_itemwise,
     chat_transport,
     proposal_dispatch,
     proposal_replies,
@@ -365,7 +366,7 @@ async def test_request_vllm_with_retry_deadline_and_second_connect_error(
         chat_transport, "teacher_judge_client", SimpleNamespace(create_chat_completion=failing)
     )
     monkeypatch.setattr(
-        svc,
+        chat_transport,
         "asyncio",
         SimpleNamespace(
             wait_for=asyncio.wait_for,
@@ -579,9 +580,9 @@ async def test_model_not_configured_guards(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(HTTPException):
         await svc.chat_with_rubric([message], "{}")
     with pytest.raises(HTTPException):
-        await svc.extract_attachment_requirements("doc")
+        await attachment_itemwise.extract_attachment_requirements("doc")
     with pytest.raises(HTTPException):
-        await svc.analyze_attachments_itemwise(
+        await attachment_itemwise.analyze_attachments_itemwise(
             rubric_context="{}", attachment_context="x"
         )
 
@@ -673,12 +674,12 @@ async def test_chat_reply_falls_back_when_no_budget_for_check(
 
 
 def test_parse_attachment_extraction_errors() -> None:
-    assert svc._parse_attachment_extraction("[1]")[1] is not None
-    assert svc._parse_attachment_extraction(json.dumps({"error": " 壞 "})) == (
+    assert attachment_itemwise._parse_attachment_extraction("[1]")[1] is not None
+    assert attachment_itemwise._parse_attachment_extraction(json.dumps({"error": " 壞 "})) == (
         [],
         "壞",
     )
-    assert svc._parse_attachment_extraction(json.dumps({"items": "x"})) == (
+    assert attachment_itemwise._parse_attachment_extraction(json.dumps({"items": "x"})) == (
         [],
         "AI 拆解結果缺少項目清單",
     )
@@ -702,8 +703,8 @@ def test_itemwise_result_variants() -> None:
         conversation_focus={"requirements": ["bad", {"missing_information": [" "]}]},
         proposal_status="needs_information",
     )
-    assert svc._itemwise_focus_missing(needs) == []
-    assert svc._itemwise_result_from_chat(_source(), needs)["status"] == (
+    assert attachment_itemwise._itemwise_focus_missing(needs) == []
+    assert attachment_itemwise._itemwise_result_from_chat(_source(), needs)["status"] == (
         "needs_information"
     )
 
@@ -713,7 +714,7 @@ def test_itemwise_result_variants() -> None:
         metrics=_metrics(),  # type: ignore[arg-type]
         proposal_status="unsupported",
     )
-    row = svc._itemwise_result_from_chat(_source(), unsupported)
+    row = attachment_itemwise._itemwise_result_from_chat(_source(), unsupported)
     assert row["status"] == "unsupported"
 
     error = svc.TeacherJudgeChatResult(
@@ -722,16 +723,16 @@ def test_itemwise_result_variants() -> None:
         metrics=_metrics(),  # type: ignore[arg-type]
         proposal_status=None,
     )
-    assert svc._itemwise_result_from_chat(_source(), error)["status"] == (
+    assert attachment_itemwise._itemwise_result_from_chat(_source(), error)["status"] == (
         "analysis_error"
     )
 
-    failure = svc._itemwise_error_result(
+    failure = attachment_itemwise._itemwise_error_result(
         _source(), HTTPException(status_code=502, detail={"message": "上游失敗"})
     )
     assert failure["detail"] == "AI 回覆失敗：上游失敗"
 
-    reply = svc._itemwise_reply([{**row, "detail": ""}], 1)
+    reply = attachment_itemwise._itemwise_reply([{**row, "detail": ""}], 1)
     assert "目前無法安全取證：沒有合適的檢查方式" in reply
 
 
@@ -753,12 +754,14 @@ async def test_itemwise_rejects_conflicting_merged_steps(
             proposal_status="ready",
         )
 
-    monkeypatch.setattr(svc, "extract_attachment_requirements", fake_extract)
-    monkeypatch.setattr(svc, "analyze_requirement_item", fake_analyze)
+    monkeypatch.setattr(attachment_itemwise, "extract_attachment_requirements", fake_extract)
+    monkeypatch.setattr(attachment_itemwise, "analyze_requirement_item", fake_analyze)
     monkeypatch.setattr(
-        svc, "typed_item_issues", lambda *_a, **_k: [{"message": "conflict"}]
+        attachment_itemwise,
+        "typed_item_issues",
+        lambda *_a, **_k: [{"message": "conflict"}],
     )
-    result = await svc.analyze_attachments_itemwise(
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         rubric_context=json.dumps({"items": []}),
         attachment_context="附件",
     )

@@ -37,6 +37,8 @@ from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlsplit
 
+from app.ai.teacher_judge import attachment_itemwise
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
 REPORT_DIR = REPO_ROOT / "test-results" / "teacher-judge-live"
@@ -527,7 +529,7 @@ async def run_round(case: Case, round_no: int, service: Any) -> dict[str, Any]:
             from app.ai.teacher_judge.attachment_service import attachment_context
 
             result = await asyncio.wait_for(
-                service.analyze_attachments_itemwise(
+                attachment_itemwise.analyze_attachments_itemwise(
                     teacher_message=case.message,
                     attachment_context=attachment_context([attachment]),
                     **common,

@@ -8,7 +8,12 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import chat_transport, proposal_replies, service
+from app.ai.teacher_judge import (
+    attachment_itemwise,
+    chat_transport,
+    proposal_replies,
+    service,
+)
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
 from tests.ai.teacher_judge.helpers import (
     patch_teacher_judge_vllm_settings,
@@ -181,7 +186,7 @@ def test_itemwise_reply_counts_and_names_attention_rows() -> None:
         _row(4, "teacher_review"),
         _row(5, "needs_information", missing_information=["檔案絕對路徑"]),
     ]
-    lines = service._itemwise_reply(rows, 5).splitlines()
+    lines = attachment_itemwise._itemwise_reply(rows, 5).splitlines()
     assert lines[0] == "已建立 4 項提案，請在下方提案清單確認後套用。"
     assert lines[1] == (
         "摘要：共 5 項需求，4 項已建立提案（其中 1 項交給老師核查），1 項需要補資訊或調整。"
@@ -193,7 +198,7 @@ def test_itemwise_reply_counts_and_names_attention_rows() -> None:
 
 
 def test_itemwise_reply_all_ready_has_no_attention_list() -> None:
-    lines = service._itemwise_reply([_row(1, "ready"), _row(2, "ready")], 2).splitlines()
+    lines = attachment_itemwise._itemwise_reply([_row(1, "ready"), _row(2, "ready")], 2).splitlines()
     assert lines == [
         "已建立 2 項提案，請在下方提案清單確認後套用。",
         "摘要：共 2 項需求，2 項已建立提案。",
@@ -201,7 +206,7 @@ def test_itemwise_reply_all_ready_has_no_attention_list() -> None:
 
 
 def test_itemwise_reply_without_any_proposal_does_not_claim_created() -> None:
-    reply = service._itemwise_reply([_row(1, "analysis_error")], 1)
+    reply = attachment_itemwise._itemwise_reply([_row(1, "analysis_error")], 1)
     assert "已建立" not in reply
     assert "摘要：共 1 項需求，沒有建立提案，1 項需要補資訊或調整。" in reply
     assert "- 第 1 列「項目1」這項分析沒有成功" in reply

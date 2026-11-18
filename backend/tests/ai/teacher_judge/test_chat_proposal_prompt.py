@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from app.ai.teacher_judge import (
+    attachment_itemwise,
     chat_transport,
     proposal_replies,
     proposal_tools,
@@ -392,12 +393,12 @@ async def test_attachment_item_missing_information_is_needs_information(
         "description": "程式能正常執行",
     }
 
-    result = await service.analyze_requirement_item(
+    result = await attachment_itemwise.analyze_requirement_item(
         source=source,
         rubric_context=json.dumps({"items": []}),
         rubric_available=True,
     )
-    row = service._itemwise_result_from_chat(source, result)
+    row = attachment_itemwise._itemwise_result_from_chat(source, result)
 
     assert len(calls) == 2
     assert row["status"] == "needs_information"

@@ -18,6 +18,7 @@ from sqlmodel import col, desc, select
 
 from app.ai.monitoring import new_ai_request_id, record_ai_template_call, usage_metrics
 from app.ai.teacher_judge._types import VLLMMetrics
+from app.ai.teacher_judge.attachment_itemwise import analyze_attachments_itemwise
 from app.ai.teacher_judge.attachment_service import (
     MAX_ATTACHMENT_COUNT,
     attachment_context,
@@ -86,10 +87,7 @@ from app.ai.teacher_judge.script_run_service import (
 from app.ai.teacher_judge.script_run_service import (
     update_target_review as save_target_review,
 )
-from app.ai.teacher_judge.service import (
-    analyze_attachments_itemwise,
-    chat_with_rubric,
-)
+from app.ai.teacher_judge.service import chat_with_rubric
 from app.ai.teacher_judge.session_chat_service import (
     build_assistant_metadata,
     prompt_template_scope,

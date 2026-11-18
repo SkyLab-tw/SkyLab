@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException
 from sqlmodel import select
 
-from app.ai.teacher_judge import chat_transport, service
+from app.ai.teacher_judge import attachment_itemwise, chat_transport, service
 from app.ai.teacher_judge.schemas import TeacherJudgeSessionMessageCreateRequest
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_session import (
@@ -157,8 +157,8 @@ async def test_real_itemwise_pipeline_cancels_active_and_waiting_items(
             cancelled.append(source["source_index"])
             raise
 
-    monkeypatch.setattr(service, "extract_attachment_requirements", extract)
-    monkeypatch.setattr(service, "analyze_requirement_item", analyze)
+    monkeypatch.setattr(attachment_itemwise, "extract_attachment_requirements", extract)
+    monkeypatch.setattr(attachment_itemwise, "analyze_requirement_item", analyze)
     monkeypatch.setattr(routes, "get_pending_attachments", lambda *args: [object()])
     monkeypatch.setattr(routes, "bind_attachments_to_message", lambda *args: None)
     monkeypatch.setattr(routes, "attachment_context", lambda *args: "附件")

@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.ai.teacher_judge import chat_transport, service
+from app.ai.teacher_judge import attachment_itemwise, chat_transport, service
 from tests.ai.teacher_judge.helpers import (
     patch_teacher_judge_vllm_settings,
     reply_message,
@@ -85,7 +85,7 @@ async def test_attachment_itemwise_uses_replaced_transport(
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     try:
-        await service.analyze_attachments_itemwise(
+        await attachment_itemwise.analyze_attachments_itemwise(
             teacher_message="",
             rubric_context=json.dumps({"items": []}),
             attachment_context="第 1 列：檢查 nginx 啟動",
