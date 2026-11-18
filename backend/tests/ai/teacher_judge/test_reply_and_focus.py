@@ -14,6 +14,7 @@ from app.ai.role_contracts import (
 )
 from app.ai.teacher_judge import (
     chat_transport,
+    proposal_tool_loop,
     proposal_tools,
     reply_payload,
     rubric_normalization,
@@ -248,7 +249,7 @@ async def test_proposal_loop_respects_cumulative_completion_budget(
     monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
-    _, metrics, _, _, _ = await teacher_judge_service._run_proposal_tool_loop(
+    _, metrics, _, _, _ = await proposal_tool_loop.run_proposal_tool_loop(
         {"messages": [], "max_tokens": 4096},
         rubric_context='{"items":[]}',
         template_key="linux",

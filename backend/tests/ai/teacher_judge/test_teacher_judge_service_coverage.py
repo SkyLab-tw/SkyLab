@@ -16,6 +16,7 @@ from app.ai.teacher_judge import (
     proposal_dispatch,
     proposal_replies,
     proposal_rules,
+    proposal_tool_loop,
     reply_payload,
     rubric_normalization,
 )
@@ -555,7 +556,7 @@ async def test_tool_loop_ignores_non_dict_tool_calls(
         [{"role": "assistant", "content": "最後回覆", "tool_calls": ["bad"]}]
     )
     monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
-    content, *_rest = await svc._run_proposal_tool_loop(
+    content, *_rest = await proposal_tool_loop.run_proposal_tool_loop(
         {"messages": [], "max_tokens": 512},
         rubric_context=json.dumps({"items": []}),
         template_key="linux",
@@ -596,7 +597,7 @@ def _patch_loop(
         return content, _metrics(completion_tokens), staged, [], []
 
     monkeypatch.setattr(chat_transport, "settings", _settings())
-    monkeypatch.setattr(svc, "_run_proposal_tool_loop", fake_loop)
+    monkeypatch.setattr(svc, "run_proposal_tool_loop", fake_loop)
 
 
 def _staged_entry(title: str = "新項目") -> dict[str, Any]:
