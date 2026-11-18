@@ -35,6 +35,12 @@ svg {
   max-width: 100%;
 }
 
+/* React Flow 畫布裡的連線、箭頭 svg 不受上面的 max-width 限制；
+   但左下角操作鈕的圖示要維持 React Flow 原本的 12px 上限，
+   不然扁長的「－」會被撐滿整顆按鈕，看起來比「＋」大 */
+.react-flow svg { max-width: none; }
+.react-flow .react-flow__controls-button svg { max-width: 12px; }
+
 button {
   cursor: pointer;
   border: none;

@@ -59,7 +59,6 @@
   position: relative;
 
   :global(.react-flow) { background: transparent; }
-  :global(.react-flow) svg { max-width: none; }
   :global(.react-flow__background) { background: transparent; }
   :global(.react-flow__edge path) {
     stroke-opacity: 1 !important;

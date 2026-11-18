@@ -1749,10 +1749,6 @@ button.heatAttentionChip {
   background: transparent;
 }
 
-.topologyCanvas :global(.react-flow) svg {
-  max-width: none;
-}
-
 .topologyCanvas :global(.react-flow__edge path) {
   stroke-opacity: 1 !important;
 }
@@ -1851,10 +1847,6 @@ button.heatAttentionChip {
    用 visibility 而非 opacity：蓋得過 hover 規則，連接點仍佔位、線照樣接得上 */
 .readonlyTopology :global(.react-flow__handle) {
   visibility: hidden;
-}
-
-.readonlyTopology :global(.react-flow) svg {
-  max-width: none;
 }
 
 .readonlyTopology :global(.react-flow__edge path) {

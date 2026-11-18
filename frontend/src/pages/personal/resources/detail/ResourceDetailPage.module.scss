@@ -816,7 +816,6 @@
   box-shadow: 0 4px 24px var(--color-flow-shadow);
 
   :global(.react-flow) { background: transparent; }
-  :global(.react-flow) svg { max-width: none; }
   :global(.react-flow__background) { background: transparent; }
   :global(.react-flow__edge path) { stroke-opacity: 1 !important; }
   :global(.react-flow__attribution) { display: none; }
