@@ -838,6 +838,55 @@ def list_booting_vmids(nodes: Iterable[str]) -> set[int]:
 
 
 # ---------------------------------------------------------------------------
+# Main disk（平台管理大小的那顆磁碟）
+# ---------------------------------------------------------------------------
+
+_QEMU_BOOT_DISK_KEYS = ("scsi0", "virtio0", "sata0", "ide0")
+
+
+def qemu_boot_disk(config: dict[str, Any]) -> tuple[str, str] | None:
+    """qemu config 的開機磁碟 (key, 原始設定字串)；找不到回 None。
+
+    先看 ``bootdisk``，沒有再依 scsi0 → virtio0 → sata0 → ide0 取第一個。
+    轉範本偵測磁碟大小、克隆後調整磁碟與規格調整都用同一套判斷。
+    """
+    bootdisk = str(config.get("bootdisk") or "")
+    if bootdisk and config.get(bootdisk):
+        return bootdisk, str(config[bootdisk])
+    for key in _QEMU_BOOT_DISK_KEYS:
+        if config.get(key):
+            return key, str(config[key])
+    return None
+
+
+def main_disk(
+    config: dict[str, Any], resource_type: ResourceType
+) -> tuple[str, str] | None:
+    """機器的主磁碟 (key, 原始設定字串)：VM 是開機磁碟、LXC 是 rootfs。
+
+    「目前磁碟大小」、磁碟所在的儲存區與要放大的磁碟必須是同一顆，一律從
+    這裡取。VM 的開機磁碟不一定是 scsi0（Windows 沒裝 VirtIO 驅動時常見
+    sata0／ide0），寫死 scsi0 會讀不到大小、resize 時 PVE 也找不到磁碟。
+    """
+    if resource_type == "lxc":
+        rootfs = config.get("rootfs")
+        return ("rootfs", str(rootfs)) if rootfs else None
+    return qemu_boot_disk(config)
+
+
+def main_disk_key(node: str, vmid: int, resource_type: ResourceType) -> str | None:
+    """要放大的磁碟 key：LXC 一律 rootfs，VM 讀實際生效的 config 找開機磁碟。
+
+    VM 找不到開機磁碟時回 None，由呼叫端決定怎麼報錯 —— 不要改猜 scsi0。
+    """
+    if resource_type == "lxc":
+        return "rootfs"
+    config = get_config(node, vmid, resource_type, current=True)
+    disk = main_disk(config, resource_type)
+    return disk[0] if disk else None
+
+
+# ---------------------------------------------------------------------------
 # Disk resize
 # ---------------------------------------------------------------------------
 
@@ -1158,18 +1207,11 @@ def get_current_specs(node: str, vmid: int, resource_type: ResourceType) -> dict
     current_memory = config.get("memory")
     current_disk = None
 
-    if resource_type == "qemu":
-        scsi0 = config.get("scsi0", "")
-        if "size=" in scsi0:
-            size_str = scsi0.split("size=")[1].split(",")[0].split(")")[0]
-            if size_str.endswith("G"):
-                current_disk = int(size_str[:-1])
-    else:
-        rootfs = config.get("rootfs", "")
-        if "size=" in rootfs:
-            size_str = rootfs.split("size=")[1].split(",")[0]
-            if size_str.endswith("G"):
-                current_disk = int(size_str[:-1])
+    disk = main_disk(config, resource_type)
+    if disk is not None and "size=" in disk[1]:
+        size_str = disk[1].split("size=")[1].split(",")[0].split(")")[0]
+        if size_str.endswith("G"):
+            current_disk = int(size_str[:-1])
 
     return {"cpu": current_cpu, "memory": current_memory, "disk": current_disk}
 

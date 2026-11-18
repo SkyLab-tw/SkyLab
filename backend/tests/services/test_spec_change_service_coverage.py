@@ -159,6 +159,7 @@ def _fake_pve(
         get_status=lambda *_a, **_k: {"status": status},
         control=control,
         update_config=update_config,
+        main_disk_key=lambda *_a, **_k: "scsi0",
         resize_disk=resize_disk,
         list_all_resources=list_all_resources,
     )

@@ -55,6 +55,7 @@
   "spec_change.not_found": "Request not found",
   "spec_change.already_reviewed": "Request already {status}",
   "spec_change.disk_current_unknown": "Cannot apply disk change for VMID {vmid}: current disk size is unknown",
+  "spec_change.boot_disk_not_found": "Cannot apply disk change for VMID {vmid}: the machine has no boot disk to resize",
   "spec_change.disk_increase_only_detail": "Disk size can only be increased (current={current}GB, requested={requested}GB)",
   "spec_change.apply_failed": "Failed to apply the requested changes: {error}",
   "spec_change.duplicate_open_request": "This machine already has a spec change request in progress ({status}). Wait for it to finish, or cancel it before submitting a new one.",

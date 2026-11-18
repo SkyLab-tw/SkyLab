@@ -473,6 +473,29 @@ def test_get_ip_address_qemu_without_result_or_on_error(api: MagicMock) -> None:
             {"cpu": 2, "memory": 2048, "disk": None},
         ),
         ("qemu", {"cores": 1}, {"cpu": 1, "memory": None, "disk": None}),
+        # 開機磁碟不是 scsi0：Windows 沒裝 VirtIO 驅動時常見 sata0／ide0
+        (
+            "qemu",
+            {
+                "cores": 2,
+                "memory": 4096,
+                "sata0": "local-lvm:vm-100-disk-0,size=60G",
+                "ide2": "local:iso/virtio-win.iso,media=cdrom",
+            },
+            {"cpu": 2, "memory": 4096, "disk": 60},
+        ),
+        # bootdisk 指到別顆時以它為準，不是看到 scsi0 就拿
+        (
+            "qemu",
+            {
+                "cores": 2,
+                "memory": 4096,
+                "bootdisk": "virtio0",
+                "scsi0": "local-lvm:vm-100-disk-1,size=100G",
+                "virtio0": "local-lvm:vm-100-disk-0,size=40G",
+            },
+            {"cpu": 2, "memory": 4096, "disk": 40},
+        ),
         (
             "lxc",
             {"cpus": 2, "memory": 1024, "rootfs": "local-lvm:subvol-101,size=8G"},
@@ -502,6 +525,88 @@ def test_get_current_specs_reads_effective_config(
 
     assert ops.get_current_specs("pve1", 100, resource_type) == expected  # type: ignore[arg-type]
     assert seen["current"] is True
+
+
+# ---------------------------------------------------------------------------
+# main disk（平台管理大小的那顆磁碟）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "config", "expected"),
+    [
+        (
+            "qemu",
+            {"scsi0": "local-lvm:vm-100-disk-0,size=32G"},
+            ("scsi0", "local-lvm:vm-100-disk-0,size=32G"),
+        ),
+        (
+            "qemu",
+            {
+                "ide0": "local-lvm:vm-100-disk-0,size=60G",
+                "ide2": "local:iso/virtio-win.iso,media=cdrom",
+            },
+            ("ide0", "local-lvm:vm-100-disk-0,size=60G"),
+        ),
+        (
+            "qemu",
+            {
+                "bootdisk": "sata1",
+                "scsi0": "local-lvm:vm-100-disk-1,size=100G",
+                "sata1": "ceph-vm:vm-100-disk-0,size=40G",
+            },
+            ("sata1", "ceph-vm:vm-100-disk-0,size=40G"),
+        ),
+        ("qemu", {"cores": 2, "net0": "virtio=AA:BB"}, None),
+        (
+            "lxc",
+            {"rootfs": "local-lvm:subvol-101,size=8G"},
+            ("rootfs", "local-lvm:subvol-101,size=8G"),
+        ),
+        ("lxc", {"cores": 1}, None),
+    ],
+)
+def test_main_disk_is_the_boot_disk_for_vm_and_rootfs_for_container(
+    resource_type: str, config: dict, expected: tuple[str, str] | None
+) -> None:
+    assert ops.main_disk(config, resource_type) == expected  # type: ignore[arg-type]
+
+
+def test_main_disk_key_reads_the_effective_vm_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def _get_config(node: str, vmid: int, rtype: str, *, current: bool) -> dict:
+        seen.update(node=node, vmid=vmid, rtype=rtype, current=current)
+        return {
+            "sata0": "local-lvm:vm-100-disk-0,size=60G",
+            "ide2": "local:iso/virtio-win.iso,media=cdrom",
+        }
+
+    monkeypatch.setattr(ops, "get_config", _get_config)
+
+    assert ops.main_disk_key("pve1", 100, "qemu") == "sata0"
+    assert seen == {"node": "pve1", "vmid": 100, "rtype": "qemu", "current": True}
+
+
+def test_main_disk_key_is_none_when_vm_has_no_boot_disk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ops, "get_config", lambda *_a, **_k: {"cores": 2})
+
+    assert ops.main_disk_key("pve1", 100, "qemu") is None
+
+
+def test_main_disk_key_for_container_is_rootfs_without_asking_pve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _must_not_be_called(*_a: Any, **_k: Any) -> dict:
+        raise AssertionError("container main disk is always rootfs")
+
+    monkeypatch.setattr(ops, "get_config", _must_not_be_called)
+
+    assert ops.main_disk_key("pve1", 101, "lxc") == "rootfs"
 
 
 # ---------------------------------------------------------------------------

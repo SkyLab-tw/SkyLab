@@ -55,6 +55,7 @@
   "spec_change.not_found": "リクエストが見つかりません",
   "spec_change.already_reviewed": "この申請はすでに {status} の状態です",
   "spec_change.disk_current_unknown": "VMID {vmid} のディスク変更を適用できません：現在のディスク容量が不明です",
+  "spec_change.boot_disk_not_found": "VMID {vmid} のディスク変更を適用できません：このマシンの起動ディスクが見つかりません",
   "spec_change.disk_increase_only_detail": "ディスク容量は増加のみ可能です（現在={current}GB、申請={requested}GB）",
   "spec_change.apply_failed": "変更の適用に失敗しました：{error}",
   "spec_change.duplicate_open_request": "このマシンには処理中のスペック変更申請（{status}）があります。完了を待つか、取り消してから再度送信してください",

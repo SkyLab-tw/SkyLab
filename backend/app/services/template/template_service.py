@@ -1283,22 +1283,9 @@ def _detect_password_settable(
     return has_cloud_init_drive(config)
 
 
-_QEMU_BOOT_DISK_KEYS = ("scsi0", "virtio0", "sata0", "ide0")
-
-
-def qemu_boot_disk(config: dict[str, Any]) -> tuple[str, str] | None:
-    """qemu config 的開機磁碟 (key, 原始設定字串)；找不到回 None。
-
-    先看 ``bootdisk``，沒有再依 scsi0 → virtio0 → sata0 → ide0 取第一個。
-    轉範本偵測磁碟大小與克隆後調整磁碟都用同一套判斷。
-    """
-    bootdisk = str(config.get("bootdisk") or "")
-    if bootdisk and config.get(bootdisk):
-        return bootdisk, str(config[bootdisk])
-    for key in _QEMU_BOOT_DISK_KEYS:
-        if config.get(key):
-            return key, str(config[key])
-    return None
+# 開機磁碟的判斷在 infrastructure（規格調整讀目前大小、放大磁碟也用同一套）；
+# 這裡保留原名給轉範本與克隆的既有呼叫端。
+qemu_boot_disk = proxmox_ops.qemu_boot_disk
 
 
 def _parse_disk_size_gb(raw: str) -> int | None:
