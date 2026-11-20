@@ -7,7 +7,7 @@ import { isAdminUser } from "../../utils/roles";
 import MIcon from "../MIcon";
 import { AccountService } from "../../services/account";
 import { ROUTE_DETAILED_GUIDES } from "./pageGuides";
-import { getRouteGuide } from "./routeGuides";
+import { getRouteGuide, USER_GUIDE_START_EVENT } from "./routeGuides";
 import styles from "./UserGuide.module.scss";
 
 const STUDENT_HOME_GUIDE = {
@@ -769,6 +769,15 @@ export default function UserGuide() {
     };
   }, [current, open]);
 
+  // AI 助手等外部入口用事件啟動，和頁首 ? 按鈕走同一個 start
+  const startRef = useRef(null);
+  startRef.current = null;
+  useEffect(() => {
+    const handleStart = () => startRef.current?.();
+    window.addEventListener(USER_GUIDE_START_EVENT, handleStart);
+    return () => window.removeEventListener(USER_GUIDE_START_EVENT, handleStart);
+  }, []);
+
   if (!guide) return null;
 
   /* dismissed：使用者按「跳過」或右上角關閉，不是走完最後一步 */
@@ -815,6 +824,7 @@ export default function UserGuide() {
       setOpen(true);
     }, trigger ? 260 : 80);
   };
+  startRef.current = start;
 
   const next = () => {
     if (current.performSelector) {

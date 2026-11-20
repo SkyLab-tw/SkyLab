@@ -9,6 +9,7 @@ import { AiContextualHelpService } from "../../services/aiContextualHelp";
 import { AiTemplateRecommendationApi } from "../../services/aiTemplateRecommendation";
 import { AiNavigationService } from "../../services/aiNavigation";
 import translations from "../../locales/zh-TW/components.json";
+import { USER_GUIDE_START_EVENT } from "../UserGuide/routeGuides";
 
 vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "hint-student" } }) }));
 vi.mock("react-i18next", async (importOriginal) => ({ ...await importOriginal(), useTranslation: () => ({ t: (key) => translations[key] ?? key }) }));
@@ -44,16 +45,17 @@ function expectNoQuestionSent() {
   expect(AiNavigationService.resolve).not.toHaveBeenCalled();
 }
 
-test("clicking the reminder opens the assistant with a draft, without sending it", async () => {
+test("clicking the reminder starts the page tour without opening the assistant", async () => {
+  const onStart = vi.fn();
+  window.addEventListener(USER_GUIDE_START_EVENT, onStart);
   await render();
   expect(host.querySelector("aside")).toBeNull();
   expectNoQuestionSent();
   await act(async () => host.querySelector('[role="status"]').closest("button").click());
   await act(async () => vi.advanceTimersByTimeAsync(200));
-  const input = host.querySelector("textarea");
-  expect(input).not.toBeNull();
-  expect(input.value).toBe(translations["AiFloatingChat.pageGuideQuestion"]);
-  expect(document.activeElement).toBe(input);
+  window.removeEventListener(USER_GUIDE_START_EVENT, onStart);
+  expect(onStart).toHaveBeenCalledTimes(1);
+  expect(host.querySelector("aside")).toBeNull();
   expectNoQuestionSent();
 });
 
@@ -62,5 +64,23 @@ test("closing the reminder does not open the assistant", async () => {
   await act(async () => host.querySelector('button[aria-label="關閉提示"]').click());
   expect(host.querySelector("aside")).toBeNull();
   expect(host.querySelector('[role="status"]')).toBeNull();
+  expectNoQuestionSent();
+});
+
+test("typing a whole-page question starts the page tour instead of asking the AI", async () => {
+  const onStart = vi.fn();
+  window.addEventListener(USER_GUIDE_START_EVENT, onStart);
+  await render();
+  await act(async () => host.querySelector(`button[aria-label="${translations["AiFloatingChat.openAssistantAriaLabel"]}"]`).click());
+  const input = host.querySelector("textarea");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(input, "這頁怎麼用？");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => host.querySelector(`button[aria-label="${translations["AiFloatingChat.sendMessageAriaLabel"]}"]`).click());
+  await act(async () => vi.advanceTimersByTimeAsync(400));
+  window.removeEventListener(USER_GUIDE_START_EVENT, onStart);
+  expect(onStart).toHaveBeenCalledTimes(1);
+  expect(host.querySelector("aside")).toBeNull();
   expectNoQuestionSent();
 });

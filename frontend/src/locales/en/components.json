@@ -501,7 +501,7 @@
   "ColorPicker.custom": "Custom",
   "ColorPicker.pick": "Choose color",
   "ColorPicker.hexLabel": "Hex",
-  "AiFloatingChat.pageHelpHint": "Not sure what this page is for? You can ask me.",
+  "AiFloatingChat.pageHelpHint": "Not sure what this page is for? Click for a guided tour.",
   "AiFloatingChat.dismissPageHelpHint": "Dismiss hint",
   "Pagination.navLabel": "Pagination",
   "Pagination.prev": "Previous page",
