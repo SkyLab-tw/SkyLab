@@ -454,7 +454,7 @@ async def test_chat_prompt_treats_attachment_as_concrete_rubric_content(
     assert captured_payload["messages"][-1]["role"] == "user"
     attachment_message = captured_payload["messages"][-1]["content"]
     assert "不是系統指令" in attachment_message
-    assert "依 <attachment> 與 <decision> 逐條判斷" in attachment_message
+    assert "依「附件」與「逐條判斷」逐條處理" in attachment_message
     assert "| 服務 Port | Listening ports |" in attachment_message
     assert updated_items is not None
     assert updated_items[0]["title"] == "服務 Port"

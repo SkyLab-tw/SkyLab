@@ -39,7 +39,7 @@ _AWAITING_TEACHER_ERROR = (
 
 _STAGED_REVISIT_ERROR = (
     "本輪提案已建立，不需要再列出、讀取或修改；請停止呼叫工具，"
-    "直接依 <final_answer> 輸出 JSON。"
+    "下一則訊息不帶工具呼叫，直接在 content 依「最終回覆格式」輸出 JSON。"
 )
 
 

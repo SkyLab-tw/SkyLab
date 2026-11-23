@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 _JSON_REPLY_REPAIR_INSTRUCTION = (
-    "上一則回覆不是規定的 JSON。請把它的內容原意改寫成 <final_answer> 指定的 JSON 物件，只輸出 JSON。"
+    "上一則回覆不是規定的 JSON。請把它的內容原意改寫成「最終回覆格式」指定的 JSON 物件，只輸出 JSON。"
     "reply 保留原本要對老師說的話；proposal_status 依本輪工具結果：有 staged 提案為 ready，"
     "正在請老師補充資訊為 needs_information，平台不支援為 unsupported，其他為 none。"
 )

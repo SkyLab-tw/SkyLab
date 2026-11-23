@@ -81,9 +81,9 @@ def _tool_calls_message(*calls: tuple[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _section(prompt: str, tag: str) -> str:
-    match = re.search(rf"<{tag}>(.*?)</{tag}>", prompt, re.S)
-    assert match is not None, tag
+def _section(prompt: str, heading: str) -> str:
+    match = re.search(rf"^# {heading}\n(.*?)(?=^# |\Z)", prompt, re.S | re.M)
+    assert match is not None, heading
     return match.group(1)
 
 
@@ -124,27 +124,31 @@ async def test_chat_prompt_has_each_section_once_without_fill_vocabulary(
     prompt = calls[0]["messages"][0]["content"]
     tool_tag = "allowed_tools" if rubric_available else "no_tools"
     lines = prompt.splitlines()
-    for tag in (
-        tool_tag,
-        "decision",
-        "gaps",
-        "judgement",
-        "tool_results",
-        "final_answer",
+    assert lines.count(f"<{tool_tag}>") == 1
+    assert lines.count(f"</{tool_tag}>") == 1
+    # Only the tool section is XML; rules are Markdown so no tag reads as a tool.
+    assert {
+        line.strip("</>") for line in lines if re.fullmatch(r"</?[a-z_]+>", line)
+    } == {tool_tag}
+    for heading in (
+        "逐條判斷",
+        "缺資訊判準",
+        "判定方式",
+        "工具結果處理",
+        "最終回覆格式",
     ):
-        assert lines.count(f"<{tag}>") == 1, tag
-        assert lines.count(f"</{tag}>") == 1, tag
+        assert lines.count(f"# {heading}") == 1, heading
     for word in ("partial", "manual", "detectable", "fallback"):
         assert word not in prompt
     # missing_information only names reply-focus gaps, never item fill fields.
-    outside_answer = prompt.replace(_section(prompt, "final_answer"), "")
+    outside_answer = prompt.replace(_section(prompt, "最終回覆格式"), "")
     assert "missing_information" not in outside_answer
     # No copyable example sentence or value for the version-check request.
     assert "檢查 Python 版本" not in prompt
     assert "3.12" not in prompt
     rules = prompt
-    for tag in ("gaps", "check_steps", "environment"):
-        rules = rules.replace(_section(prompt, tag), "")
+    for heading in ("缺資訊判準", "檢查步驟格式", "環境"):
+        rules = rules.replace(_section(prompt, heading), "")
     assert "絕對路徑" not in rules
 
 
@@ -159,7 +163,7 @@ async def test_chat_prompt_keeps_machine_follow_up_rule_only_in_gaps(
     )
 
     prompt = calls[0]["messages"][0]["content"]
-    assert "列出可選機器並詢問要檢查哪一台" in _section(prompt, "gaps")
+    assert "列出可選機器並詢問要檢查哪一台" in _section(prompt, "缺資訊判準")
     assert prompt.count("列出可選機器") == 1
 
 
@@ -176,7 +180,7 @@ async def test_refine_prompt_still_uses_refine_templates(
     prompt = calls[0]["messages"][0]["content"]
     assert SITUATION_REFINE.strip() in prompt
     assert FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION.strip() in prompt
-    assert "<decision>" not in prompt
+    assert "# 逐條判斷" not in prompt
     assert CHAT_PROPOSAL_SYSTEM_TEMPLATE.splitlines()[1] not in prompt
 
 
