@@ -53,6 +53,9 @@ const ROUTE_GUIDES = [
   /* /dashboard/course/:id 只是轉址（見 App.jsx），不會停在那個路徑上 */
 ];
 
+/** 從頁首 ? 以外的地方（例如 AI 助手）開始目前頁面的導覽 */
+export const USER_GUIDE_START_EVENT = "skylab:user-guide-start";
+
 export const GENERIC_TOUR_STEPS = [
   {
     selector: '[data-page-guide="header"]',

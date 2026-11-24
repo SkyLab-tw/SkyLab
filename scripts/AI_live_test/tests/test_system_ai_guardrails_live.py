@@ -16,7 +16,7 @@ import pytest
 
 @pytest.fixture(scope="module")
 def runner():
-    path = Path(__file__).resolve().parents[1] / "test_system_ai_role_guardrails.py"
+    path = Path(__file__).resolve().parents[1] / "system_ai_guardrails_live.py"
     spec = importlib.util.spec_from_file_location("role_guardrails_runner", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

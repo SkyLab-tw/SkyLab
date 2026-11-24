@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.ai.teacher_judge import chat_assistant
 from app.ai.teacher_judge import config as tj_config
 from app.ai.teacher_judge import session_chat_service as chat
 from app.ai.teacher_judge.template_command_service import (
@@ -52,12 +53,12 @@ def test_proposal_machine_contract_issues_raise(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        chat,
+        chat_assistant,
         "load_class_machine_nodes",
         lambda *_args: [SimpleNamespace(node_key="web")],
     )
     with pytest.raises(HTTPException) as exc:
-        chat.validate_proposal_machine_nodes(
+        chat_assistant.validate_proposal_machine_nodes(
             None,  # type: ignore[arg-type]
             uuid.uuid4(),
             [

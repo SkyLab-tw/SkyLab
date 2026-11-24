@@ -2,8 +2,8 @@
 """互動式測試 SkyLab 的 OpenAI-compatible Chat API。
 
 執行：
-    python scripts/test_ai_chat.py school.skylab-tw.com
-    SKYLAB_URL=https://school.skylab-tw.com python scripts/test_ai_chat.py
+    python scripts/AI_live_test/ai_api_chat_live.py school.skylab-tw.com
+    SKYLAB_URL=https://school.skylab-tw.com python scripts/AI_live_test/ai_api_chat_live.py
 
 學校平台的網址用參數或環境變數 SKYLAB_URL 指定，都沒有就在執行時詢問。
 API key 只在終端機以隱藏輸入讀取，不會寫入檔案或列印到畫面。

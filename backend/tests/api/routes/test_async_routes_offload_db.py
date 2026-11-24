@@ -17,7 +17,9 @@ from fastapi import HTTPException
 
 from app.ai import monitoring as ai_monitoring
 from app.ai.pve_log import chat as pve_chat_module
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import TeacherJudgeSessionMessageCreateRequest
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.api.routes import classroom as classroom_routes
 from app.api.routes import course_environments as course_environment_routes
 from app.api.routes import teacher_judge_sessions
@@ -57,7 +59,7 @@ async def test_teacher_judge_chat_runs_db_work_off_the_loop(
         teacher_judge_sessions, "_access", lambda *a: threads.mark("access")
     )
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *a, **k: [],
     )
@@ -68,14 +70,14 @@ async def test_teacher_judge_chat_runs_db_work_off_the_loop(
 
     async def fake_chat(messages, rubric_context, **kwargs):
         threads.mark("model")
-        return "好的。", None, {}
+        return TeacherJudgeChatResult("好的。", None, {})
 
     def record_usage(**kwargs: Any) -> None:
         threads.mark("usage")
 
-    monkeypatch.setattr(teacher_judge_sessions, "bounded_history", history)
+    monkeypatch.setattr(chat_flow, "bounded_history", history)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
-    monkeypatch.setattr(teacher_judge_sessions, "record_ai_template_call", record_usage)
+    monkeypatch.setattr(chat_flow, "record_ai_template_call", record_usage)
 
     result = await teacher_judge_sessions.create_message(
         class_id,

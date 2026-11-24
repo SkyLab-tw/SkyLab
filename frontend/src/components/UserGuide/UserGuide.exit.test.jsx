@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import UserGuide from "./UserGuide";
+import { USER_GUIDE_START_EVENT } from "./routeGuides";
 
 const state = vi.hoisted(() => ({ user: null, updateUser: vi.fn(), markSeen: vi.fn() }));
 vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => state }));
@@ -77,4 +78,15 @@ test("使用者自己先打開表單，再跳過導覽時表單保留", async ()
 
   await act(async () => buttonByText("UserGuide.skipButton").click());
   expect(formOpen()).toBe(true);
+});
+
+test("看過導覽後，外部入口（AI 助手）派發開始事件仍會打開導覽", async () => {
+  state.user = { id: "u1", role: "student", seen_user_guides: ["my-requests"] };
+  await openGuide();
+  expect(buttonByText("UserGuide.skipButton")).toBeUndefined();
+
+  await act(async () => window.dispatchEvent(new CustomEvent(USER_GUIDE_START_EVENT)));
+  await act(async () => vi.advanceTimersByTimeAsync(600));
+  await act(async () => vi.advanceTimersByTimeAsync(600));
+  expect(buttonByText("UserGuide.skipButton")).toBeDefined();
 });

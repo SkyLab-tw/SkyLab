@@ -10,8 +10,10 @@ import pytest
 from fastapi import HTTPException
 from sqlmodel import select
 
-from app.ai.teacher_judge import service
+from app.ai.teacher_judge import attachment_itemwise, chat_transport, service
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import TeacherJudgeSessionMessageCreateRequest
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_session import (
     TeacherJudgeMessageRole,
@@ -33,10 +35,10 @@ def context(monkeypatch):
         db.commit()
         db.refresh(item)
         monkeypatch.setattr(routes, "_access", lambda *args: None)
-        monkeypatch.setattr(routes, "schedule_summary", lambda *args, **kwargs: None)
-        monkeypatch.setattr(routes, "record_ai_template_call", lambda **kwargs: None)
+        monkeypatch.setattr(chat_flow, "schedule_summary", lambda *args, **kwargs: None)
+        monkeypatch.setattr(chat_flow, "record_ai_template_call", lambda **kwargs: None)
         monkeypatch.setattr(
-            routes,
+            chat_flow,
             "teacher_judge_settings",
             SimpleNamespace(REQUEST_TIMEOUT_SECONDS=5, VLLM_MODEL_NAME="test"),
         )
@@ -60,7 +62,7 @@ async def send(context, **kwargs):
 async def test_total_deadline_cancels_all_children_and_persists_timeout(
     context, monkeypatch
 ):
-    routes.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.15
+    chat_flow.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.15
     cancelled = []
 
     async def child(index):
@@ -71,7 +73,7 @@ async def test_total_deadline_cancels_all_children_and_persists_timeout(
 
     async def hanging_chat(*args, **kwargs):
         await asyncio.gather(child(1), child(2))
-        return "不應完成", None, {}
+        return TeacherJudgeChatResult("不應完成", None, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", hanging_chat)
     with pytest.raises(HTTPException) as error:
@@ -105,7 +107,7 @@ async def test_success_saves_recoverable_proposal_with_source_and_revision(
     ]
 
     async def chat(*args, **kwargs):
-        return "請確認提案", proposal, {}
+        return TeacherJudgeChatResult("請確認提案", proposal, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     result = await send(context)
@@ -125,7 +127,7 @@ async def test_clearing_chat_during_ai_does_not_resurrect_answer(context, monkey
 
     async def chat(*args, **kwargs):
         routes.clear_session_messages(db, item)
-        return "晚到回覆", None, {}
+        return TeacherJudgeChatResult("晚到回覆", None, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     with pytest.raises(HTTPException) as error:
@@ -143,8 +145,8 @@ async def test_real_itemwise_pipeline_cancels_active_and_waiting_items(
     # 0.15 秒時，CI（Python 3.11 加 coverage 追蹤）偶爾連第一個項目都還沒
     # 開始就逾時，started 會是空的。放寬到 0.8 秒、項目改睡 3 秒，
     # 語意不變：前兩個項目一定被取消、後三個一定沒機會開始。
-    routes.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.8
-    monkeypatch.setattr(service, "settings", SimpleNamespace(VLLM_MODEL_NAME="test"))
+    chat_flow.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.8
+    monkeypatch.setattr(chat_transport, "settings", SimpleNamespace(VLLM_MODEL_NAME="test"))
 
     async def extract(*args, **kwargs):
         return [{"source_index": i} for i in range(5)], None, {}
@@ -157,11 +159,11 @@ async def test_real_itemwise_pipeline_cancels_active_and_waiting_items(
             cancelled.append(source["source_index"])
             raise
 
-    monkeypatch.setattr(service, "extract_attachment_requirements", extract)
-    monkeypatch.setattr(service, "analyze_requirement_item", analyze)
-    monkeypatch.setattr(routes, "get_pending_attachments", lambda *args: [object()])
-    monkeypatch.setattr(routes, "bind_attachments_to_message", lambda *args: None)
-    monkeypatch.setattr(routes, "attachment_context", lambda *args: "附件")
+    monkeypatch.setattr(attachment_itemwise, "extract_attachment_requirements", extract)
+    monkeypatch.setattr(attachment_itemwise, "analyze_requirement_item", analyze)
+    monkeypatch.setattr(chat_flow, "get_pending_attachments", lambda *args: [object()])
+    monkeypatch.setattr(chat_flow, "bind_attachments_to_message", lambda *args: None)
+    monkeypatch.setattr(chat_flow, "attachment_context", lambda *args: "附件")
     with pytest.raises(HTTPException) as error:
         await send(context)
     assert error.value.status_code == 504
@@ -175,13 +177,13 @@ async def test_real_itemwise_pipeline_cancels_active_and_waiting_items(
 async def test_cancellation_suppressed_by_model_cannot_publish_late_proposal(
     context, monkeypatch
 ):
-    routes.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.15
+    chat_flow.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.15
 
     async def chat(*args, **kwargs):
         try:
             await asyncio.sleep(0.5)
         except asyncio.CancelledError:
-            return "晚到提案", [{"id": "late", "operation": "add"}], {}
+            return TeacherJudgeChatResult("晚到提案", [{"id": "late", "operation": "add"}], {})
         raise AssertionError("request deadline should have cancelled the model call")
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
@@ -204,7 +206,7 @@ async def test_same_session_rejects_duplicate_while_previous_request_runs(
     async def chat(*args, **kwargs):
         entered.set()
         await release.wait()
-        return "完成", None, {}
+        return TeacherJudgeChatResult("完成", None, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     task = asyncio.create_task(send(context))
@@ -226,7 +228,7 @@ async def test_dismissal_is_persistent_idempotent_and_scoped_to_session(
     context, monkeypatch
 ):
     async def chat(*args, **kwargs):
-        return "請確認", [{"id": "new", "operation": "add"}], {}
+        return TeacherJudgeChatResult("請確認", [{"id": "new", "operation": "add"}], {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     result = await send(context)
@@ -255,13 +257,13 @@ async def test_summary_scheduler_failure_does_not_hide_durable_success(
     context, monkeypatch
 ):
     async def chat(*args, **kwargs):
-        return "完成", [{"id": "new", "operation": "add"}], {}
+        return TeacherJudgeChatResult("完成", [{"id": "new", "operation": "add"}], {})
 
     def fail(*args, **kwargs):
         raise RuntimeError("scheduler unavailable")
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
-    monkeypatch.setattr(routes, "schedule_summary", fail)
+    monkeypatch.setattr(chat_flow, "schedule_summary", fail)
     result = await send(context)
     assert result.rubric_proposal[0]["id"] == "new"
 
@@ -276,14 +278,14 @@ async def test_deadline_covers_multiple_calls_without_resetting_budget(
     # and can cancel ``generate`` before its first line runs.  Leave enough
     # headroom for that setup while keeping four calls (4 * 0.4 s) longer than
     # the single shared deadline.
-    routes.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 1.0
+    chat_flow.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 1.0
     calls = []
 
     async def chat(*args, **kwargs):
         for index in range(4):
             calls.append(index)
             await asyncio.sleep(0.4)
-        return "不應完成", None, {}
+        return TeacherJudgeChatResult("不應完成", None, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     with pytest.raises(HTTPException) as error:
@@ -296,13 +298,13 @@ async def test_deadline_covers_multiple_calls_without_resetting_budget(
 async def test_clear_then_timeout_does_not_recreate_failure_message(
     context, monkeypatch
 ):
-    routes.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.1
+    chat_flow.teacher_judge_settings.REQUEST_TIMEOUT_SECONDS = 0.1
     db, _, item, _, _ = context
 
     async def chat(*args, **kwargs):
         routes.clear_session_messages(db, item)
         await asyncio.sleep(0.5)
-        return "不應完成", None, {}
+        return TeacherJudgeChatResult("不應完成", None, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     with pytest.raises(HTTPException) as error:
@@ -327,7 +329,7 @@ async def test_interrupted_request_does_not_block_retry_after_deadline(
     db.commit()
 
     async def chat(*args, **kwargs):
-        return "本次已完成", None, {}
+        return TeacherJudgeChatResult("本次已完成", None, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     result = await send(context)
@@ -344,7 +346,7 @@ async def test_revision_changed_during_ai_clears_processing_without_saving_propo
         file.analysis_revision += 1
         db.add(file)
         db.commit()
-        return "舊版提案", [{"id": "new", "operation": "add"}], {}
+        return TeacherJudgeChatResult("舊版提案", [{"id": "new", "operation": "add"}], {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     with pytest.raises(HTTPException) as error:
@@ -384,7 +386,7 @@ async def test_cancel_during_commit_recovers_only_pending_admission(
             assert release.wait(2)
 
     async def chat(*args, **kwargs):
-        return "completed", None, {}
+        return TeacherJudgeChatResult("completed", None, {})
 
     monkeypatch.setattr(db, "commit", commit)
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
@@ -431,7 +433,7 @@ async def test_persist_db_error_rolls_back_and_clears_pending_guard(
         return original_refresh(row, *args, **kwargs)
 
     async def chat(*args, **kwargs):
-        return "completed", None, {}
+        return TeacherJudgeChatResult("completed", None, {})
 
     monkeypatch.setattr(db, "refresh", refresh)
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
@@ -468,7 +470,7 @@ async def test_level_cancellation_recovers_admitted_message(context, monkeypatch
     async def chat(*args, **kwargs):
         scope.cancel()
         await asyncio.sleep(1)
-        return "unexpected", None, {}
+        return TeacherJudgeChatResult("unexpected", None, {})
 
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
     with anyio.CancelScope() as scope:

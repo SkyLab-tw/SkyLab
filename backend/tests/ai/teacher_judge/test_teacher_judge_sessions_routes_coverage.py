@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeScriptRunCreateRequest,
     TeacherJudgeScriptSetRunRequest,
@@ -21,6 +22,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeSessionScriptCreateRequest,
     TeacherJudgeSessionUpdateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_attachment import TeacherJudgeSessionAttachment
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
@@ -85,7 +87,7 @@ def test_save_workflow_message_commit_failure_returns_none(ctx, monkeypatch) -> 
     monkeypatch.setattr(db, "commit", _raise(RuntimeError("db down")))
     monkeypatch.setattr(db, "rollback", rollback)
 
-    result = routes._save_workflow_message(db, item, content="x", metadata={})
+    result = chat_flow.save_workflow_message(db, item, content="x", metadata={})
 
     assert result is None
     assert rolled_back == [True]
@@ -93,9 +95,9 @@ def test_save_workflow_message_commit_failure_returns_none(ctx, monkeypatch) -> 
 
 def test_save_workflow_message_survives_summary_failure(ctx, monkeypatch) -> None:
     db, _, item = ctx
-    monkeypatch.setattr(routes, "schedule_summary", _raise(RuntimeError("boom")))
+    monkeypatch.setattr(chat_flow, "schedule_summary", _raise(RuntimeError("boom")))
 
-    result = routes._save_workflow_message(
+    result = chat_flow.save_workflow_message(
         db, item, content="done", metadata={"status": "ok"}, created_by=USER.id
     )
 
@@ -494,13 +496,13 @@ def chat_ctx(ctx, monkeypatch):
     db.add(item)
     db.commit()
     db.refresh(item)
-    monkeypatch.setattr(routes, "schedule_summary", lambda *args, **kwargs: None)
-    monkeypatch.setattr(routes, "record_ai_template_call", lambda **kwargs: None)
+    monkeypatch.setattr(chat_flow, "schedule_summary", lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_flow, "record_ai_template_call", lambda **kwargs: None)
     monkeypatch.setattr(
-        routes, "get_enabled_template_commands", lambda *args, **kwargs: []
+        chat_flow, "get_enabled_template_commands", lambda *args, **kwargs: []
     )
     monkeypatch.setattr(
-        routes,
+        chat_flow,
         "teacher_judge_settings",
         SimpleNamespace(REQUEST_TIMEOUT_SECONDS=5, VLLM_MODEL_NAME="test"),
     )
@@ -515,7 +517,7 @@ async def test_recovery_skips_when_session_vanished(chat_ctx, monkeypatch) -> No
         db.commit()
         raise RuntimeError("context failed")
 
-    monkeypatch.setattr(routes, "uses_legacy_command_context", delete_then_fail)
+    monkeypatch.setattr(chat_flow, "uses_legacy_command_context", delete_then_fail)
 
     with pytest.raises(RuntimeError):
         await routes.create_message(
@@ -545,9 +547,9 @@ async def test_persist_deadline_records_timeout_failure(chat_ctx, monkeypatch) -
         return 0.0 if calls["count"] <= 3 else 1e9
 
     async def chat(*args, **kwargs):
-        return "答覆", None, {}
+        return TeacherJudgeChatResult("答覆", None, {})
 
-    monkeypatch.setattr(routes, "perf_counter", fake_perf_counter)
+    monkeypatch.setattr(chat_flow, "perf_counter", fake_perf_counter)
     monkeypatch.setattr(routes, "chat_with_rubric", chat)
 
     with pytest.raises(HTTPException) as exc:
@@ -799,3 +801,26 @@ def test_create_session_run_submits_run(ctx, monkeypatch) -> None:
     assert result["artifact_id"] == artifact_id
     assert created[0]["target_vmids"] == [101]
     assert submitted == [f"teacher_judge_script_run:{run_id}"]
+
+
+def test_mark_dispatch_failed_marks_every_run_and_expires_session(monkeypatch) -> None:
+    marked: list[tuple[uuid.UUID, str, str]] = []
+    monkeypatch.setattr(
+        routes,
+        "mark_run_executor_failed",
+        lambda run_id, message, *, reason_code: marked.append(
+            (run_id, message, reason_code)
+        ),
+    )
+    expired: list[bool] = []
+    fake_session = SimpleNamespace(expire_all=lambda: expired.append(True))
+    first, second = uuid.uuid4(), uuid.uuid4()
+
+    routes._mark_dispatch_failed(fake_session, [str(first), str(second)])  # type: ignore[arg-type]
+
+    reason = "背景執行器未接受任務。"
+    assert marked == [
+        (first, reason, "executor_unavailable"),
+        (second, reason, "executor_unavailable"),
+    ]
+    assert expired == [True]

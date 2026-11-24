@@ -500,7 +500,7 @@
   "ColorPicker.custom": "カスタム",
   "ColorPicker.pick": "色を選ぶ",
   "ColorPicker.hexLabel": "カラーコード",
-  "AiFloatingChat.pageHelpHint": "この画面で何ができるか、私に聞いてください。",
+  "AiFloatingChat.pageHelpHint": "この画面で何ができるか、ガイドで確認できます。",
   "AiFloatingChat.dismissPageHelpHint": "ヒントを閉じる",
   "Pagination.navLabel": "ページ送り",
   "Pagination.prev": "前のページ",

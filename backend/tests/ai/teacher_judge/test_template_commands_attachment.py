@@ -10,6 +10,7 @@ import json
 import pytest
 from fastapi import HTTPException
 
+from app.ai.teacher_judge import attachment_itemwise, chat_transport
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.check_plan_contract import analysis_write_issues
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricAnalysis
@@ -139,10 +140,10 @@ async def test_attachment_itemwise_analysis_checks_each_row_in_isolation(
             )
         raise AssertionError("unexpected model call")
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
-    result = await teacher_judge_service.analyze_attachments_itemwise(
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         teacher_message="幫我增加這些項目",
         rubric_context=json.dumps({"items": []}),
         template_key="linux",
@@ -221,10 +222,10 @@ async def test_attachment_itemwise_single_item_failure_keeps_other_proposals(
             return (_itemwise_ready_tool_call(title), {"total_tokens": 1})
         return (reply_message("已整理成提案。", "ready"), {"total_tokens": 1})
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
-    result = await teacher_judge_service.analyze_attachments_itemwise(
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         rubric_context=json.dumps({"items": []}),
         template_key="linux",
         template_commands=[GENERAL_COMMAND],
@@ -254,10 +255,10 @@ async def test_attachment_itemwise_extraction_error_does_not_create_proposals(
         calls.append(payload)
         return ("這不是 JSON", {"total_tokens": 1})
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
-    result = await teacher_judge_service.analyze_attachments_itemwise(
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         rubric_context=json.dumps({"items": []}),
         template_key="linux",
         template_commands=[GENERAL_COMMAND],
@@ -278,10 +279,10 @@ async def test_attachment_itemwise_without_rubric_rows_does_not_create_proposals
         assert "評分表拆解器" in payload["messages"][0]["content"]
         return (json.dumps({"items": []}, ensure_ascii=False), {"total_tokens": 1})
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
-    result = await teacher_judge_service.analyze_attachments_itemwise(
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         rubric_context=json.dumps({"items": []}),
         template_key="linux",
         template_commands=[GENERAL_COMMAND],
@@ -314,10 +315,10 @@ async def test_attachment_itemwise_keeps_duplicate_titles_as_separate_items(
             )
         return (reply_message("已整理成提案。", "ready"), {"total_tokens": 1})
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
-    result = await teacher_judge_service.analyze_attachments_itemwise(
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         rubric_context=json.dumps({"items": []}),
         template_key="linux",
         template_commands=[GENERAL_COMMAND],
@@ -353,10 +354,10 @@ async def test_attachment_itemwise_results_carry_source_item_id(
                     )
         return (reply_message("已整理成提案。", "ready"), {"total_tokens": 1})
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
-    result = await teacher_judge_service.analyze_attachments_itemwise(
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         rubric_context=json.dumps({"items": []}),
         template_key="linux",
         template_commands=[GENERAL_COMMAND],

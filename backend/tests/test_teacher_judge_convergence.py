@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.ai.teacher_judge import proposal_tools
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.automation_support import (
     ensure_script_generation_supported,
@@ -14,6 +15,7 @@ from app.ai.teacher_judge.machine_context import (
     rubric_item_machine_issues,
     target_node_keys_from_snapshot,
 )
+from app.ai.teacher_judge.rubric_normalization import normalize_rubric_items
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeRubricCheckStep,
@@ -23,7 +25,6 @@ from app.ai.teacher_judge.script_run_service import (
     _public_target,
     _public_target_snapshot,
 )
-from app.ai.teacher_judge.service import _normalize_rubric_items
 from app.ai.teacher_judge.template_command_service import validate_check_steps
 
 
@@ -62,7 +63,7 @@ def test_flat_steps_normalize_without_a_template_command_catalog() -> None:
         }
     ]
 
-    items = _normalize_rubric_items(
+    items = normalize_rubric_items(
         [
             {
                 "id": "web-health",
@@ -133,7 +134,7 @@ def test_machine_aliases_canonicalize_only_keys_and_derived_p_labels() -> None:
 
 
 def test_proposal_tools_are_request_scoped_to_current_class_nodes() -> None:
-    tools = teacher_judge_service._build_proposal_tools(
+    tools = proposal_tools.build_proposal_tools(
         [
             {"display_label": "P1", "node_key": "web"},
             {"display_label": "P2", "node_key": "db"},
@@ -153,7 +154,7 @@ def test_proposal_tools_are_request_scoped_to_current_class_nodes() -> None:
 
 
 def test_finalizer_tools_expose_only_typed_check_steps() -> None:
-    tools = teacher_judge_service._build_proposal_tools()
+    tools = proposal_tools.build_proposal_tools()
 
     for tool in tools:
         if tool["function"]["name"] not in {

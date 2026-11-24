@@ -10,7 +10,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.ai.teacher_judge import service
+from app.ai.teacher_judge import chat_transport, service
 from app.infrastructure.ai.vllm_client import VLLMClient
 from tests.ai.teacher_judge.helpers import (
     patch_teacher_judge_vllm_settings,
@@ -49,8 +49,8 @@ def completion(message, *, finish=None, tokens=10, usage=True):
 @pytest.fixture
 async def transport(monkeypatch):
     patch_teacher_judge_vllm_settings(monkeypatch)
-    service.settings.VLLM_MODEL_NAME = "gpt-oss-120B"
-    service.settings.VLLM_BASE_URL = "http://vllm.test/v1"
+    chat_transport.settings.VLLM_MODEL_NAME = "gpt-oss-120B"
+    chat_transport.settings.VLLM_BASE_URL = "http://vllm.test/v1"
     responses = []
     requests = []
 
@@ -62,9 +62,9 @@ async def transport(monkeypatch):
         assert responses, "Unexpected extra generation"
         return httpx.Response(200, json=responses.pop(0))
 
-    client = VLLMClient(base_url=service.settings.VLLM_BASE_URL, api_key="")
+    client = VLLMClient(base_url=chat_transport.settings.VLLM_BASE_URL, api_key="")
     client._http_client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
-    monkeypatch.setattr(service, "teacher_judge_client", client)
+    monkeypatch.setattr(chat_transport, "teacher_judge_client", client)
     yield responses, requests
     await client.aclose()
 
@@ -189,7 +189,7 @@ async def test_empty_repair_shares_original_deadline(transport, monkeypatch, emp
     ])
     now = [0.0]
     timeouts = []
-    original = service.teacher_judge_client.create_chat_completion
+    original = chat_transport.teacher_judge_client.create_chat_completion
 
     async def timed_call(payload, **kwargs):
         timeouts.append(kwargs["timeout"])
@@ -199,8 +199,8 @@ async def test_empty_repair_shares_original_deadline(transport, monkeypatch, emp
             if len(timeouts) == 2:
                 now[0] += empty_call_seconds
 
-    monkeypatch.setattr(service, "perf_counter", lambda: now[0])
-    monkeypatch.setattr(service.teacher_judge_client, "create_chat_completion", timed_call)
+    monkeypatch.setattr(chat_transport, "perf_counter", lambda: now[0])
+    monkeypatch.setattr(chat_transport.teacher_judge_client, "create_chat_completion", timed_call)
     if empty_call_seconds > 60:
         with pytest.raises(HTTPException) as exc:
             await refine()

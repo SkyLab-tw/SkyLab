@@ -241,7 +241,7 @@ def test_completed_target_is_durable_while_another_runs_and_survives_reaping(
             assert stored.status == TeacherJudgeScriptRunStatus.running
             assert stored.results_document["targets"][0]["vmid"] == 101
             assert stored.target_records[0].finished_at is not None
-            executor._mark_run_executor_failed(
+            executor.mark_run_executor_failed(
                 run_id, "Executor lost", reason_code="executor_lost"
             )
         finally:
@@ -622,7 +622,7 @@ def test_cancellation_after_last_future_finishes_still_persists_completed_result
 
         monkeypatch.setattr(executor, "_execute_target_script", remote)
         assert executor._execute_targets(run.id, stop_event=stop) is None
-        executor._mark_run_executor_failed(
+        executor.mark_run_executor_failed(
             run.id, "cancelled", reason_code="executor_cancelled"
         )
         db.expire_all()

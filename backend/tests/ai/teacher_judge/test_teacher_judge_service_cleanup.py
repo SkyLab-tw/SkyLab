@@ -11,7 +11,14 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import machine_context, session_service, target_ip_resolver
+from app.ai.teacher_judge import (
+    chat_prompt,
+    machine_context,
+    proposal_rules,
+    rubric_normalization,
+    session_service,
+    target_ip_resolver,
+)
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.script_policy import PEER_IP_TOKEN
 from app.models.teacher_judge_file import TeacherJudgeFileStatus
@@ -41,11 +48,11 @@ def test_package_init_does_not_eagerly_load_service() -> None:
 
 def test_peer_ip_token_has_one_definition() -> None:
     assert machine_context.PEER_IP_TOKEN is PEER_IP_TOKEN
-    assert teacher_judge_service.PEER_IP_TOKEN is PEER_IP_TOKEN
+    assert chat_prompt.PEER_IP_TOKEN is PEER_IP_TOKEN
 
 
 def test_proposal_status_claims_ready_reads_only_structured_status() -> None:
-    claims = teacher_judge_service._proposal_status_claims_ready
+    claims = proposal_rules.proposal_status_claims_ready
     assert claims("ready") is True
     assert claims(" READY ") is True
     assert claims("needs_information") is False
@@ -58,11 +65,11 @@ def test_raw_items_by_id_matches_normalizer_fallback_ids() -> None:
         "junk",
         {"detectable": "manual"},
     ]
-    by_id = teacher_judge_service._raw_items_by_id(raw)
+    by_id = rubric_normalization.raw_items_by_id(raw)
     assert set(by_id) == {"a", "item-3"}
-    assert teacher_judge_service._raw_detectable(by_id["a"]) == "auto"
-    assert teacher_judge_service._raw_detectable(by_id.get("missing")) == ""
-    assert teacher_judge_service._raw_items_by_id("not-a-list") == {}
+    assert rubric_normalization.raw_item_detectable(by_id["a"]) == "auto"
+    assert rubric_normalization.raw_item_detectable(by_id.get("missing")) == ""
+    assert rubric_normalization.raw_items_by_id("not-a-list") == {}
 
 
 @pytest.mark.parametrize(

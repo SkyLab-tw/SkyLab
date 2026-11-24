@@ -45,9 +45,9 @@ from app.ai.teacher_judge.script_artifact_service import (
 )
 from app.ai.teacher_judge.script_executor_service import (
     TargetExecutionError,
-    _target_progress,
     check_current_target_power,
     preflight_progress,
+    target_progress,
 )
 from app.ai.teacher_judge.script_policy import aggregate_check_status
 from app.ai.teacher_judge.target_ip_resolver import resolve_target_ip_address
@@ -276,10 +276,6 @@ def run_to_public(
     )
 
 
-# 舊名相容：模組內其他呼叫點仍用私有名稱
-_run_to_public = run_to_public
-
-
 def get_script_run_public(
     *,
     session: Session,
@@ -294,7 +290,7 @@ def get_script_run_public(
         or run.artifact_id != artifact_id
     ):
         raise HTTPException(status_code=404, detail="Script run not found")
-    return _run_to_public(run)
+    return run_to_public(run)
 
 
 def list_session_run_summaries(
@@ -1189,7 +1185,7 @@ def create_script_run(
     else:
         session.flush()
     session.refresh(run)
-    return _run_to_public(run, include_internal=True)
+    return run_to_public(run, include_internal=True)
 
 
 def _create_script_run_record(
@@ -1845,11 +1841,11 @@ def prepare_script_run_batch(
         run.progress_json = {
             "stage": "pending_executor", "total": len(targets) + len(failures),
             "done": len(failures),
-            "targets": _target_progress(targets, {}) + preflight_progress(failures),
+            "targets": target_progress(targets, {}) + preflight_progress(failures),
         }
         run.result_summary_json = {"preflight_failed": len(failures)}
         initialize_targets(session, run)
-        progress_by_key = {target_key(target): target for target in _target_progress(targets, {})}
+        progress_by_key = {target_key(target): target for target in target_progress(targets, {})}
         for record in run.target_records:
             progress = progress_by_key.get(record.target_key)
             if progress is not None:

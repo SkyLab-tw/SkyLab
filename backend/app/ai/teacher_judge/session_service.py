@@ -934,6 +934,18 @@ def ensure_active(item: TeacherJudgeSession) -> None:
         raise HTTPException(status_code=409, detail=t("session.archived_readonly"))
 
 
+def analysis_revision_conflict(file: TeacherJudgeFile) -> HTTPException:
+    """409：呼叫端帶的檢查表版本已不是目前版本；detail 附上目前的 analysis_revision。"""
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "teacher_judge_analysis_revision_conflict",
+            "message": t("teacherJudgeSessions.analysisRevisionConflict"),
+            "analysis_revision": file.analysis_revision,
+        },
+    )
+
+
 def ensure_week_published(db: Session, item: TeacherJudgeSession) -> None:
     """作業跟著老師每週的內容發布：週次發布後才能檢查學生。"""
     week = (
