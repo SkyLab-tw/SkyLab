@@ -1,0 +1,1003 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import MIcon from "../../../components/MIcon";
+import PasswordInput from "../../../components/PasswordInput/PasswordInput";
+import PasswordRules from "../../../components/PasswordRules/PasswordRules";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Turnstile from "../../../components/Turnstile/Turnstile";
+import { useAuth } from "../../../contexts/AuthContext";
+import { AccountService } from "../../../services/account";
+import { getLoginMethods } from "../../../services/auth";
+import { isPasswordStrong } from "../../../utils/passwordPolicy";
+import { useOctoMood, useOctoScene, useShyHandlers } from "./octoMood";
+import PixelPageShell from "./PixelPageShell";
+import styles from "./PixelLoginPage.module.scss";
+
+/*
+ * 像素風登入頁（預覽中）：邏輯照抄 ../LoginPage.jsx，差別只在
+ *   1. 外框換成 PixelPageShell（左邊章魚學士、右邊登入卡）
+ *   2. 各畫面把動作回報給章魚：輸入密碼舉書不偷看、送出時敲筆電、出錯噴墨、成功跳一下
+ *   3. 登入畫面的標題改成「登入」（品牌字標已經在左邊）
+ * 使用者確認要換上後，用這份取代 LoginPage.jsx／PageShell.jsx，再刪掉舊檔。
+ */
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+let googleIdentityScriptPromise;
+
+function loadGoogleIdentityScript() {
+  if (typeof window === "undefined")
+    return Promise.reject(new Error("Browser unavailable"));
+  if (window.google?.accounts?.id) return Promise.resolve();
+
+  if (!googleIdentityScriptPromise) {
+    googleIdentityScriptPromise = new Promise((resolve, reject) => {
+      const existingScript = document.getElementById(
+        "google-identity-services",
+      );
+      if (existingScript) {
+        existingScript.addEventListener("load", resolve, { once: true });
+        existingScript.addEventListener("error", reject, { once: true });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.id = "google-identity-services";
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  return googleIdentityScriptPromise;
+}
+
+function readResetTokenFromUrl() {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(window.location.search);
+  return params.get("token") ?? "";
+}
+
+function readDeviceCodeFromUrl() {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(window.location.search);
+  return params.get("device_code") ?? "";
+}
+
+function clearResetTokenFromUrl() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("token");
+  // 留在登入頁：改成 "/" 的話重新整理會跑到導入首頁
+  url.pathname = "/login";
+  window.history.replaceState(null, "", url.toString());
+}
+
+function clearDeviceCodeFromUrl() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("device_code");
+  window.history.replaceState(null, "", url.toString());
+}
+
+/* 新密碼的前端檢查（重設密碼與註冊共用）：回傳錯誤訊息，通過則回傳空字串 */
+function newPasswordError(password, confirm, t) {
+  if (!isPasswordStrong(password)) return t("PasswordRules.notMet", { ns: "common" });
+  if (password !== confirm) return t("LoginPage.passwordMismatch");
+  return "";
+}
+
+/* ─── 共用元件 ─────────────────────────────────────────── */
+
+function PasswordField({ id, label, value, onChange, disabled, placeholder, children }) {
+  const { t } = useTranslation("login");
+  const shy = useShyHandlers();
+  return (
+    <div className={styles.field} {...shy}>
+      <label htmlFor={id}>{label}</label>
+      <PasswordInput
+        id={id}
+        placeholder={placeholder ?? t("LoginPage.passwordPlaceholder")}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        required
+      />
+      {children}
+    </div>
+  );
+}
+
+function GoogleSignInButton({ onCredential, onError }) {
+  const { t } = useTranslation("login");
+  const buttonRef = useRef(null);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+
+    let cancelled = false;
+    loadGoogleIdentityScript()
+      .then(() => {
+        if (cancelled || !buttonRef.current) return;
+
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response) => {
+            const credential = response?.credential;
+            if (!credential) {
+              onError(t("LoginPage.googleNoCredential"));
+              return;
+            }
+            onCredential(credential);
+          },
+          ux_mode: "popup",
+        });
+
+        buttonRef.current.innerHTML = "";
+        window.google.accounts.id.renderButton(buttonRef.current, {
+          theme: "outline",
+          size: "large",
+          type: "standard",
+          text: "signin_with",
+          shape: "rectangular",
+          logo_alignment: "left",
+          width: Math.min(buttonRef.current.clientWidth || 360, 400),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) onError(t("Error.generic", { ns: "common" }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onCredential, onError, t]);
+
+  if (!GOOGLE_CLIENT_ID) return null;
+  return (
+    <div
+      ref={buttonRef}
+      className={styles.googleButton}
+      aria-label={t("LoginPage.googleSignInAriaLabel")}
+    />
+  );
+}
+
+function formatGoogleLoginError(err, t) {
+  const message = err?.message ?? "";
+  if (message === "Google account is not registered") {
+    return t("LoginPage.googleErrorNotRegistered");
+  }
+  if (message === "Inactive user") {
+    return t("LoginPage.googleErrorInactiveUser");
+  }
+  if (message === "Invalid Google token audience") {
+    return t("LoginPage.googleErrorAudienceMismatch");
+  }
+  if (message === "Invalid Google token") {
+    return t("LoginPage.googleErrorInvalidToken");
+  }
+  return message || t("LoginPage.googleErrorGeneric");
+}
+
+/* ─── 登入 ──────────────────────────────────────────────── */
+
+/* 兩步驟驗證：第一階段（密碼／Google／LDAP）通過後輸入 Authenticator 驗證碼 */
+function TotpStepView({ totpToken, onSubmit, onBack }) {
+  const { t } = useTranslation("login");
+  const { setMood } = useOctoMood();
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const digits = code.replace(/\D/g, "");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (digits.length !== 6) {
+      setError(t("LoginPage.totpCodeLength"));
+      return;
+    }
+    setError("");
+    setLoading(true);
+    setMood("thinking");
+    try {
+      await onSubmit(totpToken, digits);
+      setMood("done");
+    } catch (err) {
+      // 挑戰 token 逾時（401）：回到登入表單重新輸入帳密
+      if (err?.status === 401) {
+        setMood("idle");
+        onBack();
+        return;
+      }
+      setMood("error");
+      setError(err?.message ?? t("LoginPage.totpErrorDefault"));
+      setCode("");
+      inputRef.current?.focus();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" className={styles.backBtn} onClick={onBack} disabled={loading}>
+        <MIcon name="arrow_back" size={18} />
+        {t("LoginPage.backToLogin")}
+      </button>
+      <h1 className={styles.title}>{t("LoginPage.totpTitle")}</h1>
+
+      <form className={styles.form} onSubmit={handleSubmit}>
+        <div className={styles.field}>
+          <label htmlFor="totp-code">{t("LoginPage.totpCodeLabel")}</label>
+          <input
+            ref={inputRef}
+            id="totp-code"
+            className={styles.codeInput}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9 ]*"
+            maxLength={7}
+            placeholder="000000"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ""))}
+            disabled={loading}
+            required
+          />
+        </div>
+
+        {error && <p className={styles.error}>{error}</p>}
+
+        <button type="submit" className={styles.btn} disabled={loading || digits.length !== 6}>
+          {loading ? t("LoginPage.totpVerifying") : t("LoginPage.totpVerify")}
+        </button>
+      </form>
+      <p className={styles.deviceHelp}>{t("LoginPage.totpHelp")}</p>
+    </>
+  );
+}
+
+function LoginView({
+  onForgot,
+  onRegister,
+  deviceApproval = false,
+  ldapEnabled = false,
+  signupEnabled = false,
+  turnstileSiteKey = "",
+  previewTotp = false,
+}) {
+  const { t } = useTranslation("login");
+  const { login, googleLogin, ldapLogin, totpLogin } = useAuth();
+  const { setMood } = useOctoMood();
+  const [mode, setMode] = useState("password"); // "password" | "ldap"
+  // Cloudflare 機器人驗證（後端有設定金鑰才顯示）；密碼與校園帳號表單共用
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef(null);
+  const turnstilePending = Boolean(turnstileSiteKey) && !turnstileToken;
+  // 帳號已綁定兩步驟驗證：第一階段通過後拿到挑戰 token，切到驗證碼步驟
+  const [totpChallenge, setTotpChallenge] = useState(() => (previewTotp ? { totpToken: "" } : null)); // { totpToken } | null
+  useOctoScene(totpChallenge ? "totp" : "login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [ldapUsername, setLdapUsername] = useState("");
+  const [ldapPassword, setLdapPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const switchMode = (next) => {
+    setMode(next);
+    setError("");
+  };
+
+  /* 密碼／校園帳號登入共用：先確認機器人驗證，送出失敗後換一個新 token（token 只能用一次） */
+  const submitWithTurnstile = async (doLogin, defaultError) => {
+    setError("");
+    if (turnstilePending) {
+      setError(t("LoginPage.turnstileRequired"));
+      return;
+    }
+    setLoading(true);
+    setMood("thinking");
+    try {
+      const challenge = await doLogin({ turnstileToken });
+      if (challenge?.totpRequired) {
+        setMood("idle");
+        setTotpChallenge(challenge);
+      } else {
+        setMood("done");
+      }
+    } catch (err) {
+      setMood("error");
+      setError(err?.message ?? defaultError);
+      turnstileRef.current?.reset();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    submitWithTurnstile(
+      (options) => login(username, password, options),
+      t("LoginPage.loginErrorDefault"),
+    );
+  };
+
+  const handleLdapSubmit = (e) => {
+    e.preventDefault();
+    submitWithTurnstile(
+      (options) => ldapLogin(ldapUsername, ldapPassword, options),
+      t("LoginPage.ldapLoginErrorDefault"),
+    );
+  };
+
+  const turnstileBox = turnstileSiteKey ? (
+    <Turnstile
+      ref={turnstileRef}
+      siteKey={turnstileSiteKey}
+      action="login"
+      onToken={setTurnstileToken}
+    />
+  ) : null;
+
+  const handleGoogleCredential = useCallback(
+    async (credential) => {
+      setError("");
+      setGoogleLoading(true);
+      setMood("thinking");
+      try {
+        const challenge = await googleLogin(credential);
+        if (challenge?.totpRequired) {
+          setMood("idle");
+          setTotpChallenge(challenge);
+        } else {
+          setMood("done");
+        }
+      } catch (err) {
+        setMood("error");
+        setError(formatGoogleLoginError(err, t));
+      } finally {
+        setGoogleLoading(false);
+      }
+    },
+    [googleLogin, setMood, t],
+  );
+
+  const handleGoogleError = useCallback((message) => {
+    setError(message);
+  }, []);
+
+  if (totpChallenge) {
+    return (
+      <TotpStepView
+        totpToken={totpChallenge.totpToken}
+        onSubmit={totpLogin}
+        onBack={() => {
+          setTotpChallenge(null);
+          setError("");
+        }}
+      />
+    );
+  }
+
+  const passwordForm = (
+    <form className={styles.form} onSubmit={handleSubmit}>
+      <div className={styles.field}>
+        <label htmlFor="username">{t("LoginPage.usernameLabel")}</label>
+        <input
+          id="username"
+          type="text"
+          placeholder={t("LoginPage.usernamePlaceholder")}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          disabled={loading}
+          required
+        />
+      </div>
+
+      <PasswordField
+        id="password"
+        label={t("LoginPage.passwordLabel")}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        disabled={loading}
+      />
+
+      <button
+        type="button"
+        className={styles.linkRight}
+        onClick={onForgot}
+        tabIndex={0}
+      >
+        {t("LoginPage.forgotPasswordLink")}
+      </button>
+
+      {turnstileBox}
+
+      {error && <p className={styles.error}>{error}</p>}
+
+      <button type="submit" className={styles.btn} disabled={loading || turnstilePending}>
+        {loading ? t("LoginPage.loggingIn") : t("LoginPage.login")}
+      </button>
+    </form>
+  );
+
+  const ldapForm = (
+    <form className={styles.form} onSubmit={handleLdapSubmit}>
+      <div className={styles.field}>
+        <label htmlFor="ldap-username">{t("LoginPage.campusAccount")}</label>
+        <input
+          id="ldap-username"
+          type="text"
+          placeholder={t("LoginPage.campusAccountPlaceholder")}
+          autoComplete="username"
+          value={ldapUsername}
+          onChange={(e) => setLdapUsername(e.target.value)}
+          disabled={loading}
+          required
+        />
+      </div>
+
+      <PasswordField
+        id="ldap-password"
+        label={t("LoginPage.passwordLabel")}
+        value={ldapPassword}
+        onChange={(e) => setLdapPassword(e.target.value)}
+        disabled={loading}
+      />
+
+      {turnstileBox}
+
+      {error && <p className={styles.error}>{error}</p>}
+
+      <button type="submit" className={styles.btn} disabled={loading || turnstilePending}>
+        {loading ? t("LoginPage.loggingIn") : t("LoginPage.login")}
+      </button>
+    </form>
+  );
+
+  return (
+    <>
+      <h1 className={styles.title}>{t("LoginPage.login")}</h1>
+
+      {deviceApproval && (
+        <div className={styles.deviceNotice}>
+          <MIcon name="devices" size={22} />
+          <span>{t("LoginPage.deviceNotice")}</span>
+        </div>
+      )}
+
+      {ldapEnabled && (
+        <SegmentedControl
+          className={styles.modeSwitch}
+          ariaLabel={t("LoginPage.loginMethodsAriaLabel")}
+          value={mode}
+          onChange={switchMode}
+          options={[
+            { value: "password", label: t("LoginPage.emailTab") },
+            { value: "ldap", label: t("LoginPage.campusAccount") },
+          ]}
+        />
+      )}
+
+      {mode === "ldap" && ldapEnabled ? ldapForm : passwordForm}
+
+      {GOOGLE_CLIENT_ID && (
+        <div className={styles.oauthArea}>
+          <div className={styles.divider}>
+            <span>{t("LoginPage.orDivider")}</span>
+          </div>
+          <div className={googleLoading ? styles.googleBusy : undefined}>
+            <GoogleSignInButton
+              onCredential={handleGoogleCredential}
+              onError={handleGoogleError}
+            />
+          </div>
+          {googleLoading && (
+            <p className={styles.oauthHint}>{t("LoginPage.googleLoggingIn")}</p>
+          )}
+        </div>
+      )}
+
+      {signupEnabled && (
+        <p className={styles.footerText}>
+          {t("LoginPage.noAccountYet")}{" "}
+          <button type="button" className={styles.link} onClick={onRegister}>
+            {t("LoginPage.registerNow")}
+          </button>
+        </p>
+      )}
+    </>
+  );
+}
+
+function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
+  const { t } = useTranslation("login");
+  useOctoScene("device");
+
+  // 同意頁：授權必須由使用者明確按下，不可自動核准（防止釣魚連結）
+  if (status === "idle") {
+    return (
+      <>
+        <div className={styles.titleRow}>
+          <span className={styles.deviceHero} aria-hidden="true">
+            <MIcon name="devices" size={24} />
+          </span>
+          <h1 className={styles.title}>{t("LoginPage.deviceConsentTitle")}</h1>
+        </div>
+        {/* 要授權的是哪個帳號：獨立一塊、email 單獨一行，一眼看得到 */}
+        <div className={styles.deviceAccount}>
+          <MIcon name="account_circle" size={32} />
+          <div className={styles.deviceAccountText}>
+            <span>{t("LoginPage.deviceConsentAccountLabel")}</span>
+            <strong>{user?.email ?? t("LoginPage.deviceConsentCurrentAccount")}</strong>
+          </div>
+        </div>
+        <p className={styles.deviceScope}>{t("LoginPage.deviceConsentScope")}</p>
+        {/* 防釣魚提醒：別人傳來的連結不要按授權 */}
+        <p className={styles.deviceWarning}>
+          <MIcon name="gpp_maybe" size={18} />
+          <span>{t("LoginPage.deviceConsentHelp")}</span>
+        </p>
+        <div className={styles.deviceActions}>
+          <button type="button" className={styles.btn} onClick={onApprove}>
+            {t("LoginPage.deviceConsentApprove")}
+          </button>
+          <button type="button" className={styles.btnSecondary} onClick={onDecline}>
+            {t("LoginPage.deviceConsentDecline")}
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  if (status === "approved") {
+    return (
+      <>
+        <h1 className={styles.title}>{t("LoginPage.deviceApprovedTitle")}</h1>
+        <div className={styles.successBox}>
+          <MIcon name="check_circle" size={40} />
+          <p>{t("LoginPage.deviceApprovedMessage")}</p>
+        </div>
+      </>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <>
+        <h1 className={styles.title}>{t("LoginPage.deviceErrorTitle")}</h1>
+        <p className={styles.error}>{error}</p>
+        <p className={styles.deviceHelp}>{t("LoginPage.deviceErrorHelp")}</p>
+        <a className={styles.btnLink} href="/dashboard">
+          {t("LoginPage.backToSkyLab")}
+        </a>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h1 className={styles.title}>
+        {t(status === "declining" ? "LoginPage.deviceCancellingTitle" : "LoginPage.deviceConnectingTitle")}
+      </h1>
+      <div className={styles.deviceProgress} aria-live="polite">
+        <MIcon name="sync" size={40} spin />
+      </div>
+    </>
+  );
+}
+
+/* ─── 忘記密碼 ──────────────────────────────────────────── */
+
+function ForgotView({ onBack }) {
+  const { t } = useTranslation("login");
+  const { setMood } = useOctoMood();
+  useOctoScene("forgot");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    setMood("thinking");
+    try {
+      await AccountService.requestPasswordRecovery(email);
+      setMood("done");
+      setSuccess(true);
+    } catch (err) {
+      setMood("error");
+      setError(err?.message ?? t("LoginPage.forgotPasswordErrorDefault"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" className={styles.backBtn} onClick={onBack}>
+        <MIcon name="arrow_back" size={18} />
+        <span>{t("LoginPage.backToLogin")}</span>
+      </button>
+
+      <h1 className={styles.title}>{t("LoginPage.forgotPasswordTitle")}</h1>
+
+      {success ? (
+        <div className={styles.successBox}>
+          <MIcon name="mark_email_read" size={32} />
+          <p>{t("LoginPage.resetLinkSent")}</p>
+        </div>
+      ) : (
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <div className={styles.field}>
+            <label htmlFor="forgot-email">{t("LoginPage.emailLabel")}</label>
+            <input
+              id="forgot-email"
+              type="email"
+              placeholder={t("LoginPage.emailPlaceholderExample")}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              required
+            />
+          </div>
+
+          {error && <p className={styles.error}>{error}</p>}
+
+          <button type="submit" className={styles.btn} disabled={loading}>
+            {loading ? t("LoginPage.sending") : t("LoginPage.sendResetLink")}
+          </button>
+        </form>
+      )}
+    </>
+  );
+}
+
+/* ─── 重設密碼 ──────────────────────────────────────────── */
+
+function ResetView({ token, onDone }) {
+  const { t } = useTranslation("login");
+  const { setMood } = useOctoMood();
+  useOctoScene("reset");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSubmitted(true);
+
+    const passwordError = newPasswordError(password, confirm, t);
+    if (passwordError) {
+      setMood("error");
+      setError(passwordError);
+      return;
+    }
+
+    setLoading(true);
+    setMood("thinking");
+    try {
+      await AccountService.resetPassword(token, password);
+      setMood("done");
+      setSuccess(true);
+    } catch (err) {
+      setMood("error");
+      setError(err?.message ?? t("LoginPage.resetPasswordErrorDefault"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <h1 className={styles.title}>{t("LoginPage.resetPasswordTitle")}</h1>
+
+      {success ? (
+        <div className={styles.successBox}>
+          <MIcon name="check_circle" size={32} />
+          <p>{t("LoginPage.resetPasswordSuccess")}</p>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={onDone}
+            style={{ marginTop: "8px" }}
+          >
+            {t("LoginPage.goToLogin")}
+          </button>
+        </div>
+      ) : (
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <PasswordField
+            id="reset-password"
+            label={t("LoginPage.newPasswordLabel")}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+          >
+            <PasswordRules password={password} invalid={submitted} />
+          </PasswordField>
+
+          <PasswordField
+            id="reset-confirm"
+            label={t("LoginPage.confirmNewPasswordLabel")}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            disabled={loading}
+            placeholder={t("LoginPage.confirmNewPasswordPlaceholder")}
+          />
+
+          {error && <p className={styles.error}>{error}</p>}
+
+          <button type="submit" className={styles.btn} disabled={loading}>
+            {loading ? t("LoginPage.updating") : t("LoginPage.updatePassword")}
+          </button>
+        </form>
+      )}
+    </>
+  );
+}
+
+/* ─── 註冊 ──────────────────────────────────────────────── */
+
+function RegisterView({ onBack, turnstileSiteKey = "" }) {
+  const { t } = useTranslation("login");
+  const { setMood } = useOctoMood();
+  useOctoScene("register");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef(null);
+  const turnstilePending = Boolean(turnstileSiteKey) && !turnstileToken;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (turnstilePending) {
+      setError(t("LoginPage.turnstileRequired"));
+      return;
+    }
+
+    setLoading(true);
+    setMood("thinking");
+    try {
+      await AccountService.signup(
+        { email, full_name: fullName },
+        { turnstileToken },
+      );
+      setMood("done");
+      setSuccess(true);
+    } catch (err) {
+      setMood("error");
+      setError(err?.message ?? t("LoginPage.registerErrorDefault"));
+      turnstileRef.current?.reset();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" className={styles.backBtn} onClick={onBack}>
+        <MIcon name="arrow_back" size={18} />
+        <span>{t("LoginPage.backToLogin")}</span>
+      </button>
+
+      <h1 className={styles.title}>{t("LoginPage.registerTitle")}</h1>
+
+      {success ? (
+        <div className={styles.successBox}>
+          <MIcon name="check_circle" size={32} />
+          <p>{t("LoginPage.registerSuccess")}</p>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={onBack}
+            style={{ marginTop: "8px" }}
+          >
+            {t("LoginPage.backToLogin")}
+          </button>
+        </div>
+      ) : (
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <div className={styles.field}>
+            <label htmlFor="full-name">{t("LoginPage.fullNameLabel")}</label>
+            <input
+              id="full-name"
+              type="text"
+              placeholder={t("LoginPage.fullNamePlaceholder")}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              disabled={loading}
+              required
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label htmlFor="reg-email">{t("LoginPage.emailLabel")}</label>
+            <input
+              id="reg-email"
+              type="email"
+              placeholder={t("LoginPage.emailPlaceholderExample")}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              required
+            />
+          </div>
+
+          {turnstileSiteKey && (
+            <Turnstile
+              ref={turnstileRef}
+              siteKey={turnstileSiteKey}
+              action="signup"
+              onToken={setTurnstileToken}
+            />
+          )}
+
+          {error && <p className={styles.error}>{error}</p>}
+
+          <button type="submit" className={styles.btn} disabled={loading || turnstilePending}>
+            {loading ? t("LoginPage.creating") : t("LoginPage.createAccount")}
+          </button>
+        </form>
+      )}
+    </>
+  );
+}
+
+/* ─── 主元件 ─────────────────────────────────────────────── */
+
+/**
+ * @param {object} [preview] 開發預覽頁（/dev/login-pixel）用：直接開某個畫面、假裝後端開了哪些登入方式，
+ *   不必真的走流程；正式路由不傳
+ */
+export default function PixelLoginPage({ preview } = {}) {
+  const { t } = useTranslation("login");
+  const { user } = useAuth();
+  const [resetToken, setResetToken] = useState(() => readResetTokenFromUrl());
+  const [deviceCode, setDeviceCode] = useState(() => readDeviceCodeFromUrl());
+  const [deviceApproval, setDeviceApproval] = useState({
+    status: "idle",
+    error: "",
+  });
+  const approvalKeyRef = useRef("");
+  const [view, setView] = useState(() =>
+    preview?.view ?? (readResetTokenFromUrl() ? "reset" : "login"),
+  ); // "login" | "forgot" | "register" | "reset"
+  // 後端啟用的登入方式（決定是否顯示「校園帳號」分頁）與機器人驗證 site key；
+  // 公開端點，取不到就只顯示 Email、不顯示驗證框（後端若已啟用會回錯誤訊息）
+  const [fetchedLoginMethods, setLoginMethods] = useState(null);
+  const loginMethods = preview?.methods ?? fetchedLoginMethods;
+
+  useEffect(() => {
+    let cancelled = false;
+    getLoginMethods()
+      .then((methods) => {
+        if (!cancelled) setLoginMethods(methods);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const turnstileSiteKey = loginMethods?.turnstile_site_key ?? "";
+
+  useEffect(() => {
+    const onPop = () => {
+      const token = readResetTokenFromUrl();
+      setDeviceCode(readDeviceCodeFromUrl());
+      setResetToken(token);
+      setView(token ? "reset" : "login");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // 裝置授權必須由使用者明確按下「授權此裝置」，不可在頁面載入時自動核准：
+  // 否則任何人把 /login?device_code=... 丟給已登入的使用者，就能拿到對方
+  // 帳號的桌面 App token（釣魚）。
+  const approveDevice = async () => {
+    if (!deviceCode || !user) return;
+
+    const approvalKey = `${deviceCode}:${user.id ?? user.email ?? "current"}`;
+    if (approvalKeyRef.current) return;
+    approvalKeyRef.current = approvalKey;
+
+    setDeviceApproval({ status: "approving", error: "" });
+    try {
+      await AccountService.approveDesktopDevice(deviceCode);
+      setDeviceApproval({ status: "approved", error: "" });
+    } catch (err) {
+      approvalKeyRef.current = "";
+      setDeviceApproval({
+        status: "error",
+        error: err?.message ?? t("LoginPage.deviceApprovalError"),
+      });
+    }
+  };
+
+  const declineDevice = async () => {
+    if (!deviceCode || approvalKeyRef.current) return;
+    approvalKeyRef.current = `decline:${deviceCode}`;
+    setDeviceApproval({ status: "declining", error: "" });
+    try {
+      await AccountService.declineDesktopDevice(deviceCode);
+    } catch (err) {
+      approvalKeyRef.current = "";
+      setDeviceApproval({
+        status: "error",
+        error: err?.message ?? t("LoginPage.deviceApprovalError"),
+      });
+      return;
+    }
+    clearDeviceCodeFromUrl();
+    setDeviceCode("");
+    setDeviceApproval({ status: "idle", error: "" });
+    // 已登入使用者回到首頁（整頁重載讓 App 重新判斷路由）
+    window.location.replace("/");
+  };
+
+  const goLogin = () => {
+    clearResetTokenFromUrl();
+    setResetToken("");
+    setView("login");
+  };
+
+  if ((deviceCode && user) || preview?.device) {
+    return (
+      <PixelPageShell>
+        <DeviceApprovalView
+          status={deviceApproval.status}
+          error={deviceApproval.error}
+          user={user ?? preview?.user}
+          onApprove={approveDevice}
+          onDecline={declineDevice}
+        />
+      </PixelPageShell>
+    );
+  }
+
+  return (
+    <PixelPageShell>
+      {view === "login" && (
+        <LoginView
+          deviceApproval={Boolean(deviceCode)}
+          ldapEnabled={Boolean(loginMethods?.ldap)}
+          signupEnabled={Boolean(loginMethods?.signup_enabled)}
+          turnstileSiteKey={turnstileSiteKey}
+          previewTotp={preview?.totp}
+          onForgot={() => setView("forgot")}
+          onRegister={() => setView("register")}
+        />
+      )}
+      {view === "forgot" && <ForgotView onBack={() => setView("login")} />}
+      {view === "register" && loginMethods?.signup_enabled && (
+        <RegisterView
+          turnstileSiteKey={turnstileSiteKey}
+          onBack={() => setView("login")}
+        />
+      )}
+      {view === "reset" && <ResetView token={resetToken} onDone={goLogin} />}
+    </PixelPageShell>
+  );
+}

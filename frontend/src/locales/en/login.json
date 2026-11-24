@@ -327,5 +327,21 @@
   "LoginPreflight.status.skipped": "Not configured",
   "LoginPreflight.latency": "{{ms}} ms",
   "LoginPreflight.retry": "Check again",
-  "LoginPreflight.logout": "Sign out"
+  "LoginPreflight.logout": "Sign out",
+  "PixelLogin.heroTagline": "A private cloud for your campus",
+  "PixelLogin.heroSub": "From request to boot, one platform for every campus compute resource",
+  "PixelLogin.octoLabel": "Professor Octo (click to say hi)",
+  "PixelLogin.say.login": "Hi! Welcome back~",
+  "PixelLogin.say.totp": "One last step: the code",
+  "PixelLogin.say.forgot": "No worries, we'll email a link",
+  "PixelLogin.say.register": "Welcome to SkyLab!",
+  "PixelLogin.say.reset": "Time for a new password",
+  "PixelLogin.say.device": "Connect the desktop app?",
+  "PixelLogin.say.shy": "I won't peek at your password!",
+  "PixelLogin.say.thinking": "Connecting, hang on…",
+  "PixelLogin.say.error": "Hmm, something's off",
+  "PixelLogin.say.done": "You're in!",
+  "PixelLogin.poke.0": "I'm Professor Octo!",
+  "PixelLogin.poke.1": "Keep up the practice today",
+  "PixelLogin.poke.2": "Your machines are ready"
 }

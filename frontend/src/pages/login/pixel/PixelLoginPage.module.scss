@@ -1,0 +1,390 @@
+@use "@/assets/styles/pixel" as *;
+
+/* 像素風登入卡的內容：從 ../LoginPage.module.scss 搬來，外框（.page／.card）改由 PixelPageShell 負責。
+   像素只做在框線、按鈕、提示框與標題底線；字型、欄位高度（44px，登入頁例外）不變 */
+
+/* 標題靠左，底下一條海報風的標題線：金色短條＋淡藍長條＋點點＋金點 */
+.title {
+  color: var(--px-ink, var(--color-text-primary));
+  font-size: $font-size-28;
+  font-weight: $font-weight-700;
+  letter-spacing: 0.04em;
+  text-align: left;
+
+  &::after {
+    content: "";
+    display: block;
+    width: 184px;
+    height: 4px;
+    margin-top: 10px;
+    background:
+      linear-gradient(var(--px-gold), var(--px-gold)) 0 0 / 36px 4px no-repeat,
+      linear-gradient(var(--px-card-line), var(--px-card-line)) 42px 0 / 96px 4px no-repeat,
+      repeating-linear-gradient(90deg, var(--px-card-line) 0 4px, transparent 4px 8px) 146px 0 / 28px 4px no-repeat,
+      linear-gradient(var(--px-gold), var(--px-gold)) 180px 0 / 4px 4px no-repeat;
+  }
+}
+
+/* 標題下面直接接內容（副標一律拿掉） */
+.title {
+  margin-bottom: $spacing-24;
+}
+
+/* 登入方式切換：共用 SegmentedControl 撐滿卡片寬（雙類名壓過元件自身樣式） */
+.modeSwitch.modeSwitch {
+  display: flex;
+  width: 100%;
+  margin-bottom: $spacing-16;
+  border-radius: 0;
+
+  > button {
+    flex: 1;
+    justify-content: center;
+    padding-block: $spacing-8;
+    border-radius: 0;
+    font-size: $font-size-14;
+  }
+}
+
+.form {
+  @include flex-column;
+  gap: $spacing-16;
+}
+
+.field {
+  @include flex-column;
+  gap: 6px;
+  text-align: left;
+
+  label {
+    color: var(--color-text);
+    font-size: $font-size-14;
+    font-weight: $font-weight-700;
+  }
+
+  /* 欄位：方角 2px 框，聚焦時框變主色、外圈一圈方的光暈 */
+  input {
+    @include form-control;
+    min-height: 44px;
+    border-width: 2px;
+    border-radius: 0;
+    font-size: 16px;
+  }
+}
+
+/* 錯誤：海報風的粉紅痛點框，出現時抖一下 */
+.error {
+  @include pixel-frame(
+    3px,
+    2px,
+    color-mix(in srgb, var(--color-danger) 45%, var(--color-surface)),
+    color-mix(in srgb, var(--color-danger) 9%, var(--color-surface))
+  );
+  padding: 10px 14px;
+  color: var(--color-danger);
+  font-size: $font-size-14;
+  text-align: left;
+  animation: px-shake 0.3s steps(6, end);
+}
+
+@keyframes px-shake {
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+.cardWide {
+  max-width: 520px;
+}
+
+.enrollBody {
+  margin-top: $spacing-16;
+  text-align: left;
+}
+
+/* 兩步驟驗證碼：6 位數字置中、拉開字距 */
+.codeInput.codeInput {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 22px;
+  letter-spacing: 0.35em;
+  text-align: center;
+
+  &::placeholder {
+    letter-spacing: 0.35em;
+    opacity: 0.35;
+  }
+}
+
+.backBtn {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: $spacing-4;
+  margin-bottom: $spacing-16;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  cursor: pointer;
+  transition: color $transition-base;
+
+  &:hover {
+    color: var(--color-text);
+  }
+}
+
+.footerText {
+  margin-top: $spacing-24;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  text-align: center;
+}
+
+.link {
+  color: var(--color-primary-on-surface, var(--color-primary));
+  font-weight: $font-weight-700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--px-gold);
+
+  &:hover {
+    opacity: 0.8;
+  }
+}
+
+.linkRight {
+  align-self: flex-end;
+  margin-top: -$spacing-8;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  cursor: pointer;
+  transition: color $transition-base;
+
+  &:hover {
+    color: var(--color-primary);
+  }
+}
+
+/* 成功：海報風的淡藍解法框 */
+.successBox {
+  @include pixel-frame(3px, 2px, var(--px-card-line), color-mix(in srgb, var(--color-success) 8%, var(--color-surface)));
+  @include flex-column;
+  align-items: center;
+  gap: $spacing-8;
+  padding: $spacing-24 $spacing-16;
+  color: var(--color-success);
+  font-size: $font-size-14;
+  text-align: center;
+}
+
+/* 登入前的桌面 App 提示 */
+.deviceNotice {
+  @include pixel-frame(3px, 2px, var(--px-card-line), var(--color-surface));
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-8;
+  margin-bottom: $spacing-16;
+  padding: 12px $spacing-16;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  line-height: 1.5;
+  text-align: left;
+
+  > span:first-child {
+    flex: 0 0 auto;
+    color: var(--color-primary-on-surface);
+  }
+}
+
+/* 圖示跟標題同一排：圖示對齊標題字那一行（標題線在字的下面，不算進去） */
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: $spacing-24;
+
+  .title {
+    margin-bottom: 0;
+  }
+}
+
+.deviceHero {
+  @include flex-center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  /* 標題那一行高 36px，往上提 2px 讓圖示跟字的中線對齊 */
+  margin-top: -2px;
+  clip-path: px-steps(4px);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+  color: var(--color-primary-on-surface);
+}
+
+.deviceAccount {
+  @include pixel-frame(3px, 2px, var(--px-card-line), var(--color-surface));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px $spacing-16;
+  text-align: left;
+
+  > span:first-child {
+    flex-shrink: 0;
+    color: var(--color-primary-on-surface);
+  }
+}
+
+.deviceAccountText {
+  @include flex-column;
+  min-width: 0;
+
+  span {
+    color: var(--color-text-muted);
+    font-size: $font-size-12;
+  }
+
+  strong {
+    color: var(--color-text-primary);
+    font-size: $font-size-14;
+    font-weight: $font-weight-500;
+    overflow-wrap: anywhere;
+  }
+}
+
+.deviceScope {
+  margin-top: 12px;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  line-height: $line-height-base;
+  text-align: left;
+}
+
+.deviceWarning {
+  @include pixel-frame(
+    3px,
+    2px,
+    color-mix(in srgb, var(--color-pending) 40%, var(--color-surface)),
+    color-mix(in srgb, var(--color-pending) 10%, var(--color-surface))
+  );
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-8;
+  margin-top: $spacing-16;
+  padding: 12px $spacing-16;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  line-height: $line-height-base;
+  text-align: left;
+
+  > span:first-child {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--color-pending);
+  }
+}
+
+.deviceActions {
+  @include flex-column;
+  gap: $spacing-8;
+  margin-top: $spacing-24;
+
+  .btn {
+    margin-top: 0;
+  }
+}
+
+.btnSecondary {
+  @include btn-secondary;
+  @include pixel-button(var(--px-card-line));
+  width: 100%;
+  min-height: 44px;
+  box-shadow:
+    inset 0 0 0 2px var(--px-card-line),
+    inset 0 -4px 0 var(--px-card-line);
+  font-size: $font-size-16;
+}
+
+.deviceProgress {
+  @include flex-center;
+  min-height: 96px;
+  color: var(--color-primary);
+}
+
+.deviceHelp {
+  margin: $spacing-16 0;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.btnLink {
+  @include btn-primary;
+  @include pixel-button(color-mix(in srgb, var(--color-primary) 62%, #0b1230));
+  width: 100%;
+  min-height: 44px;
+  font-size: $font-size-16;
+  text-decoration: none;
+}
+
+.oauthArea {
+  margin-top: $spacing-16;
+}
+
+/* 「或」分隔線：兩條像素虛線 */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: $spacing-8;
+  margin-bottom: $spacing-16;
+  color: var(--color-text-muted);
+  font-size: $font-size-14;
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--px-card-line) 0 6px, transparent 6px 10px);
+  }
+}
+
+.googleButton {
+  @include flex-center;
+  width: 100%;
+  min-height: 44px;
+
+  > div {
+    width: 100%;
+  }
+}
+
+.googleBusy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.oauthHint {
+  margin-top: $spacing-8;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+}
+
+/* 主要按鈕：主色像素鈕，44px（登入頁例外） */
+.btn {
+  @include btn-primary;
+  @include pixel-button(color-mix(in srgb, var(--color-primary) 62%, #0b1230));
+  width: 100%;
+  min-height: 44px;
+  margin-top: $spacing-8;
+  font-size: $font-size-16;
+  font-weight: $font-weight-700;
+  letter-spacing: 0.06em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error {
+    animation: none;
+  }
+}

@@ -26,6 +26,8 @@ const NotFoundPage = lazy(() => import("./pages/not-found/NotFoundPage"));
 // 開發用的樣式對照頁（真元件渲染 style guide）：只在 dev 模式註冊，
 // 條件是建置期常數，正式 build 會把整段連同 chunk 一起去掉
 const DevStylePage = import.meta.env.DEV ? lazy(() => import("./pages/dev/DevStylePage")) : null;
+// 像素風登入頁的預覽（尚未取代正式登入頁）：同樣只在 dev 模式註冊
+const PixelLoginPreview = import.meta.env.DEV ? lazy(() => import("./pages/login/pixel/PixelLoginPreview")) : null;
 
 // 個人
 const AdminDashboardPage = lazy(() => import("./pages/personal/dashboard/admin/AdminDashboardPage"));
@@ -151,6 +153,9 @@ function App() {
   /* 開發用樣式對照頁：不需登入、不打後端，放在所有登入閘門之前 */
   if (DevStylePage && window.location.pathname === "/dev/style") {
     return <Suspense fallback={<AuthBootstrapState />}><DevStylePage /></Suspense>;
+  }
+  if (PixelLoginPreview && window.location.pathname === "/dev/login-pixel") {
+    return <Suspense fallback={<AuthBootstrapState />}><PixelLoginPreview /></Suspense>;
   }
 
   if (window.location.pathname === "/verify-email-change") {

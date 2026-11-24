@@ -325,5 +325,21 @@
   "LoginPreflight.status.skipped": "未設定",
   "LoginPreflight.latency": "{{ms}} ms",
   "LoginPreflight.retry": "重新檢查",
-  "LoginPreflight.logout": "登出"
+  "LoginPreflight.logout": "登出",
+  "PixelLogin.heroTagline": "校園裡的私有雲",
+  "PixelLogin.heroSub": "從申請到開機，一個平台管理整個校園的運算資源",
+  "PixelLogin.octoLabel": "章魚學士（點一下跟牠打招呼）",
+  "PixelLogin.say.login": "嗨！歡迎回來～",
+  "PixelLogin.say.totp": "最後一步，輸入驗證碼",
+  "PixelLogin.say.forgot": "別擔心，重設連結寄給你",
+  "PixelLogin.say.register": "歡迎加入 SkyLab！",
+  "PixelLogin.say.reset": "幫帳號換個新密碼吧",
+  "PixelLogin.say.device": "要讓桌面 App 連上嗎？",
+  "PixelLogin.say.shy": "我不會偷看密碼的！",
+  "PixelLogin.say.thinking": "連線中，稍等一下…",
+  "PixelLogin.say.error": "咦？好像哪裡不對",
+  "PixelLogin.say.done": "成功了！",
+  "PixelLogin.poke.0": "我是章魚學士！",
+  "PixelLogin.poke.1": "今天也要好好練習喔",
+  "PixelLogin.poke.2": "你的機器已經準備好了"
 }

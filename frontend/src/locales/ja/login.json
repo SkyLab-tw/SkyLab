@@ -325,5 +325,21 @@
   "LoginPreflight.status.skipped": "未設定",
   "LoginPreflight.latency": "{{ms}} ms",
   "LoginPreflight.retry": "再チェック",
-  "LoginPreflight.logout": "ログアウト"
+  "LoginPreflight.logout": "ログアウト",
+  "PixelLogin.heroTagline": "キャンパスのプライベートクラウド",
+  "PixelLogin.heroSub": "申請から起動まで、キャンパスの計算資源をひとつのプラットフォームで",
+  "PixelLogin.octoLabel": "タコ博士（クリックであいさつ）",
+  "PixelLogin.say.login": "やあ！おかえりなさい～",
+  "PixelLogin.say.totp": "最後に認証コードを",
+  "PixelLogin.say.forgot": "大丈夫、リンクを送るよ",
+  "PixelLogin.say.register": "SkyLab へようこそ！",
+  "PixelLogin.say.reset": "新しいパスワードにしよう",
+  "PixelLogin.say.device": "デスクトップアプリを接続する？",
+  "PixelLogin.say.shy": "パスワードは見ないよ！",
+  "PixelLogin.say.thinking": "接続中、ちょっと待ってね…",
+  "PixelLogin.say.error": "あれ？何かおかしいみたい",
+  "PixelLogin.say.done": "成功！",
+  "PixelLogin.poke.0": "タコ博士だよ！",
+  "PixelLogin.poke.1": "今日も練習がんばろう",
+  "PixelLogin.poke.2": "マシンの準備はできてるよ"
 }
