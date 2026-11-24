@@ -15,6 +15,7 @@ import MachineKindBadge from "../../../components/MachineKindBadge/MachineKindBa
 import PowerMenu from "../../../components/PowerMenu/PowerMenu";
 import TemplateFormDialog from "../../resource/templates/TemplateFormDialog";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import usePersistedGroupExpansion from "../../../hooks/usePersistedGroupExpansion";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import ErrorState from "../../../components/ErrorState/ErrorState";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -501,7 +502,8 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
 function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
   const { t } = useTranslation("personal");
   const confirm = useConfirm();
-  const [expanded, setExpanded] = useState(true);
+  /* 開合記在本機：上次收起的群組回到頁面仍是收起的 */
+  const [expanded, toggleExpanded] = usePersistedGroupExpansion("my-resources", group.id);
   const [ending, setEnding] = useState(false);
   const [groupAction, setGroupAction] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -564,12 +566,12 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
       onClick={(event) => {
         /* 整列都可以開合，但列內的按鈕（結束練習、名稱區的 toggle）各自處理自己的點擊 */
         if (!isRowBackgroundClick(event, "button")) return;
-        setExpanded((value) => !value);
+        toggleExpanded();
       }}
     >
       <td className={styles.td}>
         <div className={styles.nameCell}>
-          <button type="button" className={styles.environmentToggle} aria-expanded={expanded} aria-label={t("EnvironmentGroupRows.toggleAria", { name: group.title })} onClick={() => setExpanded((value) => !value)}><MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} /></button>
+          <button type="button" className={styles.environmentToggle} aria-expanded={expanded} aria-label={t("EnvironmentGroupRows.toggleAria", { name: group.title })} onClick={toggleExpanded}><MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} /></button>
           <div><NameLine badge={fit.isFolded("kind") && kindBadge}><strong>{group.title}</strong></NameLine><small>{joinMeta(t("EnvironmentGroupRows.machineCount", { count: group.machines.length }), fit.isFolded("env") && envLabel, fit.isFolded("node") && group.nodeLabel)}</small>
             {group.publicationPending && <small className={styles.publicationPending}><MIcon name="schedule" size={12} />{t("EnvironmentGroupRows.publicationPending")}</small>}</div>
         </div>

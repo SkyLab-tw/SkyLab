@@ -59,8 +59,14 @@ export default function DashboardLayout() {
   const { active: sessionWarning, dismiss } = useSessionWarning(user?.id);
   const mobileOverlay = useDialogPresence(mobileOpen);
   useEffect(() => {
+    /* 只看寬度：手機網址列伸縮、鍵盤彈出只改高度也會觸發 resize，原本一律關抽屜，
+       剛打開的抽屜（鎖捲動時網址列跑出來）會被馬上關掉，看起來像要點兩下 */
+    let lastWidth = null;
     function handleResize() {
-      if (window.innerWidth < COLLAPSE_MIN_WIDTH) {
+      const width = window.innerWidth;
+      if (width === lastWidth) return;
+      lastWidth = width;
+      if (width < COLLAPSE_MIN_WIDTH) {
         setCollapsed(false);
         setMobileOpen(false);
       }

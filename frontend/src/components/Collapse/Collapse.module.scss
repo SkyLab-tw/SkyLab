@@ -1,0 +1,38 @@
+@use "../../assets/styles/variables" as *;
+
+$collapse-duration: 0.22s;
+$collapse-easing: cubic-bezier(0.25, 0.8, 0.25, 1);
+/* 內容四周不裁切的寬度：容得下 2px 焦點框＋2px outline-offset */
+$collapse-bleed: 4px;
+
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: calc(-1 * var(--collapse-gap, 0px));
+  opacity: 0;
+  transition:
+    grid-template-rows $collapse-duration $collapse-easing,
+    margin-top $collapse-duration $collapse-easing,
+    opacity $collapse-duration $collapse-easing;
+}
+
+.open {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+  opacity: 1;
+}
+
+/* min-height: 0 才收得到 0；overflow 裁掉動畫中露出的部分，
+   四周用等量的 padding／負 margin 留出焦點框的位置，不影響排版尺寸 */
+.inner {
+  min-height: 0;
+  margin: -$collapse-bleed;
+  padding: $collapse-bleed;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse {
+    transition: none;
+  }
+}

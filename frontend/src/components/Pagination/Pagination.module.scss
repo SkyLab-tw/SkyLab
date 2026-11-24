@@ -1,23 +1,132 @@
 @use "../../assets/styles/variables" as *;
 @use "../../assets/styles/mixins" as *;
 
+/* 外層當容器量寬度：窄的時候（AI 助手開著、手機）頁碼收成「5 / 16」 */
 .pagination {
-  @include flex-between;
-  flex-wrap: wrap;
-  gap: $spacing-8;
+  container: pagination / inline-size;
   margin-top: $spacing-16;
 }
 
-.paginationInfo {
+/* 一行放不下時「共 N 筆」自己一行、控制項換到下一行靠右 */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-8 $spacing-16;
+}
+
+.info {
   font-size: $font-size-12;
   color: var(--color-text-muted);
 }
 
-.paginationBtns {
+.controls {
   display: flex;
-  gap: $spacing-8;
+  align-items: center;
+  gap: $spacing-16;
+  margin-left: auto;
 }
 
-.btnSecondary {
-  @include btn-secondary;
+.nav,
+.pages {
+  display: flex;
+  align-items: center;
+  gap: $spacing-4;
+}
+
+.pages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 頁碼與箭頭：36px 方鈕，平常沒底沒框（9 顆都描邊太吵），hover 淡底；
+   目前頁主色實心白字（導覽層級的選中，見樣式規範「選中分兩層」） */
+.pageBtn,
+.arrow {
+  @include btn-base;
+  min-width: 36px;
+  padding: 6px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+
+  &:hover:not(:disabled) {
+    color: var(--color-text-primary);
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+}
+
+.arrow {
+  width: 36px;
+  padding: 0;
+}
+
+.pageCurrent,
+.pageCurrent:hover:not(:disabled) {
+  color: var(--color-text-on-primary);
+  background: var(--color-primary);
+  font-weight: 600;
+  cursor: default;
+}
+
+/* 跟頁碼鈕同寬：省略號從一個變兩個時整列寬度才不會跳 */
+.gap {
+  display: inline-flex;
+  justify-content: center;
+  width: 36px;
+  color: var(--color-text-muted);
+  font-size: $font-size-14;
+  user-select: none;
+}
+
+/* 窄容器才出現，取代整排頁碼 */
+.status {
+  display: none;
+  padding: 0 $spacing-8;
+  color: var(--color-text-primary);
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.jump {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-8;
+  color: var(--color-text-secondary);
+  font-size: $font-size-14;
+  white-space: nowrap;
+}
+
+.jumpInput {
+  @include form-control;
+  width: 56px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 頁數少（7 頁內頁碼全畫得出來）時前往欄是多的，只在收成「5 / 16」時出現 */
+.jumpNarrowOnly {
+  display: none;
+}
+
+@container pagination (max-width: 519px) {
+  .pages {
+    display: none;
+  }
+
+  .status {
+    display: inline;
+  }
+
+  .jumpNarrowOnly {
+    display: inline-flex;
+  }
 }

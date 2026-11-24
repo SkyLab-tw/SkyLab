@@ -657,8 +657,8 @@ export default function MonitoringPage() {
       <div className={styles.tabbedPanels} data-guide="monitoring-panels">
         <Tabs
           options={[
-            { value: "alerts", label: t("MonitoringPage.tabAlerts"), badge: alertCount ?? undefined, buttonProps: { "data-guide-tab": "monitoring-alerts" } },
-            { value: "mining", label: t("MonitoringPage.tabMining"), badge: miningCount ?? undefined, buttonProps: { "data-guide-tab": "monitoring-mining" } },
+            { value: "alerts", label: t("MonitoringPage.tabAlerts"), icon: "notifications_active", badge: alertCount ?? undefined, buttonProps: { "data-guide-tab": "monitoring-alerts" } },
+            { value: "mining", label: t("MonitoringPage.tabMining"), icon: "currency_bitcoin", badge: miningCount ?? undefined, buttonProps: { "data-guide-tab": "monitoring-mining" } },
           ]}
           value={panelTab}
           onChange={setPanelTab}

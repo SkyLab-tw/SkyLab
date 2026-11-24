@@ -8,6 +8,7 @@ import NumberInput from "../../../components/NumberInput/NumberInput";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 import Tabs from "../../../components/Tabs/Tabs";
 import Disclosure from "../../../components/Disclosure/Disclosure";
+import DisclosureToggle from "../../../components/Disclosure/DisclosureToggle";
 import Switch from "../../../components/Switch/Switch";
 import Stepper from "../../../components/Stepper/Stepper";
 import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
@@ -119,6 +120,7 @@ export function FormsSection() {
   const [query, setQuery] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [agree, setAgree] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   return (
     <Section
       id="forms"
@@ -194,6 +196,11 @@ export function FormsSection() {
             <p className={styles.hint}>stderr：connection refused（port 3306）</p>
           </Disclosure>
         </Demo>
+        <Demo label="行內收合（按鈕版）" refs={["components/Disclosure/DisclosureToggle", "open", "onToggle"]} note="展開的內容不接在下面（例如把列併進上方表格）時用，樣子同行內收合。放在頁面底上也不鋪底色：淡底鈕的 hover 色階會跟低飽和主題的頁面背景混在一起。AI API 的「顯示已失效的金鑰」在用。">
+          <DisclosureToggle open={showInactive} onToggle={() => setShowInactive((value) => !value)}>
+            {showInactive ? "隱藏已失效的金鑰" : "顯示已失效的金鑰（2）"}
+          </DisclosureToggle>
+        </Demo>
         <Demo label="收合列（進階設定）" refs={["components/Disclosure", "label", "icon?", "meta?", "bodyClassName"]} wide note="表單底部可以不填的設定收進共用收合列：白底細框、14px／500、右側淡色說明＋箭頭（展開轉半圈），內容接在列下方跟上方欄位對齊。不用瀏覽器原生 ▶ 三角形。建班精靈、首次設定精靈在用。">
           <Disclosure icon="tune" label="進階設定" meta="選填" bodyClassName={styles.formGrid}>
             <label className={styles.field}>
@@ -228,30 +235,16 @@ export function FormsSection() {
 }
 
 export function SegmentSection() {
-  const [range, setRange] = useState("7d");
   const [status, setStatus] = useState("pending");
   const [many, setMany] = useState("a");
   return (
     <Section
       id="segment"
       title="分段切換 SegmentedControl"
-      refs={["components/SegmentedControl/SegmentedControl.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "quiet"]}
-      intro="清單篩選（狀態、類型）、表單選值（申請模式、題型）與檢視選項（時間區間、圖表指標、程式語言）一律用共用 SegmentedControl，固定 36px。清單篩選與表單選值用預設的實心版；檢視選項加 quiet：沒有軌道與陰影、選中段只有主色細框，貼在頁面分頁旁或圖表標頭不搶戲。切換整塊內容的分頁改用 Tabs（下一節）。超過 4 段在 className 加 max-width:100% + overflow-x:auto。"
+      refs={["components/SegmentedControl/SegmentedControl.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "compact", "fullWidth"]}
+      intro="清單篩選（狀態、類型）、表單選值（申請模式、題型）與檢視選項（時間區間、圖表指標、程式語言）一律用共用 SegmentedControl，只有一種實心樣子：外框軌道、選中段主色填滿，固定 36px。240px 以下的窄容器加 compact＋fullWidth。切換整塊內容的分頁改用 Tabs（下一節）。放不下時自動收成下拉（點開是共用 ListboxPopover），放得下再展開回分段，頁面不用再加 overflow-x。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="檢視選項：quiet" refs={["quiet", "icon"]} note="時間區間、圖表指標、API 文件的程式語言。切換「看哪一台」這類主要操作（課堂監看切換機器）仍用實心。">
-          <SegmentedControl
-            quiet
-            ariaLabel="日期區間"
-            value={range}
-            onChange={setRange}
-            options={[
-              { value: "24h", label: "24 小時", icon: "schedule" },
-              { value: "7d", label: "7 天", icon: "date_range" },
-              { value: "30d", label: "30 天", icon: "calendar_month" },
-            ]}
-          />
-        </Demo>
         <Demo label="清單篩選：數量徽章＋停用段" refs={["badge", "buttonProps: { disabled }"]}>
           <SegmentedControl
             ariaLabel="審核狀態"
@@ -265,25 +258,24 @@ export function SegmentSection() {
             ]}
           />
         </Demo>
-        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="240px 以下的窄容器：compact 把各段內距收成 8px，fullWidth 撐滿容器、各段平分。兩個都是元件的 prop，頁面 SCSS 不要再覆寫 .segmentBtn。">
+        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="240px 以下的窄容器（AI 導師檢查 220px 側欄的任務設定／導師核查）：compact 把各段內距收成 8px，fullWidth 撐滿容器、各段平分。兩個都是元件的 prop，頁面 SCSS 不要再覆寫 .segmentBtn。">
           <div className={styles.narrowBox}>
             <SegmentedControl
-              ariaLabel="檢查結果篩選"
+              ariaLabel="側欄分頁"
               compact
               fullWidth
               value={status === "approved" ? "approved" : "pending"}
               onChange={setStatus}
               options={[
-                { value: "pending", label: "待確認", icon: "pending" },
-                { value: "approved", label: "已通過", icon: "check_circle" },
+                { value: "pending", label: "任務設定", icon: "description" },
+                { value: "approved", label: "導師核查", icon: "rate_review" },
               ]}
             />
           </div>
         </Demo>
-        <Demo label="5 段以上橫向捲動" refs={["className → overflow-x: auto"]} wide>
+        <Demo label="段數多：放不下自動收成下拉" refs={["ResizeObserver", "ListboxPopover"]} wide note="放得下就是分段；容器變窄放不下時整組換成一顆顯示目前選項的下拉鈕（點開是共用單選清單），變寬再展開回來。把視窗拉窄就看得到。">
           <SegmentedControl
             ariaLabel="背景任務類型"
-            className={styles.segmentScroll}
             value={many}
             onChange={setMany}
             options={["a", "b", "c", "d", "e", "f"].map((key, index) => ({
@@ -301,16 +293,16 @@ export function TabsSection() {
   const [detail, setDetail] = useState("proxy");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState("overview");
-  const [side, setSide] = useState("rubrics");
+  const [classTab, setClassTab] = useState("students");
   return (
     <Section
       id="tabs"
       title="分頁 Tabs"
-      refs={["components/Tabs/Tabs.jsx", "options: [{ value, label, icon?, badge?, buttonProps? }]", "page", "compact", "fullWidth", "@include page-tabs-row"]}
-      intro="切換整塊內容一律用 Tabs，分兩種：頁面分頁（page，標題下方切換整頁內容）圖示放進圓角方塊、選中換主色實心；區塊分頁（預設，卡片／側欄裡）沒有軌道，字下一條 2px 主色短指示條。選中的字都加粗到 600（標籤先依粗體預留寬度，切換時不會左右跳）。篩選與選項用 SegmentedControl。role=tablist／tab＋aria-selected，左右鍵、Home／End 切換；放不下自己橫捲。"
+      refs={["components/Tabs/Tabs.jsx", "options: [{ value, label, icon, badge?, buttonProps? }]", "@include page-tabs-row"]}
+      intro="切換整塊內容一律用 Tabs，只有一種樣子：每個分頁都給 icon，圖示放進圓角方塊、選中換主色實心，字 16px、加粗到 600（標籤先依粗體預留寬度，切換時不會左右跳），列高 44px。頁面標題下方、卡片裡都用這一種；240px 以下的窄側欄放不下，改用 SegmentedControl 的 compact＋fullWidth。篩選與選項用 SegmentedControl。role=tablist／tab＋aria-selected，左右鍵、Home／End 切換；放不下時排不下的收進「更多」。"
     >
       <div className={styles.demoGrid}>
-        <Demo label="區塊分頁＋右側篩選與搜尋" refs={["Tabs", "SegmentedControl", "ToolbarSearch"]} wide note="AI 用量監控的呼叫明細（卡片裡的區塊分頁）：分頁換內容、右邊的分段切換只篩目前分頁的清單。徽章 0 也顯示，載入失敗傳「—」。">
+        <Demo label="卡片裡的分頁＋右側篩選與搜尋" refs={["Tabs", "SegmentedControl", "ToolbarSearch"]} wide note="AI 用量監控的呼叫明細：分頁換內容、右邊的分段切換只篩目前分頁的清單。徽章 0 也顯示，載入失敗傳「—」。">
           <div className={styles.alignRow}>
             <Tabs
               ariaLabel="呼叫明細"
@@ -335,9 +327,8 @@ export function TabsSection() {
             />
           </div>
         </Demo>
-        <Demo label="頁面分頁：page" refs={["page", "icon"]} wide note="標題下方、切換整頁內容的分頁（AI API、帳號設定、資源詳情、班級頁、Gateway、課程內容）。每個分頁都要給 icon；整列往左拉 12px，第一個方塊對齊標題左緣。放在 PageHeader 下方，分頁列 @include page-tabs-row：分頁到內容 12px、標題到分頁 24px。">
+        <Demo label="頁面標題下方" refs={["icon", "@include page-tabs-row"]} wide note="切換整頁內容的分頁（AI API、帳號設定、資源詳情、班級頁、Gateway、課程內容）。整列往左拉 12px，第一個方塊對齊標題左緣。放在 PageHeader 下方，分頁列 @include page-tabs-row：分頁到內容 12px、標題到分頁 24px。">
           <Tabs
-            page
             ariaLabel="資源詳情"
             value={page}
             onChange={setPage}
@@ -349,17 +340,24 @@ export function TabsSection() {
             ]}
           />
         </Demo>
-        <Demo label="窄容器：compact＋fullWidth" refs={["compact", "fullWidth"]} note="AI 導師檢查 220px 側欄：compact 左右內距 8px、fullWidth 平分。放在有底線的標頭列裡時，頁面讓分頁 align-self: stretch，指示條剛好壓在底線上。">
-          <div className={styles.narrowBox}>
+        <Demo
+          label="放不下時收進「更多」"
+          refs={["ResizeObserver", "ListboxPopover", "Tabs.more"]}
+          wide
+          note="班級頁 6 個分頁放進 400px 的框：排得下的照排（一律帶字），其餘收進最右邊的「更多」，點開是共用單選清單；選中的一定排在外面（從「更多」選了「AI 導師檢查」，它會換到外面最後一格）。外層變寬一個個排回來，全部放得下「更多」就消失；連一個加「更多」都放不下才橫向捲動。收進「更多」的分頁不在畫面上，掛在它身上的導覽錨點也一樣。"
+        >
+          <div className={styles.tabsNarrowBox}>
             <Tabs
-              ariaLabel="側欄分頁"
-              compact
-              fullWidth
-              value={side}
-              onChange={setSide}
+              ariaLabel="班級"
+              value={classTab}
+              onChange={setClassTab}
               options={[
-                { value: "rubrics", label: "任務設定", icon: "description" },
-                { value: "review", label: "導師核查", icon: "rate_review" },
+                { value: "overview", label: "班級總覽", icon: "dashboard" },
+                { value: "students", label: "加入學生", icon: "groups", badge: 28 },
+                { value: "machines", label: "上課環境", icon: "account_tree" },
+                { value: "weekly", label: "每週內容", icon: "calendar_view_week" },
+                { value: "progress", label: "課堂監看", icon: "cast_for_education" },
+                { value: "ai", label: "AI 導師檢查", icon: "auto_awesome" },
               ]}
             />
           </div>

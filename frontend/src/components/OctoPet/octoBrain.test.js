@@ -174,3 +174,23 @@ test("每一種姿勢都畫得出來，而且不會畫出畫布範圍", () => {
     now += ms + STEP;
   }
 });
+
+test("shy：舉起書擋臉、不會自己收書或睡覺，換回 idle 才收起來", () => {
+  const brain = createBrain(T0, () => 0);
+  run(brain, T0, SLEEP_AFTER_MS + 1000, { activity: "shy" });
+  expect(brain.state).toBe("read");
+  expect(poseOf(brain)).toMatchObject({ mouth: "none", prop: { kind: "book", lift: 0 } });
+
+  // 打字時頁面一直有動靜（keydown），換回 idle 只會收書、不會接著睡
+  brainEvent(brain, "active", T0 + SLEEP_AFTER_MS + 1100);
+  const log = run(brain, T0 + SLEEP_AFTER_MS + 1100, 1000, { activity: "idle" });
+  expect(states(log)).toEqual(["stow", "idle"]);
+});
+
+test("shy：滑鼠滑過去也不收書（書是拿來擋臉的），待機看書時滑過去才收", () => {
+  const brain = createBrain(T0, () => 0);
+  run(brain, T0, 1000, { activity: "shy" });
+  brainEvent(brain, "hover", T0 + 1000, true);
+  run(brain, T0 + 1000, 1000, { activity: "shy" });
+  expect(brain.state).toBe("read");
+});

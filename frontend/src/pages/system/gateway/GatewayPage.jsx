@@ -688,7 +688,6 @@ export default function GatewayPage() {
 
       {/* 頁面分頁放標題下方（全站頁面分頁同一個位置）；切換前若設定檔有未存修改，handleTabSelect 會先跳確認 */}
       <Tabs
-        page
         className={styles.pageTabs}
         ariaLabel={t("GatewayPage.tabsAriaLabel")}
         value={activeTab}

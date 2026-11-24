@@ -103,18 +103,13 @@ describe("Tabs", () => {
     expect(tabs()[2].textContent).toBe("節點");
   });
 
-  test("page（頁面分頁）：圖示包進方塊、加頁面分頁類名；區塊分頁的圖示不包方塊", () => {
-    act(() => root.render(<Tabs page options={OPTIONS} value="models" onChange={() => {}} ariaLabel="頁面" />));
+  test("只有一種樣子：圖示一律包進圓角方塊；沒給圖示就不畫方塊", () => {
+    act(() => root.render(<Harness />));
 
-    const list = host.querySelector('[role="tablist"]');
-    expect(list.className).toMatch(/tabsPage/);
     const box = tabs()[0].querySelector('[class*="iconBox"]');
     expect(box?.querySelector('[data-icon="model_training"]')).not.toBeNull();
     expect(tabs()[0].getAttribute("aria-selected")).toBe("true");
     expect(tabs()[0].textContent).toBe("模型3");
-
-    act(() => root.render(<Harness />));
-    expect(tabs()[0].querySelector('[class*="iconBox"]')).toBeNull();
-    expect(tabs()[0].querySelector('[data-icon="model_training"]')).not.toBeNull();
+    expect(tabs()[1].querySelector('[class*="iconBox"]')).toBeNull();
   });
 });

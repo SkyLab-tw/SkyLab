@@ -10,15 +10,24 @@
   width: fit-content;
 }
 
+/* 放不下時元件會收成下拉（見 SegmentedControl.jsx）；收起來之前那一瞬間、或瀏覽器沒有 ResizeObserver 時，
+   退回橫向捲動且不顯示捲軸：Windows 的捲軸會佔掉 36px 裡的高度，按鈕被壓扁、字跟選中底色都被切掉 */
 .segment {
   box-sizing: border-box;
   display: inline-flex;
   height: 36px;
+  max-width: 100%;
   padding: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
   border: 1px solid var(--color-border);
   border-radius: $radius-8;
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .segmentBtn {
@@ -44,10 +53,11 @@
     cursor: not-allowed;
   }
 
+  /* 焦點外框畫在按鈕內側：外框容器會橫捲（overflow），畫在外面會被裁掉 */
   &:focus-visible,
   &[aria-pressed="true"]:focus-visible {
     outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    outline-offset: -2px;
   }
 }
 
@@ -79,6 +89,12 @@
   }
 }
 
+/* 選中段是主色實心：內側的主色焦點框會跟底色糊在一起，改白框再往內縮一點 */
+.segmentBtn.segmentActive:focus-visible {
+  outline-color: var(--color-text-on-primary);
+  outline-offset: -4px;
+}
+
 /* 可選的數量徽章 */
 .segmentBadge {
   min-width: 20px;
@@ -97,42 +113,60 @@
   color: var(--color-text-on-primary);
 }
 
-/* quiet：檢視選項（時間區間、圖表指標、程式語言…）的輕量版。沒有外框軌道與陰影、選中段不填色，
-   只用 1px 主色細框＋白底＋深色字標示，份量比實心的清單篩選低一階，放在頁面分頁旁或圖表標頭不會搶過分頁與內容。
-   外框高度照樣 36px，跟同一列的按鈕、欄位對得齊。
-   選中段的 hover 要寫到跟 .segmentBtn:hover:not(:disabled) 一樣重，否則會被蓋回未選中的樣子 */
-.segmentQuiet {
-  gap: 2px;
-  /* 看不到外框，左右不留內距：第一段的框貼齊容器左緣，跟上下的內容對齊 */
-  padding: 3px 0;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
+/* 收成下拉（放不下時）：外框沿用分段的外觀（36px、框線、底色），裡面整塊是一顆觸發鈕，
+   顯示目前選項＋向下箭頭，點開是共用的 ListboxPopover */
+.segmentCollapsed {
+  padding: 0;
+}
 
-  .segmentBtn {
-    padding: 0 12px;
-    border: 1px solid transparent;
+.collapsedTrigger {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px 0 12px;
+  border-radius: inherit;
+  color: var(--color-text-primary);
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background $transition-base;
 
-    &:hover:not(:disabled) {
-      background: var(--color-hover);
-    }
+  &:hover {
+    background: var(--color-hover);
   }
 
-  /* 字用 --color-text-primary（比主色深一階）：--color-text 在藍色主題就等於主色，跟細框糊在一起 */
-  .segmentActive,
-  .segmentActive:hover:not(:disabled) {
-    border-color: var(--color-primary);
-    background: var(--color-surface);
-    color: var(--color-text-primary);
-  }
-
-  .segmentActive .segmentBadge {
-    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-    color: var(--color-primary);
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
   }
 }
+
+.collapsedLabel,
+.optionLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.collapsedLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collapsedChevron {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .segmentBtn {
+  .segmentBtn,
+  .collapsedTrigger {
     transition: none;
   }
 }

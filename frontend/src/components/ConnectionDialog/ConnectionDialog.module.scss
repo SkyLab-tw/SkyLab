@@ -312,11 +312,11 @@
   cursor: pointer;
 }
 
-/* 移除列：平常隱形，滑到那一列或列內有焦點才出現，表單不會排滿小叉叉；
-   只剩一列時整顆收起（那列本來就不能刪） */
+/* 移除列：有滑鼠時平常隱形，滑到那一列或列內有焦點才出現，表單不會排滿小叉叉；
+   觸控裝置沒有滑過，一律顯示（reveal-on-hover）。只剩一列時整顆收起（那列本來就不能刪） */
 .removeBtn {
   @include btn-icon($danger: true);
-  opacity: 0;
+  @include reveal-on-hover;
   transition: background $transition-base, opacity $transition-base;
   flex-shrink: 0;
 

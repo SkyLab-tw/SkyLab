@@ -3,12 +3,14 @@ import { useTranslation } from "react-i18next";
 import styles from "./AdminPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
+import Collapse from "../../../components/Collapse/Collapse";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../hooks/useToast";
 import { useLoadError, useQueryErrorEffect, useQueryView } from "../../../hooks/useQueryLoadState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import usePersistedGroupExpansion from "../../../hooks/usePersistedGroupExpansion";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { UsersService } from "../../../services/users";
 import { UserGroupsService } from "../../../services/userGroups";
@@ -34,6 +36,7 @@ import { joinList } from "../../../utils/joinList";
 import { isPasswordStrong } from "../../../utils/passwordPolicy";
 import { runBatch } from "../../../utils/runBatch";
 import { GroupManagerDialog, GroupPickDialog } from "./UserGroupDialogs";
+import RegistrationSettingsDialog from "./RegistrationSettingsDialog";
 
 const ROLE_ICONS = {
   student: "school",
@@ -325,8 +328,8 @@ function UserRow({ user, currentUserId, selected = false, selecting = false, onT
                 ? t("AdminPage.statusRejected")
                 : user.is_active ? t("AdminPage.statusActive") : t("AdminPage.statusInactive")}
         </span>
+        <span className={styles.createdAt}>{t("AdminPage.createdOn", { date: formatDate(user.created_at) })}</span>
       </div>
-      <span className={styles.createdAt}>{formatDate(user.created_at)}</span>
       <div className={styles.rowActions}>
         <button type="button" className={styles.actionBtn} title={t("AdminPage.editTitle")} onClick={() => onEdit(user)} data-guide="admin-user-edit">
           <MIcon name="edit" size={16} />
@@ -351,7 +354,15 @@ export default function AdminPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const [policySaving, setPolicySaving] = useState(false);
-  const [studentEmailDomainDraft, setStudentEmailDomainDraft] = useState(null);
+  /* 註冊設定對話框：開著時存的是開啟序號（0＝關），當 key 用——離場動畫還沒播完就再開，
+     才會換一個新草稿，不沿用上次沒存的修改（同 UserModal 的 modalSeq） */
+  const [registrationSettingsSeq, setRegistrationSettingsSeq] = useState(0);
+  const registrationSettingsPresence = useDialogPresence(registrationSettingsSeq);
+  const registrationSettingsOpenCount = useRef(0);
+  const openRegistrationSettings = () => {
+    registrationSettingsOpenCount.current += 1;
+    setRegistrationSettingsSeq(registrationSettingsOpenCount.current);
+  };
   const [reviewingId, setReviewingId] = useState(null);
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
@@ -372,12 +383,15 @@ export default function AdminPage() {
      增刪改經 useUserCacheUpdater 就地寫入，寫入前先取消還在路上的刷新 */
   const usersQuery = useAllUsersQuery();
   const pendingQuery = usePendingRegistrationsQuery();
-  /* 開關是按下就存、沒有草稿，跟著清單一起背景刷新 */
+  /* 跟著清單一起背景刷新；正在改的草稿在對話框裡，刷新不會蓋掉 */
   const policyQuery = useRegistrationPolicyQuery({ refetchInterval: LIST_REFRESH_INTERVAL });
   const userCache = useUserCacheUpdater();
   const users = usersQuery.data ?? EMPTY;
   const registrationPolicy = policyQuery.data ?? null;
   const pendingRegistrations = pendingQuery.data?.data ?? EMPTY;
+  /* 待審核註冊卡的開合記在本機（預設展開），重整或下次回來維持上次的選擇 */
+  /* 待審核註冊平常不必看：預設收起，標題上的人數就夠提醒；使用者展開過才記住 */
+  const [pendingOpen, togglePendingOpen] = usePersistedGroupExpansion("admin", "pending-registrations", { defaultExpanded: false });
   /* 載入失敗只在手上沒資料時提示（背景刷新失敗維持靜默、沿用舊資料）。首載失敗看 useQueryView／useLoadError：
      沒資料時 v5 每次重抓都把 status 改回 pending、清掉 error，直接看 isError 會在每次背景重試時閃回整頁載入中、
      重跳同一則 toast；useLoadError 的錯誤在重試期間不清掉，依訊息字串觸發，同一串失敗只提示一次 */
@@ -424,32 +438,20 @@ export default function AdminPage() {
   const groupPickPresence = useDialogPresence(groupPick);
   const [groupSaving, setGroupSaving] = useState(false);
 
+  /* 對話框送出的欄位疊在最新的政策上（背景刷新可能已帶回別的管理員改的值），成功才關閉；
+     失敗時對話框與草稿都留著，改一改可以直接再存 */
   async function saveRegistrationPolicy(patch) {
-    if (!registrationPolicy || policySaving) return false;
+    if (!registrationPolicy || policySaving) return;
     setPolicySaving(true);
     try {
       const saved = await UsersService.saveRegistrationPolicy({ ...registrationPolicy, ...patch });
       await userCache.setRegistrationPolicy(saved);
       toast.success(t("AdminPage.registrationSettingsSaved"));
-      return true;
+      setRegistrationSettingsSeq(0);
     } catch (err) {
       toast.error(err?.message ?? t("AdminPage.toastSaveFailed"));
-      return false;
     } finally {
       setPolicySaving(false);
-    }
-  }
-
-  /* 學號信箱網域是文字欄位：編輯中保留草稿（背景刷新不蓋掉），存檔成功才回到顯示已存的值 */
-  const savedStudentEmailDomain = registrationPolicy?.student_email_domain ?? "";
-  const studentEmailDomain = studentEmailDomainDraft ?? savedStudentEmailDomain;
-  const studentEmailDomainChanged = studentEmailDomain.trim() !== savedStudentEmailDomain;
-
-  async function saveStudentEmailDomain(event) {
-    event.preventDefault();
-    if (!studentEmailDomainChanged) return;
-    if (await saveRegistrationPolicy({ student_email_domain: studentEmailDomain.trim() || null })) {
-      setStudentEmailDomainDraft(null);
     }
   }
 
@@ -677,72 +679,43 @@ export default function AdminPage() {
         </button>
       </PageHeader>
 
-      <section className={styles.registrationPanel} aria-label={t("AdminPage.registrationSettingsTitle")} data-guide="admin-registration">
-        <h2>{t("AdminPage.registrationSettingsTitle")}</h2>
-        <label className={styles.registrationOption}>
-          <span>
-            <strong>{t("AdminPage.signupEnabled")}</strong>
-            <small>{t("AdminPage.signupEnabledHint")}</small>
-          </span>
-          <input type="checkbox" checked={Boolean(registrationPolicy?.signup_enabled)}
-            disabled={!registrationPolicy || policySaving}
-            onChange={(event) => saveRegistrationPolicy({ signup_enabled: event.target.checked })} />
-        </label>
-        <label className={styles.registrationOption}>
-          <span>
-            <strong>{t("AdminPage.approvalRequired")}</strong>
-            <small>{t("AdminPage.approvalRequiredHint")}</small>
-          </span>
-          <input type="checkbox" checked={Boolean(registrationPolicy?.approval_required)}
-            disabled={!registrationPolicy || policySaving}
-            onChange={(event) => saveRegistrationPolicy({ approval_required: event.target.checked })} />
-        </label>
-        <label className={styles.registrationOption}>
-          <span>
-            <strong>{t("AdminPage.googleSignupEnabled")}</strong>
-            <small>{t("AdminPage.googleSignupEnabledHint")}</small>
-          </span>
-          <input type="checkbox" checked={Boolean(registrationPolicy?.google_signup_enabled)}
-            disabled={!registrationPolicy || policySaving}
-            onChange={(event) => saveRegistrationPolicy({ google_signup_enabled: event.target.checked })} />
-        </label>
-        <form className={styles.registrationOption} onSubmit={saveStudentEmailDomain}>
-          <label htmlFor="admin-student-email-domain">
-            <strong>{t("AdminPage.studentEmailDomain")}</strong>
-            <small>{t("AdminPage.studentEmailDomainHint")}</small>
-          </label>
-          <div className={styles.domainField}>
-            <input id="admin-student-email-domain" type="text" inputMode="url" autoComplete="off" spellCheck={false}
-              placeholder="school.edu.tw" value={studentEmailDomain}
-              disabled={!registrationPolicy || policySaving}
-              onChange={(event) => setStudentEmailDomainDraft(event.target.value)} />
-            <button type="submit" className={styles.btnSecondary}
-              disabled={!registrationPolicy || policySaving || !studentEmailDomainChanged}>
-              {t("AdminPage.save")}
-            </button>
-          </div>
-        </form>
-      </section>
-
+      {/* 註冊設定平常不用動，收進對話框；開啟鈕放在待審核註冊的標題列，跟它管的審核放一起。
+          整張卡點標題可收起（比照監控頁節點用量卡），收起時標題的筆數照樣看得到；設定鈕不跟著收 */}
       <section className={styles.registrationPanel} aria-label={t("AdminPage.pendingRegistrationsTitle")} data-guide="admin-pending">
-        <h2>{t("AdminPage.pendingRegistrationsTitle")} ({pendingRegistrations.length})</h2>
-        {pendingRegistrations.length === 0 ? (
-          <p className={styles.registrationEmpty}>{t("AdminPage.noPendingRegistrations")}</p>
-        ) : pendingRegistrations.map((item) => (
-          <div className={styles.pendingRow} key={item.id}>
-            <span><strong>{userDisplayName(item)}</strong><small>{item.email}</small></span>
-            <div>
-              <button type="button" className={styles.btnSecondary}
-                disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, false)}>
-                {t("AdminPage.rejectRegistration")}
-              </button>
-              <button type="button" className={styles.btnPrimary}
-                disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, true)}>
-                {t("AdminPage.approveRegistration")}
-              </button>
+        <div className={styles.panelHeader}>
+          <h2>
+            <button type="button" className={styles.panelToggle} aria-expanded={pendingOpen}
+              aria-controls="admin-pending-list" onClick={togglePendingOpen}>
+              {t("AdminPage.pendingRegistrationsTitle")} ({pendingRegistrations.length})
+              <MIcon name="expand_more" size={20} className={styles.panelChevron} />
+            </button>
+          </h2>
+          <button type="button" className={styles.btnSecondary} data-guide="admin-registration"
+            disabled={!registrationPolicy} onClick={openRegistrationSettings}>
+            <MIcon name="settings" size={16} />
+            {t("AdminPage.registrationSettingsTitle")}
+          </button>
+        </div>
+        {/* 收合走共用 Collapse：高度與透明度一起過渡；gap 對應 .registrationPanel 的 16px，收起時不多留一段空白 */}
+        <Collapse id="admin-pending-list" open={pendingOpen} gap={16} innerClassName={styles.pendingList}>
+          {pendingRegistrations.length === 0 ? (
+            <p className={styles.registrationEmpty}>{t("AdminPage.noPendingRegistrations")}</p>
+          ) : pendingRegistrations.map((item) => (
+            <div className={styles.pendingRow} key={item.id}>
+              <span><strong>{userDisplayName(item)}</strong><small>{item.email}</small></span>
+              <div>
+                <button type="button" className={styles.btnSecondary}
+                  disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, false)}>
+                  {t("AdminPage.rejectRegistration")}
+                </button>
+                <button type="button" className={styles.btnPrimary}
+                  disabled={Boolean(reviewingId)} onClick={() => reviewRegistration(item, true)}>
+                  {t("AdminPage.approveRegistration")}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </Collapse>
       </section>
 
       <div className={styles.summaryGrid} data-guide="admin-summary">
@@ -866,9 +839,7 @@ export default function AdminPage() {
               <Pagination
                 page={safePage}
                 totalPages={totalPages}
-                info={t("AdminPage.paginationInfo", { count: visibleUsers.length, page: safePage + 1, totalPages })}
-                prevLabel={t("AdminPage.prevPage")}
-                nextLabel={t("AdminPage.nextPage")}
+                info={t("AdminPage.paginationInfo", { count: visibleUsers.length })}
                 onChange={setPage}
               />
             )}
@@ -889,6 +860,17 @@ export default function AdminPage() {
           onClose={() => setModal(null)}
           onSubmit={handleSubmit}
           onResetTotp={handleResetTotp}
+        />
+      )}
+
+      {registrationSettingsPresence.open && (
+        <RegistrationSettingsDialog
+          key={registrationSettingsPresence.item}
+          policy={registrationPolicy}
+          saving={policySaving}
+          closing={registrationSettingsPresence.closing}
+          onClose={() => setRegistrationSettingsSeq(0)}
+          onSave={saveRegistrationPolicy}
         />
       )}
 

@@ -502,5 +502,11 @@
   "ColorPicker.pick": "Choose color",
   "ColorPicker.hexLabel": "Hex",
   "AiFloatingChat.pageHelpHint": "Not sure what this page is for? You can ask me.",
-  "AiFloatingChat.dismissPageHelpHint": "Dismiss hint"
+  "AiFloatingChat.dismissPageHelpHint": "Dismiss hint",
+  "Pagination.navLabel": "Pagination",
+  "Pagination.prev": "Previous page",
+  "Pagination.next": "Next page",
+  "Pagination.page": "Page {{page}}",
+  "Pagination.jump": "Go to page <input/>",
+  "Pagination.jumpLabel": "Go to page (1–{{totalPages}})"
 }

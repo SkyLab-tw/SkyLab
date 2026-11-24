@@ -930,7 +930,6 @@ export default function AiMonitoringPage() {
             <span>{lastUpdated ? t("AiMonitoringPage.lastUpdated", { time: formatTime(lastUpdated, "—", { seconds: true }) }) : t("AiMonitoringPage.waitingForData")}</span>
           </div>
           <SegmentedControl
-            quiet
             options={PRESETS}
             value={preset}
             onChange={setPreset}
@@ -987,7 +986,7 @@ export default function AiMonitoringPage() {
               <h2 className={styles.panelTitle}><MIcon name="timeline" size={18} />{t("AiMonitoringPage.trendTitle")}</h2>
             </div>
             <div className={styles.trendMeta}>
-              <SegmentedControl quiet options={TREND_OPTIONS} value={trendMetric} onChange={setTrendMetric} ariaLabel={t("AiMonitoringPage.trendMetricLabel")} />
+              <SegmentedControl options={TREND_OPTIONS} value={trendMetric} onChange={setTrendMetric} ariaLabel={t("AiMonitoringPage.trendMetricLabel")} />
             </div>
           </div>
           <TrendChart series={overview?.series} bucket={overview?.bucket ?? presetToBucket(preset)} loading={overviewLoading} metric={trendMetric} t={t} />

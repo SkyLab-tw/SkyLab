@@ -32,6 +32,9 @@ export default function VMNode({ data, selected }) {
   const readOnly = data.can_manage === false;
   /* 同一班的主機名都是 cls-xxxx-1-1，截斷後分不出誰是誰：老師視角主標改學生名，主機名放滑過提示 */
   const title = data.teaching_class_name && data.owner_name ? data.owner_name : data.name;
+  /* 名稱與 IP 都可能被截斷：滑過一律看得到完整內容（老師視角是「學生名 · 主機名」） */
+  const titleHint = title !== data.name ? `${title} · ${data.name}` : title;
+  const meta = data.ip_address ?? `vmid:${data.vmid}`;
   /* 群組框內：框標題已寫明班級／類型，徽章只在唯讀（要掛鎖頭）時保留 */
   const showBadge = !data.inGroup || readOnly;
 
@@ -53,8 +56,8 @@ export default function VMNode({ data, selected }) {
 
       <div className={styles.vmStatus} style={{ background: statusColor }} />
       <div className={styles.vmInfo}>
-        <span className={styles.vmName} title={title !== data.name ? data.name : undefined}>{title}</span>
-        <span className={styles.vmMeta}>{data.ip_address ?? `vmid:${data.vmid}`}</span>
+        <span className={styles.vmName} title={titleHint}>{title}</span>
+        <span className={styles.vmMeta} title={meta}>{meta}</span>
       </div>
       <MIcon name={data.firewall_enabled ? "security" : "shield"} size={15} />
       {/* 有對外開放的機器一眼可辨，不必逐條點線確認暴露面 */}

@@ -1749,10 +1749,6 @@ button.heatAttentionChip {
   background: transparent;
 }
 
-.topologyCanvas :global(.react-flow) svg {
-  max-width: none;
-}
-
 .topologyCanvas :global(.react-flow__edge path) {
   stroke-opacity: 1 !important;
 }
@@ -1851,10 +1847,6 @@ button.heatAttentionChip {
    用 visibility 而非 opacity：蓋得過 hover 規則，連接點仍佔位、線照樣接得上 */
 .readonlyTopology :global(.react-flow__handle) {
   visibility: hidden;
-}
-
-.readonlyTopology :global(.react-flow) svg {
-  max-width: none;
 }
 
 .readonlyTopology :global(.react-flow__edge path) {
@@ -2326,6 +2318,16 @@ button.heatAttentionChip {
     width: 100%;
     margin-left: 0;
     grid-template-columns: 1fr 1fr;
+  }
+
+  /* 手機：名單鎖定說明跟標題同一列（靠右），搜尋框換到下一列撐滿；
+     原本說明排在搜尋框後面，換行後自己一列貼在右邊 */
+  .memberTitle {
+    order: -2;
+  }
+
+  .memberLockedNote {
+    order: -1;
   }
 
   .heatmapHeader,

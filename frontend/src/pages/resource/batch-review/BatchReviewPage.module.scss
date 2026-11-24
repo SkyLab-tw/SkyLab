@@ -330,7 +330,7 @@
   display: flex;
   height: 6px;
   border-radius: $radius-pill;
-  background: var(--color-hover);
+  background: var(--color-track);
   overflow: hidden;
 }
 
@@ -396,29 +396,6 @@
   transition: background $transition-base;
 
   &:hover { background: color-mix(in srgb, var(--color-primary-on-surface) 20%, transparent); }
-}
-
-/* 收合動畫：grid-template-rows 0fr↔1fr 讓高度平滑過渡；
-   收合時以負 margin 抵掉 reasonBox 的 gap，避免留一條空隙 */
-.recurCollapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  margin-top: -$spacing-8;
-  transition: grid-template-rows 0.22s cubic-bezier(0.25, 0.8, 0.25, 1), margin-top 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.recurCollapseOpen {
-  grid-template-rows: 1fr;
-  margin-top: 0;
-}
-
-.recurCollapseInner {
-  overflow: hidden;
-  min-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .recurCollapse { transition: none; }
 }
 
 .recurWindows {

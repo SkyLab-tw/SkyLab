@@ -35,6 +35,7 @@ import fwStyles from "../../network/firewall/FirewallPage.module.scss";
 import { ThemeContext } from "../../../contexts/ThemeContext";
 import NodeHandles from "../../network/firewall/nodes/NodeHandles";
 import { routeEdges } from "../../network/firewall/utils/buildFlow";
+import { applyMoves, settleDraggedNodes } from "../../network/firewall/utils/nodeSpacing";
 import ConnectionDialog, { INTERNET_KEY } from "../../../components/ConnectionDialog/ConnectionDialog";
 import { INTENT } from "../../../components/ConnectionDialog/intents";
 import { frozenTopologyLayout, peerDetailPort, peerEdgeLabel, publicationDetailPort, publicationLabel } from "../courseTopology";
@@ -410,7 +411,10 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
   }, [value, publications, selectedNode?.id, setFlowNodes, internetPosition, frozen]);
 
   // 位置只在放開滑鼠時回寫，一次拖曳只產生一筆變更。
-  const commitNodePositions = useCallback((_event, _node, draggedNodes) => {
+  const commitNodePositions = useCallback((_event, _node, droppedNodes) => {
+    /* 放得離別台太近（徽章互壓、連線短到放不下標籤）就推開到最近的空處，存推開後的位置（跟防火牆頁同一套） */
+    const { moves, dragged: draggedNodes } = settleDraggedNodes(flowNodes, droppedNodes);
+    setFlowNodes((previous) => applyMoves(previous, moves));
     const moved = new Map(draggedNodes.map((item) => [item.id, item.position]));
     const internet = moved.get(INTERNET_KEY);
     if (internet) setInternetPosition({ x: Math.round(internet.x), y: Math.round(internet.y) });
@@ -421,7 +425,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
         ? { ...node, positionX: Math.round(position.x), positionY: Math.round(position.y) }
         : node;
     }));
-  }, [onChange, value]);
+  }, [onChange, value, flowNodes, setFlowNodes]);
 
   const graphEdges = useMemo(() => {
     const peerEdges = edges.map((edge) => ({

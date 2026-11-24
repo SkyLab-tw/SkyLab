@@ -1,0 +1,77 @@
+/* 像素風共用（像素登入頁、官網像素版都用）：階梯圓角的 clip-path 與像素外框。
+   clip-path 會連 box-shadow 一起切掉，所以投影一律用 filter: drop-shadow 打在元素本身 */
+
+/* 兩階的階梯角（卡片、對話泡泡、提示框） */
+@function px-steps($s) {
+  $s2: $s * 2;
+  @return polygon(
+    $s2 0, calc(100% - #{$s2}) 0, calc(100% - #{$s2}) $s, calc(100% - #{$s}) $s,
+    calc(100% - #{$s}) $s2, 100% $s2, 100% calc(100% - #{$s2}), calc(100% - #{$s}) calc(100% - #{$s2}),
+    calc(100% - #{$s}) calc(100% - #{$s}), calc(100% - #{$s2}) calc(100% - #{$s}), calc(100% - #{$s2}) 100%,
+    $s2 100%, $s2 calc(100% - #{$s}), $s calc(100% - #{$s}), $s calc(100% - #{$s2}), 0 calc(100% - #{$s2}),
+    0 $s2, $s $s2, $s $s, $s2 $s
+  );
+}
+
+/* 一階的缺角（按鈕） */
+@function px-notch($s) {
+  @return polygon(
+    $s 0, calc(100% - #{$s}) 0, calc(100% - #{$s}) $s, 100% $s,
+    100% calc(100% - #{$s}), calc(100% - #{$s}) calc(100% - #{$s}), calc(100% - #{$s}) 100%,
+    $s 100%, $s calc(100% - #{$s}), 0 calc(100% - #{$s}), 0 $s, $s $s
+  );
+}
+
+/* 外層畫框色、內層（內縮 $border）畫底色，兩層都切成階梯角 */
+@mixin pixel-frame($step, $border, $line, $fill) {
+  position: relative;
+  isolation: isolate;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+    clip-path: px-steps($step);
+  }
+
+  &::before {
+    inset: 0;
+    background: $line;
+  }
+
+  &::after {
+    inset: $border;
+    background: $fill;
+  }
+}
+
+/* 像素按鈕：一階缺角＋底部一條深色「厚度」＋頂部一條亮邊，按下去往下沉 2px。
+   聚焦框畫在內側（外側的 outline 會被 clip-path 切掉） */
+@mixin pixel-button($lip) {
+  border: 0;
+  border-radius: 0;
+  clip-path: px-notch(3px);
+  box-shadow:
+    inset 0 -4px 0 $lip,
+    inset 0 3px 0 rgb(255 255 255 / 0.2);
+  transition:
+    background 0.2s ease,
+    transform 0.06s steps(1, end),
+    box-shadow 0.06s steps(1, end);
+
+  &:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow:
+      inset 0 -2px 0 $lip,
+      inset 0 3px 0 rgb(255 255 255 / 0.2);
+  }
+
+  &:focus-visible {
+    outline: 0;
+    box-shadow:
+      inset 0 -4px 0 $lip,
+      inset 0 0 0 3px var(--px-focus, #f7c442);
+  }
+}

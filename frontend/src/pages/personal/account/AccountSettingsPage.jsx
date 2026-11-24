@@ -578,7 +578,6 @@ export default function AccountSettingsPage() {
           （原本壓在表單最底，使用者反映會直接忽略） */}
       <div className={styles.tabBar} data-guide="account-tabs">
         <Tabs
-          page
           options={TABS.map((tab) => ({
             value: tab.key,
             label: t(tab.labelKey),

@@ -439,9 +439,7 @@ export default function IpManagementPage() {
           <Pagination
             page={safePage}
             totalPages={totalPages}
-            info={t("IpManagementPage.paginationInfo", { count: visible.length, page: safePage + 1, totalPages })}
-            prevLabel={t("IpManagementPage.prevPage")}
-            nextLabel={t("IpManagementPage.nextPage")}
+            info={t("IpManagementPage.paginationInfo", { count: visible.length })}
             onChange={setPage}
           />
         )}

@@ -44,15 +44,77 @@
   }
 }
 
-.registrationOption,
+/* 待審核註冊的標題列：標題靠左、「註冊設定」鈕靠右，窄到放不下時按鈕換到下一行 */
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-8 $spacing-16;
+
+  /* 標題吃掉剩下的寬度：中間空白也點得到收合（比照監控頁整列標題可點） */
+  > h2 {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+/* 收合鈕：外觀就是標題字，箭頭跟在字後面；滑過標題與箭頭轉主色，展開時箭頭轉 180°（同 Disclosure） */
+.panelToggle {
+  display: flex;
+  align-items: center;
+  gap: $spacing-4;
+  width: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: $radius-8;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: color $transition-base;
+
+  &:hover {
+    color: var(--color-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary-on-surface);
+    outline-offset: 2px;
+  }
+}
+
+.panelChevron {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  transition: transform $transition-base, color $transition-base;
+
+  .panelToggle:hover > & {
+    color: inherit;
+  }
+
+  .panelToggle[aria-expanded="true"] > & {
+    transform: rotate(180deg);
+  }
+}
+
+.pendingList {
+  @include flex-column;
+  gap: $spacing-16;
+}
+
 .pendingRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: $spacing-16;
+  padding-top: $spacing-8;
+  border-top: 1px solid var(--color-border);
 
-  > span,
-  > label {
+  > span {
     @include flex-column;
     gap: 4px;
     min-width: 0;
@@ -67,48 +129,55 @@
     font-size: $font-size-12;
     color: var(--color-text-muted);
   }
-}
-
-.registrationOption input[type="checkbox"] {
-  flex: none;
-  width: 18px;
-  height: 18px;
-}
-
-/* 學號信箱網域：文字欄＋儲存，窄螢幕換到說明下方 */
-.registrationOption:has(.domainField) {
-  flex-wrap: wrap;
-
-  /* 說明再長也先在自己欄內換行，欄位寬度不夠時才把輸入框換到下一行 */
-  > label {
-    flex: 1 1 280px;
-  }
-}
-
-.domainField {
-  display: flex;
-  flex: 0 1 320px;
-  gap: $spacing-8;
-  min-width: 0;
-
-  input {
-    @include form-control;
-    min-width: 0;
-  }
-
-  button {
-    flex: none;
-  }
-}
-
-.pendingRow {
-  flex-wrap: wrap;
-  padding-top: $spacing-8;
-  border-top: 1px solid var(--color-border);
 
   > div {
     display: flex;
     gap: $spacing-8;
+  }
+}
+
+/* 註冊設定對話框的開關：勾選框在左、對齊標題那一行，說明接在標題下方；
+   勾選框吃主色，跟 .checkRow 同一套 */
+.settingList {
+  @include flex-column;
+  gap: $spacing-16;
+}
+
+.settingOption {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-8;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 2px 0 0;
+    accent-color: var(--color-primary);
+    cursor: inherit;
+  }
+
+  > span {
+    @include flex-column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  strong {
+    font-size: $font-size-14;
+    font-weight: $font-weight-500;
+    color: var(--color-text-primary);
+  }
+
+  small {
+    font-size: $font-size-12;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+  }
+
+  &:has(input:disabled) {
+    cursor: default;
   }
 }
 
@@ -153,7 +222,7 @@
    窄時勾選框、頭像與操作鈕跨兩行置中，姓名信箱在上、角色狀態在下；
    寬時一行排完，角色／狀態／日期各自固定欄寬——每一列都是獨立的 grid，
    只有固定寬度才能讓徽章在不同列之間對齊。
-   一行排完的最小寬度：內距 32＋框 2＋勾選 16＋頭像 40＋姓名 220＋88＋64＋96＋操作 80＋間距 16×6 = 734 */
+   一行排完的最小寬度：內距 32＋框 2＋勾選 16＋頭像 40＋姓名 220＋124＋150＋112＋操作 80＋間距 16×6 = 872 */
 .row {
   display: grid;
   grid-template-columns: 16px 40px minmax(0, 1fr) auto;
@@ -169,8 +238,9 @@
 
   @container (min-width: 880px) {
     /* 角色與狀態欄要放得下英文最長的 Administrator（含圖示約 117px）與 Registration rejected（約 145px）；
-       每列各自是一個 grid，靠固定欄寬上下對齊，所以不能依內容撐開。欄位變寬，改排成一列的斷點也從 740 提到 880 */
-    grid-template-columns: 16px 40px minmax(220px, 1fr) 124px 150px 96px auto;
+       每列各自是一個 grid，靠固定欄寬上下對齊，所以不能依內容撐開。欄位變寬，改排成一列的斷點也從 740 提到 880。
+       日期欄前面帶「建立於」，要放得下最長的英文 Created 2026/09/01（約 109px） */
+    grid-template-columns: 16px 40px minmax(220px, 1fr) 124px 150px 112px auto;
     grid-template-areas: "check avatar main role status date actions";
     row-gap: 0;
   }
@@ -242,12 +312,13 @@
   @include text-truncate;
 }
 
-/* 角色＋狀態徽章：窄螢幕同一行排在姓名下方；
-   寬螢幕 display: contents 解開外層，兩顆徽章各自落到 role / status 欄 */
+/* 角色＋狀態徽章＋建立日期：窄螢幕同一行排在姓名下方（日期接在徽章後面，不藏起來）；
+   寬螢幕 display: contents 解開外層，三樣各自落到 role / status / date 欄 */
 .rowTags {
   grid-area: tags;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: $spacing-8;
   min-width: 0;
 
@@ -262,6 +333,10 @@
     > .statusBadge {
       grid-area: status;
       justify-self: start;
+    }
+
+    > .createdAt {
+      grid-area: date;
     }
   }
 }
@@ -307,15 +382,9 @@
 }
 
 .createdAt {
-  grid-area: date;
-  display: none;
   color: var(--color-text-muted);
   font-size: $font-size-12;
   white-space: nowrap;
-
-  @container (min-width: 880px) {
-    display: inline;
-  }
 }
 
 /* 列上的淡底圖示鈕之間留 8px，與 AI API、我的資源、資源管理的列動作同距 */

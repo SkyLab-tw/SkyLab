@@ -21,6 +21,7 @@ import VMNode from "../../../../network/firewall/nodes/VMNode";
 import GatewayNode from "../../../../network/firewall/nodes/GatewayNode";
 import ConnectionEdge from "../../../../network/firewall/edges/ConnectionEdge";
 import { GATEWAY_KEY, buildFlow, routeEdges } from "../../../../network/firewall/utils/buildFlow";
+import { applyMoves, settleDraggedNodes } from "../../../../network/firewall/utils/nodeSpacing";
 import { INTERNET_KEY } from "../../../../../components/ConnectionDialog/intents";
 import { canManageNode } from "../../../../../components/ConnectionDialog/topologyNodes";
 import { ThemeContext } from "../../../../../contexts/ThemeContext";
@@ -123,8 +124,11 @@ export default function MiniTopology({
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
-        onNodeDragStop={(_, __, dragged) => {
-          for (const node of dragged ?? []) draggedRef.current.set(node.id, { ...node.position });
+        onNodeDragStop={(_, __, dropped) => {
+          /* 放得離別台太近就推開到最近的空處（跟防火牆頁同一套） */
+          const { moves, dragged } = settleDraggedNodes(nodes, dropped);
+          setNodes((prev) => applyMoves(prev, moves));
+          for (const node of dragged) draggedRef.current.set(node.id, { ...node.position });
         }}
         onConnect={handleConnect}
         onConnectStart={() => setConnecting(true)}
