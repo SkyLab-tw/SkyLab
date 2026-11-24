@@ -374,8 +374,9 @@ function LoginView({
   );
 
   const handleGoogleError = useCallback((message) => {
+    setMood("error");
     setError(message);
-  }, []);
+  }, [setMood]);
 
   if (totpChallenge) {
     return (
@@ -521,9 +522,17 @@ function LoginView({
   );
 }
 
+/* 裝置授權的狀態 → 章魚心情 */
+const DEVICE_MOOD = { approving: "thinking", declining: "thinking", approved: "done", error: "error" };
+
 function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
   const { t } = useTranslation("login");
+  const { setMood } = useOctoMood();
   useOctoScene("device");
+  // 授權流程在外層（PixelPageShell 外面）跑，這裡照狀態回報給章魚
+  useEffect(() => {
+    setMood(DEVICE_MOOD[status] ?? "idle");
+  }, [status, setMood]);
 
   // 同意頁：授權必須由使用者明確按下，不可自動核准（防止釣魚連結）
   if (status === "idle") {

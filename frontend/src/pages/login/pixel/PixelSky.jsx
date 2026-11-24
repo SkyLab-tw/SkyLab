@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import PixelSprite from "../../../components/PixelArt/PixelSprite";
 import { DOTS, PLUS, SPARKLE } from "../../../components/PixelArt/pixelArt";
 import { CLOUD_SEA_BACK, CLOUD_SEA_FRONT, SKY_CLOUDS } from "../../../components/PixelArt/pixelScenery";
@@ -33,7 +33,7 @@ const STARS = [
  * 像素天空：柔和雲（慢慢飄、跟游標有一點視差）、金藍十字星（閃爍）、點點方陣與底部雲海。
  * 深色模式換成夜空配色並多一層小星點。整層純裝飾，減少動態效果時全部靜止。
  */
-export default function PixelSky() {
+function PixelSky() {
   const rootRef = useRef(null);
 
   useEffect(() => {
@@ -90,3 +90,6 @@ export default function PixelSky() {
     </div>
   );
 }
+
+/* 沒有 props：外框換心情重繪時不必跟著重算雲海 */
+export default memo(PixelSky);

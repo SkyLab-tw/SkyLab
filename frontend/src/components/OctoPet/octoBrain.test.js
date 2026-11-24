@@ -186,3 +186,11 @@ test("shy：舉起書擋臉、不會自己收書或睡覺，換回 idle 才收�
   const log = run(brain, T0 + SLEEP_AFTER_MS + 1100, 1000, { activity: "idle" });
   expect(states(log)).toEqual(["stow", "idle"]);
 });
+
+test("shy：滑鼠滑過去也不收書（書是拿來擋臉的），待機看書時滑過去才收", () => {
+  const brain = createBrain(T0, () => 0);
+  run(brain, T0, 1000, { activity: "shy" });
+  brainEvent(brain, "hover", T0 + 1000, true);
+  run(brain, T0 + 1000, 1000, { activity: "shy" });
+  expect(brain.state).toBe("read");
+});

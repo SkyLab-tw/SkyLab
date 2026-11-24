@@ -21,10 +21,20 @@ export function useOctoScene(scene) {
   }, [scene, setScene]);
 }
 
+/* 密碼欄外層的標記：章魚回到待機時用它判斷焦點是不是還在密碼欄 */
+export const SHY_ATTR = "data-octo-shy";
+
+/** 沒事做時該是什麼心情：焦點還在密碼欄就繼續擋臉，不然待機 */
+export function restingMood() {
+  if (typeof document === "undefined") return "idle";
+  return document.activeElement?.closest?.(`[${SHY_ATTR}]`) ? "shy" : "idle";
+}
+
 /** 密碼欄外層用：聚焦時章魚舉書不偷看，離開就放下 */
 export function useShyHandlers() {
   const { setMood } = useOctoMood();
   return {
+    [SHY_ATTR]: "",
     onFocus: () => setMood("shy"),
     onBlur: () => setMood((current) => (current === "shy" ? "idle" : current)),
   };

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import OctoPet from "../../../components/OctoPet/OctoPet";
 import PixelSprite from "../../../components/PixelArt/PixelSprite";
 import { BOOK, PLUS, SPARKLE, WORDMARK } from "../../../components/PixelArt/pixelArt";
-import { OctoMoodContext } from "./octoMood";
+import { OctoMoodContext, restingMood } from "./octoMood";
 import PixelSky from "./PixelSky";
 import { HERO_CLOUD } from "../../../components/PixelArt/pixelScenery";
 import styles from "./PixelPageShell.module.scss";
@@ -65,15 +65,24 @@ export default function PixelPageShell({ children }) {
   const [pokeCount, setPokeCount] = useState(0);
   const timerRef = useRef(0);
 
-  /* 出錯、被戳之後幾秒回到待機；換成別的心情就取消 */
+  /* 出錯、被戳之後幾秒回到待機（焦點還在密碼欄就繼續擋臉）；換成別的心情就取消 */
   useEffect(() => {
     window.clearTimeout(timerRef.current);
     const ms = SETTLE_MS[mood];
-    if (ms) timerRef.current = window.setTimeout(() => setMood("idle"), ms);
+    if (ms) timerRef.current = window.setTimeout(() => setMood(restingMood()), ms);
     return () => window.clearTimeout(timerRef.current);
   }, [mood, pokeCount]);
 
-  const context = useMemo(() => ({ setMood, setScene }), []);
+  /* 換畫面時心情歸零：上一個畫面留下的「成功了！」不會帶到下一個畫面 */
+  const sceneRef = useRef(scene);
+  const changeScene = useCallback((next) => {
+    if (sceneRef.current === next) return;
+    sceneRef.current = next;
+    setScene(next);
+    setMood(restingMood());
+  }, []);
+
+  const context = useMemo(() => ({ setMood, setScene: changeScene }), [changeScene]);
 
   const poke = () => {
     if (mood !== "idle" && mood !== "poke") return;

@@ -133,7 +133,8 @@ export function brainEvent(b, type, now, value) {
     if (!value) return;
     b.lastPlay = b.lastActive = now;
     if (b.state === "sleep") { setState(b, "wake"); hop(b, -32); }
-    else if (b.state === "read") setState(b, "stow", "idle");
+    // shy 時書是拿來擋臉的，滑過去也不收
+    else if (b.state === "read" && b.activity !== "shy") setState(b, "stow", "idle");
     else if (b.state === "walk") setState(b, "idle");
   } else if (type === "rub") {
     // value：這次移動的距離（px）；停超過 0.45 秒重新累計
