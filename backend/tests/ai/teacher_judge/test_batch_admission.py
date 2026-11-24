@@ -185,7 +185,7 @@ def test_preparation_does_not_resurrect_a_reaped_run(context, monkeypatch):
     run_id = uuid.UUID(batch.nodes[0].run_id)
 
     def resolve(**kwargs):
-        executor._mark_run_executor_failed(
+        executor.mark_run_executor_failed(
             run_id, "interrupted", reason_code="executor_lost"
         )
         return [], []

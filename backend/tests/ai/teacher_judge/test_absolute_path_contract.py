@@ -7,7 +7,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ai.teacher_judge import service, session_chat_service
+from app.ai.teacher_judge import (
+    chat_assistant,
+    proposal_dispatch,
+    proposal_tools,
+    service,
+)
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.check_plan_contract import typed_step_issues
 from app.ai.teacher_judge.deterministic_compiler import (
@@ -15,10 +21,12 @@ from app.ai.teacher_judge.deterministic_compiler import (
     canonicalize_check_plan,
     compile_check_plan,
 )
+from app.ai.teacher_judge.proposal_dispatch import ToolTurnState
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionMessageCreateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.ai.teacher_judge.session_service import apply_proposal_operations_to_analysis
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_session import (
@@ -51,11 +59,11 @@ def test_known_path_conflict_is_repairable_independently_of_assertion(operation,
         arguments = {key: value for key, value in item.items() if key != "id"}
         tool = "create_checklist_item"
     else:
-        service._execute_checklist_tool("get_checklist_item", {"id": item["id"]}, **state)
+        proposal_dispatch.execute_checklist_tool("get_checklist_item", {"id": item["id"]}, ToolTurnState(**state))
         arguments = {"id": item["id"]}
         tool = "edit_checklist_item"
     arguments.update(detectable="partial", missing_information=["檔案的絕對路徑"])
-    result = service._execute_checklist_tool(tool, arguments, **state)
+    result = proposal_dispatch.execute_checklist_tool(tool, arguments, ToolTurnState(**state))
     assert result["reason_code"] == "check_plan_contract_invalid"
     assert result["teacher_input_required"] is False
     assert result["retryable"] is True
@@ -67,15 +75,15 @@ def test_index_never_authorizes_edit(finalizer):
     item = file_item()
     state = tool_state(item)
     state["finalizer"] = finalizer
-    service._execute_checklist_tool("list_checklist", {}, **state)
-    result = service._execute_checklist_tool("edit_checklist_item", {"id": item["id"], "title": "updated"}, **state)
+    proposal_dispatch.execute_checklist_tool("list_checklist", {}, ToolTurnState(**state))
+    result = proposal_dispatch.execute_checklist_tool("edit_checklist_item", {"id": item["id"], "title": "updated"}, ToolTurnState(**state))
     assert result["reason_code"] == "checklist_item_not_read"
     assert result["teacher_input_required"] is False
 
 
 @pytest.mark.parametrize("cwd", [None, "", "/root/test"])
 def test_write_schema_and_validation_remove_cwd(cwd):
-    assert '"cwd"' not in json.dumps(service._build_proposal_tools())
+    assert '"cwd"' not in json.dumps(proposal_tools.build_proposal_tools())
     item = file_item()
     item["check_steps"][0]["collector"]["cwd"] = cwd
     assert typed_step_issues(item["check_steps"])
@@ -122,10 +130,10 @@ async def test_finalizer_explanation_uses_actual_blocker_not_false_model_path_cl
 
     async def fake_chat(*args, **kwargs):
         assert kwargs["is_refine"] is True
-        return false_reply, [], {}
+        return TeacherJudgeChatResult(false_reply, [], {})
 
     monkeypatch.setattr(routes, "_access", lambda *args: None)
-    monkeypatch.setattr(routes, "get_enabled_template_commands", lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_flow, "get_enabled_template_commands", lambda *args, **kwargs: [])
     monkeypatch.setattr(routes, "chat_with_rubric", fake_chat)
     with make_session() as db:
         class_id = uuid.uuid4()
@@ -179,8 +187,8 @@ async def test_finalizer_repairs_assertion_without_requesting_known_path(monkeyp
     assert get_script_generation_blockers(candidate, [], require_typed_plan=True) == []
     script, _policy, _review, _plan = compile_check_plan(candidate, target_node_key="linux")
     assert "/root/test/test.txt" in script
-    monkeypatch.setattr(session_chat_service, "load_class_machine_nodes", lambda *args: [])
-    workflow = session_chat_service.refine_readiness_workflow(
+    monkeypatch.setattr(chat_assistant, "load_class_machine_nodes", lambda *args: [])
+    workflow = chat_assistant.refine_readiness_workflow(
         None, teaching_class_id=uuid.uuid4(), session_id=uuid.uuid4(),
         file=SimpleNamespace(id=uuid.uuid4(), analysis_json={"items": [item]}),
         proposal=result.proposal, template_commands=[], analysis_revision=1,
@@ -192,8 +200,8 @@ async def test_finalizer_repairs_assertion_without_requesting_known_path(monkeyp
 @pytest.mark.parametrize("status", ["error", "rejected", "duplicate"])
 def test_unresolved_tool_failure_blocks_finalizer_consistently(monkeypatch, status):
     item = file_item()
-    monkeypatch.setattr(session_chat_service, "load_class_machine_nodes", lambda *args: [])
-    workflow = session_chat_service.refine_readiness_workflow(
+    monkeypatch.setattr(chat_assistant, "load_class_machine_nodes", lambda *args: [])
+    workflow = chat_assistant.refine_readiness_workflow(
         None, teaching_class_id=uuid.uuid4(), session_id=uuid.uuid4(),
         file=SimpleNamespace(id=uuid.uuid4(), analysis_json={"items": [item]}),
         proposal=[], template_commands=[], analysis_revision=1,

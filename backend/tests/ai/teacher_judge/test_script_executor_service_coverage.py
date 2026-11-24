@@ -272,7 +272,7 @@ def _assert_unstarted_failure_summary(
 def test_mark_run_failed_with_missing_judge_session(sqlite_db: Session) -> None:
     artifact = _artifact(sqlite_db, session_id=uuid.uuid4())
     run = _run(sqlite_db, artifact.id, status=TeacherJudgeScriptRunStatus.running)
-    executor._mark_run_executor_failed(run.id, "boom")
+    executor.mark_run_executor_failed(run.id, "boom")
     sqlite_db.expire_all()
     stored = sqlite_db.get(TeacherJudgeScriptRun, run.id)
     assert stored is not None

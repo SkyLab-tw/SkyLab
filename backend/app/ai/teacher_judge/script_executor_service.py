@@ -235,7 +235,7 @@ def _target_metadata(target: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _target_progress(
+def target_progress(
     targets: list[dict[str, Any]],
     statuses: dict[int, str],
     results: list[dict[str, Any]] | None = None,
@@ -321,7 +321,7 @@ def _save_run_progress(
             "stage": stage,
             "total": len(targets) + len(preflight_results or []),
             "done": done,
-            "targets": _target_progress(targets, statuses, results)
+            "targets": target_progress(targets, statuses, results)
             + preflight_progress(preflight_results or []),
         }
         run.updated_at = _now()
@@ -890,7 +890,7 @@ def reap_stale_script_runs(session: Session, *, now: datetime | None = None) -> 
     )
     for run_id in stale_ids:
         logger.warning("Reaping stale Teacher Judge script run %s", run_id)
-        _mark_run_executor_failed(
+        mark_run_executor_failed(
             run_id,
             STALE_RUN_MESSAGE.format(hours=STALE_RUN_HOURS),
             stale_before=cutoff,
@@ -917,7 +917,7 @@ def reap_stale_script_runs(session: Session, *, now: datetime | None = None) -> 
     return len(stale_ids) + len(orphan_batches)
 
 
-def _mark_run_executor_failed(
+def mark_run_executor_failed(
     run_id: uuid.UUID, message: str, *, stale_before: datetime | None = None,
     reason_code: str = "executor_error",
 ) -> None:
@@ -950,7 +950,7 @@ def _mark_run_executor_failed(
             "stage": "failed",
             "total": len(targets) + len(preflight_results),
             "done": len(results),
-            "targets": _target_progress(targets, statuses, results)
+            "targets": target_progress(targets, statuses, results)
             + preflight_progress(preflight_results),
         }
         run.result_summary_json = {
@@ -1304,7 +1304,7 @@ def _save_results(run_id: uuid.UUID, results: list[dict[str, Any]]) -> None:
             "stage": "completed",
             "total": len(targets) + len(preflight_results),
             "done": len(results),
-            "targets": _target_progress(targets, statuses, results)
+            "targets": target_progress(targets, statuses, results)
             + preflight_progress(preflight_results),
         }
         run.status = TeacherJudgeScriptRunStatus.completed
@@ -1376,7 +1376,7 @@ async def execute_script_run(run_id: uuid.UUID) -> None:
         await _await_worker(
             asyncio.create_task(
                 asyncio.to_thread(
-                    _mark_run_executor_failed,
+                    mark_run_executor_failed,
                     run_id,
                     "執行流程已中斷；請檢查目標狀態後再重試。",
                     reason_code="executor_cancelled",
@@ -1388,7 +1388,7 @@ async def execute_script_run(run_id: uuid.UUID) -> None:
         logger.exception("Teacher Judge script run executor failed run=%s", run_id)
         await _await_worker(
             asyncio.create_task(
-                asyncio.to_thread(_mark_run_executor_failed, run_id, str(exc))
+                asyncio.to_thread(mark_run_executor_failed, run_id, str(exc))
             )
         )
 
@@ -1455,7 +1455,7 @@ async def execute_script_run_batch(run_batch_id: uuid.UUID) -> None:
     except asyncio.CancelledError:
         for run_id in run_ids:
             await _await_worker(asyncio.create_task(asyncio.to_thread(
-                _mark_run_executor_failed, run_id,
+                mark_run_executor_failed, run_id,
                 "整批執行流程已中斷。", reason_code="executor_cancelled",
             )))
         raise
@@ -1463,6 +1463,6 @@ async def execute_script_run_batch(run_batch_id: uuid.UUID) -> None:
         logger.exception("Teacher Judge batch preparation failed batch=%s", run_batch_id)
         for run_id in run_ids:
             await _await_worker(asyncio.create_task(asyncio.to_thread(
-                _mark_run_executor_failed, run_id,
+                mark_run_executor_failed, run_id,
                 "批次前置處理失敗，請稍後重試。", reason_code="preparation_failed",
             )))

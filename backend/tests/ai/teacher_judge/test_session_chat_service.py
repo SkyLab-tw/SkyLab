@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.ai.teacher_judge import chat_assistant
 from app.ai.teacher_judge import session_chat_service as chat
 
 
@@ -45,12 +46,12 @@ def test_prompt_template_scope_only_uses_file_scope_for_legacy_context() -> None
 )
 def test_attachment_analysis_status_priority(statuses, expected) -> None:
     rows = [{"status": status} for status in statuses]
-    assert chat.attachment_analysis_status(rows) == expected
+    assert chat_assistant.attachment_analysis_status(rows) == expected
 
 
 def _nodes(monkeypatch, *keys: str) -> None:
     monkeypatch.setattr(
-        chat,
+        chat_assistant,
         "load_class_machine_nodes",
         lambda *_args: [SimpleNamespace(node_key=key) for key in keys],
     )
@@ -58,9 +59,9 @@ def _nodes(monkeypatch, *keys: str) -> None:
 
 def test_proposal_nodes_must_belong_to_class(monkeypatch) -> None:
     _nodes(monkeypatch, "web")
-    monkeypatch.setattr(chat, "rubric_item_machine_issues", lambda _item: [])
+    monkeypatch.setattr(chat_assistant, "rubric_item_machine_issues", lambda _item: [])
     with pytest.raises(HTTPException) as exc:
-        chat.validate_proposal_machine_nodes(
+        chat_assistant.validate_proposal_machine_nodes(
             None,  # type: ignore[arg-type]
             uuid.uuid4(),
             [{"item": {"id": "a", "target_node_key": "db", "peer_node_key": "x"}}],
@@ -73,9 +74,9 @@ def test_proposal_nodes_must_belong_to_class(monkeypatch) -> None:
 
 def test_auto_items_need_a_target_node(monkeypatch) -> None:
     _nodes(monkeypatch, "web")
-    monkeypatch.setattr(chat, "rubric_item_machine_issues", lambda _item: [])
+    monkeypatch.setattr(chat_assistant, "rubric_item_machine_issues", lambda _item: [])
     with pytest.raises(HTTPException) as exc:
-        chat.validate_proposal_machine_nodes(
+        chat_assistant.validate_proposal_machine_nodes(
             None,  # type: ignore[arg-type]
             uuid.uuid4(),
             [{"title": "開機", "detectable": "AUTO"}, {"id": "b", "detectable": "auto"}],
@@ -87,8 +88,8 @@ def test_auto_items_need_a_target_node(monkeypatch) -> None:
 
 def test_valid_proposal_passes(monkeypatch) -> None:
     _nodes(monkeypatch, "web")
-    monkeypatch.setattr(chat, "rubric_item_machine_issues", lambda _item: [])
-    chat.validate_proposal_machine_nodes(
+    monkeypatch.setattr(chat_assistant, "rubric_item_machine_issues", lambda _item: [])
+    chat_assistant.validate_proposal_machine_nodes(
         None,  # type: ignore[arg-type]
         uuid.uuid4(),
         [{"id": "a", "detectable": "auto", "target_node_key": "web"}, "junk"],
@@ -97,7 +98,7 @@ def test_valid_proposal_passes(monkeypatch) -> None:
 
 def test_metadata_for_itemwise_failure_replaces_results() -> None:
     file_id = uuid.uuid4()
-    metadata = chat.build_assistant_metadata(
+    metadata = chat_assistant.build_assistant_metadata(
         metrics={"latency": 1},
         workflow=None,
         item_results=[{"item_id": "a", "status": "resolved"}],
@@ -119,7 +120,7 @@ def test_metadata_for_itemwise_failure_replaces_results() -> None:
 
 
 def test_metadata_for_plain_chat_keeps_focus_and_tool_calls() -> None:
-    metadata = chat.build_assistant_metadata(
+    metadata = chat_assistant.build_assistant_metadata(
         metrics={},
         workflow=None,
         item_results=None,
@@ -142,7 +143,7 @@ def test_metadata_for_plain_chat_keeps_focus_and_tool_calls() -> None:
 
 def test_metadata_prefers_workflow_result() -> None:
     workflow = {"content": "ok", "metadata": {"status": "ready", "stage": "refine"}}
-    metadata = chat.build_assistant_metadata(
+    metadata = chat_assistant.build_assistant_metadata(
         metrics={},
         workflow=workflow,  # type: ignore[arg-type]
         item_results=[{"status": "analysis_error"}],

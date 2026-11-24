@@ -30,6 +30,7 @@ B1_SOURCES = [
     "app/api/routes/classroom.py",
     "app/api/routes/quick_practice.py",
     "app/ai/teacher_judge/session_chat_service.py",
+    "app/ai/teacher_judge/chat_assistant.py",
     "app/services/teaching/class_capacity_service.py",
     "app/services/teaching/class_lifecycle_service.py",
     "app/services/user/roster_csv.py",

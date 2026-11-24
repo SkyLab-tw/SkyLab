@@ -9,7 +9,13 @@ from typing import Any
 
 import pytest
 
-from app.ai.teacher_judge import service
+from app.ai.teacher_judge import (
+    attachment_itemwise,
+    chat_transport,
+    proposal_replies,
+    proposal_tools,
+    service,
+)
 from app.ai.teacher_judge.prompt import (
     CHAT_PROPOSAL_SYSTEM_TEMPLATE,
     FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION,
@@ -75,9 +81,9 @@ def _tool_calls_message(*calls: tuple[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _section(prompt: str, tag: str) -> str:
-    match = re.search(rf"<{tag}>(.*?)</{tag}>", prompt, re.S)
-    assert match is not None, tag
+def _section(prompt: str, heading: str) -> str:
+    match = re.search(rf"^# {heading}\n(.*?)(?=^# |\Z)", prompt, re.S | re.M)
+    assert match is not None, heading
     return match.group(1)
 
 
@@ -88,7 +94,7 @@ async def _chat(
     **kwargs: Any,
 ):
     calls, fake = scripted_vllm(responses)
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     kwargs.setdefault("rubric_context", json.dumps({"items": []}))
     kwargs.setdefault("template_key", "linux")
@@ -118,27 +124,31 @@ async def test_chat_prompt_has_each_section_once_without_fill_vocabulary(
     prompt = calls[0]["messages"][0]["content"]
     tool_tag = "allowed_tools" if rubric_available else "no_tools"
     lines = prompt.splitlines()
-    for tag in (
-        tool_tag,
-        "decision",
-        "gaps",
-        "judgement",
-        "tool_results",
-        "final_answer",
+    assert lines.count(f"<{tool_tag}>") == 1
+    assert lines.count(f"</{tool_tag}>") == 1
+    # Only the tool section is XML; rules are Markdown so no tag reads as a tool.
+    assert {
+        line.strip("</>") for line in lines if re.fullmatch(r"</?[a-z_]+>", line)
+    } == {tool_tag}
+    for heading in (
+        "逐條判斷",
+        "缺資訊判準",
+        "判定方式",
+        "工具結果處理",
+        "最終回覆格式",
     ):
-        assert lines.count(f"<{tag}>") == 1, tag
-        assert lines.count(f"</{tag}>") == 1, tag
+        assert lines.count(f"# {heading}") == 1, heading
     for word in ("partial", "manual", "detectable", "fallback"):
         assert word not in prompt
     # missing_information only names reply-focus gaps, never item fill fields.
-    outside_answer = prompt.replace(_section(prompt, "final_answer"), "")
+    outside_answer = prompt.replace(_section(prompt, "最終回覆格式"), "")
     assert "missing_information" not in outside_answer
     # No copyable example sentence or value for the version-check request.
     assert "檢查 Python 版本" not in prompt
     assert "3.12" not in prompt
     rules = prompt
-    for tag in ("gaps", "check_steps", "environment"):
-        rules = rules.replace(_section(prompt, tag), "")
+    for heading in ("缺資訊判準", "檢查步驟格式", "環境"):
+        rules = rules.replace(_section(prompt, heading), "")
     assert "絕對路徑" not in rules
 
 
@@ -153,7 +163,7 @@ async def test_chat_prompt_keeps_machine_follow_up_rule_only_in_gaps(
     )
 
     prompt = calls[0]["messages"][0]["content"]
-    assert "列出可選機器並詢問要檢查哪一台" in _section(prompt, "gaps")
+    assert "列出可選機器並詢問要檢查哪一台" in _section(prompt, "缺資訊判準")
     assert prompt.count("列出可選機器") == 1
 
 
@@ -170,7 +180,7 @@ async def test_refine_prompt_still_uses_refine_templates(
     prompt = calls[0]["messages"][0]["content"]
     assert SITUATION_REFINE.strip() in prompt
     assert FINALIZER_CHECK_PLAN_CONTRACT_INSTRUCTION.strip() in prompt
-    assert "<decision>" not in prompt
+    assert "# 逐條判斷" not in prompt
     assert CHAT_PROPOSAL_SYSTEM_TEMPLATE.splitlines()[1] not in prompt
 
 
@@ -185,8 +195,8 @@ def _properties(tools: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 
 def test_chat_tool_schema_hides_fill_fields_and_keeps_node_fields() -> None:
-    chat_tools = service._build_proposal_tools(_MACHINES, chat=True)
-    refine_tools = service._build_proposal_tools(_MACHINES)
+    chat_tools = proposal_tools.build_proposal_tools(_MACHINES, chat=True)
+    refine_tools = proposal_tools.build_proposal_tools(_MACHINES)
 
     create = _properties(chat_tools, "create_checklist_item")
     edit = _properties(chat_tools, "edit_checklist_item")
@@ -207,9 +217,9 @@ def test_chat_tool_schema_hides_fill_fields_and_keeps_node_fields() -> None:
 
 
 def test_refine_tool_schema_is_unchanged() -> None:
-    assert service._build_proposal_tools() == service._PROPOSAL_TOOLS
+    assert proposal_tools.build_proposal_tools() == proposal_tools._PROPOSAL_TOOLS
     refine_create = _properties(
-        service._build_proposal_tools(), "create_checklist_item"
+        proposal_tools.build_proposal_tools(), "create_checklist_item"
     )
     assert "detectable" in refine_create
     assert "missing_information" in refine_create
@@ -378,7 +388,7 @@ async def test_attachment_item_missing_information_is_needs_information(
             reply_message("這列需要 main.py 的絕對路徑。", "none"),
         ]
     )
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     source = {
         "source_index": 0,
@@ -387,12 +397,12 @@ async def test_attachment_item_missing_information_is_needs_information(
         "description": "程式能正常執行",
     }
 
-    result = await service.analyze_requirement_item(
+    result = await attachment_itemwise.analyze_requirement_item(
         source=source,
         rubric_context=json.dumps({"items": []}),
         rubric_available=True,
     )
-    row = service._itemwise_result_from_chat(source, result)
+    row = attachment_itemwise._itemwise_result_from_chat(source, result)
 
     assert len(calls) == 2
     assert row["status"] == "needs_information"
@@ -414,7 +424,7 @@ async def test_attachment_item_missing_information_is_needs_information(
     ],
 )
 def test_creation_claim_only_counts_completed_wording(reply: str, claims: bool) -> None:
-    assert service._reply_claims_created(reply) is claims
+    assert proposal_replies.reply_claims_created(reply) is claims
 
 
 async def test_prose_final_reply_is_restated_once_in_json_mode(
@@ -557,7 +567,7 @@ async def test_editing_own_staged_item_is_blocked_and_keeps_proposal(
             return tool_call_message("edit_checklist_item", guessed_edit), {}
         return reply_message("已整理成提案。", "ready"), {}
 
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     result = await service.chat_with_rubric(
         messages=[SimpleNamespace(role="user", content="我想看學生的 Python 版本")],

@@ -10,7 +10,8 @@ import pytest
 from fastapi import HTTPException
 from sqlmodel import select
 
-from app.ai.teacher_judge import service
+from app.ai.teacher_judge import chat_transport, rubric_normalization, service
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.deterministic_compiler import (
     CheckPlanContractError,
@@ -22,6 +23,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionMessageCreateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.ai.teacher_judge.template_command_service import GENERAL_COMMAND
 from app.api.routes import teacher_judge_sessions as routes
 from app.models.teacher_judge_session import (
@@ -87,7 +89,7 @@ def _typed(collector: dict) -> dict:
 )
 def test_proposal_readiness_and_compiler_agree_on_unresolved_paths(collector) -> None:
     raw = _candidate(_typed(collector))
-    normalized = service._normalize_rubric_items([raw])[0]
+    normalized = rubric_normalization.normalize_rubric_items([raw])[0]
     if normalized.check_steps[0].collector.cwd is not None:
         analysis = TeacherJudgeRubricAnalysis(items=[raw])
         blockers = get_script_generation_blockers(analysis, [], require_typed_plan=True)
@@ -151,7 +153,7 @@ def test_empty_legacy_directory_is_omitted_on_save_and_compile(cwd, argv, monkey
     from app.ai.teacher_judge import file_service
 
     raw = _candidate(_typed({"type": "command", "argv": argv, "cwd": cwd}))
-    item = service._normalize_rubric_items([raw])[0]
+    item = rubric_normalization.normalize_rubric_items([raw])[0]
     assert item.detectable == "auto"
     assert item.missing_information == []
     analysis = TeacherJudgeRubricAnalysis(items=[item])
@@ -175,7 +177,7 @@ def test_file_collectors_save_and_compile_absolute_path(kind, monkeypatch):
     from app.ai.teacher_judge import file_service
 
     raw = _candidate(_typed({"type": kind, "path": "/srv/student/.env"}))
-    item = service._normalize_rubric_items([raw])[0]
+    item = rubric_normalization.normalize_rubric_items([raw])[0]
     assert item.detectable == "auto"
     analysis = TeacherJudgeRubricAnalysis(items=[item])
     with make_session() as db:
@@ -254,7 +256,7 @@ async def test_missing_path_rejects_proposal_and_asks_even_when_model_does_not(
             reply_message(reply, "ready" if reply.startswith("已") else "none"),
         ]
     )
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     result = await service.chat_with_rubric(
         messages=[
@@ -304,7 +306,7 @@ async def test_followup_encodes_known_directory_as_absolute_path(
             reply_message("已補上絕對路徑，請確認提案。", "ready"),
         ]
     )
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     result = await service.chat_with_rubric(
         messages=[SimpleNamespace(role="user", content="程式在 /srv/student")],
@@ -336,7 +338,7 @@ async def test_file_directory_followup_clears_old_gap_in_chat_and_finalizer(monk
         }),
         reply_message("已補上絕對路徑。", "ready"),
     ])
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     result = await service.chat_with_rubric(
         messages=[SimpleNamespace(role="user", content=".env 在 /srv/student，收集內容供我檢查")],
@@ -385,9 +387,12 @@ async def test_routes_persist_visible_path_question_and_never_create_script(
         monkeypatch.setattr(
             routes, "get_enabled_template_commands", lambda *a, **kw: []
         )
+        monkeypatch.setattr(
+            chat_flow, "get_enabled_template_commands", lambda *a, **kw: []
+        )
 
         async def fake_chat(*args, **kwargs):
-            return "所有檢查項目已通過，狀態良好。", [], {}
+            return TeacherJudgeChatResult("所有檢查項目已通過，狀態良好。", [], {})
 
         def unexpected_compile(**kwargs):
             pytest.fail("A missing location must stop before creating artifacts")
@@ -428,7 +433,7 @@ async def test_routes_persist_visible_path_question_and_never_create_script(
 def test_compile_contract_error_keeps_specific_reason_in_chat(monkeypatch) -> None:
     saved = []
     monkeypatch.setattr(
-        routes, "_save_workflow_message", lambda *a, **kw: saved.append(kw)
+        routes, "save_workflow_message", lambda *a, **kw: saved.append(kw)
     )
     routes._save_script_set_failure(
         None,

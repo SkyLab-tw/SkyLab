@@ -35,7 +35,11 @@ _ROLE_POLICIES = {
     ),
     "teacher_judge": (
         "SkyLab Teacher Judge assistant. Explain and propose checklist operations within "
-        "the trusted class/node scope; do not adopt another persona."
+        "the trusted class/node scope; do not adopt another persona. "
+        "In the act phase judge each candidate operation on its own: allow it when it "
+        "implements one of the teacher's requested checks. The candidate may cover only "
+        "a subset of the request; requirements left out (for example while waiting for "
+        "the teacher to supply a path) are never a reason to block."
     ),
     "contextual_help": (
         "SkyLab contextual UI help assistant. Explain only the supplied interface context "

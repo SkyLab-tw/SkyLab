@@ -11,11 +11,14 @@ import pytest
 from fastapi import HTTPException
 
 from app.ai.teacher_judge import (
+    chat_assistant,
+    chat_transport,
     file_service,
+    proposal_tools,
     service,
-    session_chat_service,
     session_service,
 )
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.check_plan_contract import (
     typed_item_issues,
@@ -41,14 +44,14 @@ from tests.ai.teacher_judge.helpers import (
 
 def test_teacher_judge_request_profile_matches_payload_shape():
     assert (
-        service._request_profile({"tools": [{"type": "function"}]})
+        chat_transport._request_profile({"tools": [{"type": "function"}]})
         is VLLMRequestProfile.COMPLEX_AGENT
     )
     assert (
-        service._request_profile({"response_format": {"type": "json_object"}})
+        chat_transport._request_profile({"response_format": {"type": "json_object"}})
         is VLLMRequestProfile.STRUCTURED_OBJECT
     )
-    assert service._request_profile({}) is VLLMRequestProfile.CONFIGURED_TEXT
+    assert chat_transport._request_profile({}) is VLLMRequestProfile.CONFIGURED_TEXT
 
 
 def version_item() -> dict:
@@ -89,7 +92,7 @@ def install_responses(monkeypatch, responses):
             for response in responses
         ]
     )
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     return calls
 
 
@@ -104,7 +107,7 @@ async def chat(*, snapshot=None, refine=False):
 
 
 def test_chat_and_finalizer_expose_identical_model_derived_contract():
-    for tool in service._build_proposal_tools():
+    for tool in proposal_tools.build_proposal_tools():
         if tool["function"]["name"] in {"create_checklist_item", "edit_checklist_item"}:
             schema = tool["function"]["parameters"]["properties"]["check_steps"]["items"]
             assert schema["required"] == ["id", "title", "collector"]
@@ -300,8 +303,8 @@ async def test_route_keeps_failed_finalizer_unready_even_if_saved_plan_is_valid(
         monkeypatch.setattr(service, "check_adherence", block)
     calls = install_responses(monkeypatch, responses)
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *_args: None)
-    monkeypatch.setattr(teacher_judge_sessions, "machine_context_entries", lambda *_args: [{"node_key": "web", "display_label": "P1"}])
-    monkeypatch.setattr(session_chat_service, "load_class_machine_nodes", lambda *_args: [SimpleNamespace(node_key="web")])
+    monkeypatch.setattr(chat_flow, "machine_context_entries", lambda *_args: [{"node_key": "web", "display_label": "P1"}])
+    monkeypatch.setattr(chat_assistant, "load_class_machine_nodes", lambda *_args: [SimpleNamespace(node_key="web")])
     response = await teacher_judge_sessions.create_message(
         class_id, session.id,
         TeacherJudgeSessionMessageCreateRequest(content="重新核對完整檢查表", is_refine=True, analysis_revision=1),
@@ -425,17 +428,17 @@ async def test_model_http_retry_is_bounded_and_only_for_temporary_rejection(
         return {"choices": [{"message": {"content": "ok"}}]}
 
     monkeypatch.setattr(
-        service.teacher_judge_client, "create_chat_completion", completion
+        chat_transport.teacher_judge_client, "create_chat_completion", completion
     )
     if status in {400, 401, 503, 504}:
         with pytest.raises(httpx.HTTPStatusError):
-            await service._request_vllm_with_retry(
+            await chat_transport._request_vllm_with_retry(
                 {"messages": []},
                 profile=VLLMRequestProfile.CONFIGURED_TEXT,
                 timeout=1,
             )
     else:
-        assert await service._request_vllm_with_retry(
+        assert await chat_transport._request_vllm_with_retry(
             {"messages": []},
             profile=VLLMRequestProfile.CONFIGURED_TEXT,
             timeout=1,
@@ -454,10 +457,10 @@ async def test_model_read_timeout_does_not_replay_an_ambiguous_generation(monkey
         raise httpx.ReadTimeout("request timed out")
 
     monkeypatch.setattr(
-        service.teacher_judge_client, "create_chat_completion", completion
+        chat_transport.teacher_judge_client, "create_chat_completion", completion
     )
     with pytest.raises(httpx.ReadTimeout):
-        await service._request_vllm_with_retry(
+        await chat_transport._request_vllm_with_retry(
             {}, profile=VLLMRequestProfile.CONFIGURED_TEXT, timeout=1
         )
     assert len(calls) == 1
@@ -475,9 +478,9 @@ async def test_model_connection_retry_preserves_payload_and_deadline(monkeypatch
             raise error_type("connection unavailable")
         return {"choices": [{"message": {"content": "ok"}}]}
 
-    monkeypatch.setattr(service.teacher_judge_client, "create_chat_completion", completion)
+    monkeypatch.setattr(chat_transport.teacher_judge_client, "create_chat_completion", completion)
     payload = {"messages": [{"role": "user", "content": "version"}], "max_tokens": 100}
-    result = await service._request_vllm_with_retry(
+    result = await chat_transport._request_vllm_with_retry(
         payload, profile=VLLMRequestProfile.CONFIGURED_TEXT, timeout=1
     )
     assert result["choices"][0]["message"]["content"] == "ok"
@@ -499,9 +502,9 @@ async def test_model_deadline_also_bounds_client_internal_retries(monkeypatch):
         finally:
             cancelled.append(True)
 
-    monkeypatch.setattr(service.teacher_judge_client, "create_chat_completion", completion)
+    monkeypatch.setattr(chat_transport.teacher_judge_client, "create_chat_completion", completion)
     with pytest.raises(httpx.ReadTimeout):
-        await service._request_vllm_with_retry(
+        await chat_transport._request_vllm_with_retry(
             {}, profile=VLLMRequestProfile.CONFIGURED_TEXT, timeout=0.01
         )
     assert len(calls) == 1
