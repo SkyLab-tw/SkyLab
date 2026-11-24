@@ -1,0 +1,413 @@
+@use "sass:list";
+@use "sass:math";
+@use "@/assets/styles/pixel" as *;
+
+/* ── 配色：亮色是海報風的晴空，深色是夜空；章魚身體色由 OctoPet 自己管 ── */
+.page {
+  --px-sky-top: #f5f8ff;
+  --px-sky-bottom: #e2ebfb;
+  --px-sky-cloud: #dfe8fa;
+  --px-sky-cloud-shade: #d1ddf5;
+  --px-sea-back: #d4e0f7;
+  --px-sea-front: #ffffff;
+  --px-gold: #f7c442;
+  --px-gold-hi: #ffe08a;
+  --px-gold-dark: #c98f1c;
+  --px-star-blue: #9fb5ea;
+  --px-dots: #c8d6f3;
+  --px-cloud-line: #84a0e4;
+  --px-cloud-fill: #d5e0fa;
+  --px-cloud-hi: #ffffff;
+  --px-cloud-shade: #c3d3f3;
+  --px-book-line: #202748;
+  --px-book-page: #ffffff;
+  --px-book-shade: #d5e0fa;
+  --px-word-top: #5471bf;
+  --px-word-bottom: #314994;
+  --px-ink: #202748;
+  --px-ink-soft: #4a5a8c;
+  --px-card-line: #c9d7f3;
+  --px-card-fill: var(--color-surface);
+  --px-card-drop: #cddaf4;
+  --px-bubble-line: #202748;
+  --px-bubble-fill: #ffffff;
+  /* 泡泡在深色模式也是淺底，字一律深色 */
+  --px-bubble-ink: #202748;
+  --px-night-star: transparent;
+
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--px-sky-top) 0%, var(--px-sky-bottom) 100%);
+
+  :global(body.dark) & {
+    --px-sky-top: #0c1226;
+    --px-sky-bottom: #19234a;
+    --px-sky-cloud: #1d2850;
+    --px-sky-cloud-shade: #19224a;
+    --px-sea-back: #1b2549;
+    --px-sea-front: #24305c;
+    --px-gold: #e9b93f;
+    --px-gold-hi: #ffd978;
+    --px-gold-dark: #b5801a;
+    --px-star-blue: #6d86cf;
+    --px-dots: #28355f;
+    --px-cloud-line: #6f8bd6;
+    --px-cloud-fill: #b6c6ee;
+    --px-cloud-hi: #dbe4fa;
+    --px-cloud-shade: #9cb0e2;
+    --px-book-line: #0a0e1d;
+    --px-book-page: #e6ecf8;
+    --px-book-shade: #b6c6ee;
+    --px-word-top: #ffffff;
+    --px-word-bottom: #c9d7f8;
+    --px-ink: #f0f4ff;
+    --px-ink-soft: #b7c5ea;
+    --px-card-line: #2d3b69;
+    --px-card-drop: #070b18;
+    --px-bubble-line: #0a0e1d;
+    --px-bubble-fill: #e6ecf8;
+    --px-night-star: #dfe8ff;
+  }
+}
+
+/* ── 背景天空 ── */
+.sky {
+  --sky-px: 0;
+  --sky-py: 0;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.skyItem {
+  position: absolute;
+  transform: translate(
+    calc(var(--sky-px) * var(--depth) * -28px),
+    calc(var(--sky-py) * var(--depth) * -14px)
+  );
+  transition: transform 0.8s ease-out;
+}
+
+.skyCloud {
+  display: block;
+}
+
+/* 單欄版面時這幾顆星會壓到字標或卡片，收掉 */
+.wideOnly {
+  @media (max-width: 1023.98px) {
+    display: none;
+  }
+}
+
+.driftA {
+  animation: px-drift-a 46s ease-in-out infinite alternate;
+}
+
+.driftB {
+  animation: px-drift-b 38s ease-in-out infinite alternate;
+}
+
+@keyframes px-drift-a {
+  to {
+    transform: translateX(48px);
+  }
+}
+
+@keyframes px-drift-b {
+  to {
+    transform: translateX(-40px);
+  }
+}
+
+.skyStar {
+  display: block;
+  animation: px-twinkle 3.6s steps(1, end) infinite;
+  animation-delay: var(--twinkle-delay, 0s);
+}
+
+/* 像素星一閃：一下子變淡、縮一格，再回來（steps 讓它跳格，不是平滑淡出） */
+@keyframes px-twinkle {
+  0%,
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  78% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+  86% {
+    opacity: 0.8;
+    transform: scale(1.15);
+  }
+}
+
+.skyDots {
+  position: absolute;
+}
+
+.skyDotsTop {
+  top: 6%;
+  right: 4%;
+}
+
+.skyDotsBottom {
+  bottom: 120px;
+  left: 3%;
+}
+
+/* 夜空的小星點：一個 2px 方塊，用一串 box-shadow 撒在畫面上；亮色模式顏色是透明 */
+$night-stars: ();
+@for $i from 1 through 70 {
+  $x: ($i * 137) % 1000;
+  $y: ($i * 271) % 620;
+  $night-stars: list.append($night-stars, #{math.div($x, 10)}vw #{math.div($y, 10)}vh 0 0 var(--px-night-star), comma);
+}
+
+.nightStars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  box-shadow: $night-stars;
+  animation: px-night-twinkle 5s steps(2, end) infinite;
+}
+
+@keyframes px-night-twinkle {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.sea {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 2080px;
+  height: 128px;
+  transform: translateX(calc(-50% + var(--sky-px) * -10px));
+  transition: transform 0.8s ease-out;
+}
+
+.seaBack,
+.seaFront {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+}
+
+.seaBack {
+  bottom: 24px;
+}
+
+/* ── 版面：左邊章魚舞台、右邊登入卡；< 1024px 收成置中單卡 ── */
+.layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
+  align-items: center;
+  gap: clamp(32px, 5vw, 96px);
+  width: min(1180px, calc(100% - 64px));
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 48px 0 112px;
+
+  @media (max-width: 1023.98px) {
+    grid-template-columns: minmax(0, 440px);
+    justify-content: center;
+    align-content: start;
+    gap: 24px;
+    width: calc(100% - 32px);
+    padding: 32px 0 96px;
+  }
+}
+
+/* 卡片放寬（強制綁定兩步驟驗證：放得下 QR code 與步驟說明） */
+.layoutWide {
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 520px);
+
+  @media (max-width: 1023.98px) {
+    grid-template-columns: minmax(0, 520px);
+  }
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+}
+
+/* 舞台以「格」為單位排：雲 58×24、書 36×9、章魚 20×16，--cell 由 JS 依視窗寬度給整數 px */
+.stage {
+  position: relative;
+  width: calc(var(--cell) * 60);
+  height: calc(var(--cell) * 33);
+  margin-bottom: calc(var(--cell) * 3);
+}
+
+.stageCloud {
+  position: absolute;
+  left: calc(var(--cell) * 1);
+  top: 0;
+  width: calc(var(--cell) * 58);
+  height: calc(var(--cell) * 24);
+}
+
+.stageBook {
+  position: absolute;
+  left: calc(var(--cell) * 12);
+  top: calc(var(--cell) * 24);
+  z-index: 1;
+  width: calc(var(--cell) * 36);
+  height: calc(var(--cell) * 9);
+}
+
+.stageStar {
+  position: absolute;
+  animation: px-twinkle 3.6s steps(1, end) infinite;
+}
+
+/* 星星避開右上的對話泡泡：十字星在右側雲腰、金色星芒在左上 */
+.stagePlus {
+  right: 0;
+  top: calc(var(--cell) * 15);
+  width: calc(var(--cell) * 3);
+  height: calc(var(--cell) * 3);
+}
+
+.stageSparkle {
+  left: calc(var(--cell) * 2);
+  top: calc(var(--cell) * 3);
+  width: calc(var(--cell) * 5);
+  height: calc(var(--cell) * 5);
+  animation-delay: -1.8s;
+}
+
+/* 章魚本身是按鈕：點一下跳起來說句話；hover 開心臉、在身上來回滑冒愛心是 OctoPet 自己的反應 */
+.octoButton {
+  position: absolute;
+  left: calc(var(--cell) * 20);
+  top: calc(var(--cell) * 10);
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px dashed var(--px-word-top);
+    outline-offset: 4px;
+  }
+}
+
+/* 對話泡泡：深藍像素框白底，尾巴朝左下指著章魚 */
+.bubble {
+  @include pixel-frame(3px, 3px, var(--px-bubble-line), var(--px-bubble-fill));
+  position: absolute;
+  left: calc(var(--cell) * 40);
+  bottom: calc(var(--cell) * 22);
+  z-index: 3;
+  width: max-content;
+  max-width: 240px;
+  padding: 9px 15px 10px;
+  color: var(--px-bubble-ink);
+  font-size: $font-size-14;
+  font-weight: $font-weight-700;
+  line-height: 1.45;
+  text-align: left;
+  transform-origin: 0 100%;
+  animation: px-pop 0.28s steps(3, end);
+
+  /* 尾巴：兩個方塊疊出往左下的階梯（外框色＋底色各一層） */
+  > i {
+    position: absolute;
+    left: 14px;
+    bottom: -9px;
+    width: 12px;
+    height: 12px;
+    background: var(--px-bubble-line);
+    clip-path: polygon(0 0, 100% 0, 100% 3px, 75% 3px, 75% 6px, 50% 6px, 50% 9px, 25% 9px, 25% 100%, 0 100%);
+
+    &::after {
+      content: "";
+      position: absolute;
+      left: 3px;
+      top: -3px;
+      width: 6px;
+      height: 6px;
+      background: var(--px-bubble-fill);
+      clip-path: polygon(0 0, 100% 0, 100% 50%, 50% 50%, 50% 100%, 0 100%);
+    }
+  }
+}
+
+@keyframes px-pop {
+  from {
+    transform: scale(0.6);
+  }
+}
+
+.wordmark {
+  display: block;
+  width: calc((var(--cell) + 2px) * 35);
+  height: calc((var(--cell) + 2px) * 7);
+}
+
+@media (max-width: 1023.98px) {
+  .stage {
+    margin-bottom: calc(var(--cell) * 2);
+  }
+
+  .bubble {
+    max-width: 160px;
+    font-size: $font-size-12;
+  }
+}
+
+/* ── 卡片 ── */
+.cardWrap {
+  min-width: 0;
+}
+
+.card {
+  @include pixel-frame(4px, 4px, var(--px-card-line), var(--px-card-fill));
+  width: 100%;
+  padding: 40px 36px 36px;
+  filter: drop-shadow(0 6px 0 var(--px-card-drop));
+  animation: px-card-in 0.36s steps(4, end);
+
+  @media (max-width: 575.98px) {
+    padding: 32px 24px 28px;
+  }
+}
+
+@keyframes px-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driftA,
+  .driftB,
+  .skyStar,
+  .stageStar,
+  .nightStars,
+  .bubble,
+  .card {
+    animation: none;
+  }
+
+  .skyItem,
+  .sea {
+    transition: none;
+  }
+}

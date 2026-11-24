@@ -10,6 +10,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { GATEWAY_KEY, buildFlow } from "./buildFlow";
 import {
+  applyGroupRefits,
   applyView,
   buildGroups,
   defaultCollapsed,
@@ -17,6 +18,7 @@ import {
   groupKeyOfId,
   groupNodeId,
   listGroupKeys,
+  refitGroup,
   vmidsWithRules,
   COLLAPSE_THRESHOLD,
 } from "./grouping";
@@ -84,7 +86,10 @@ describe("applyView 分組模式", () => {
     const childIndex = view.nodes.findIndex((n) => n.id === "101");
     expect(groupIndex).toBeGreaterThanOrEqual(0);
     expect(childIndex).toBeGreaterThan(groupIndex);
-    expect(view.nodes[childIndex]).toMatchObject({ parentId: groupNodeId(CLASS_KEY), draggable: false });
+    /* 框內機器可拖、可拖出框外（框跟著長大），不再鎖在格子裡 */
+    expect(view.nodes[childIndex]).toMatchObject({ parentId: groupNodeId(CLASS_KEY), expandParent: true });
+    expect(view.nodes[childIndex].draggable).not.toBe(false);
+    expect(view.nodes[childIndex].extent).toBeUndefined();
     expect(view.nodes.some((n) => n.id === GATEWAY_KEY)).toBe(true);
   });
 
@@ -132,8 +137,15 @@ describe("applyView 分組模式", () => {
       isCollapsed: () => true,
     });
     expect(view.nodes.some((n) => n.id === groupNodeId("class:獨班"))).toBe(false);
-    expect(view.nodes.find((n) => n.id === "301")).toMatchObject({ draggable: false });
+    expect(view.nodes.find((n) => n.id === "301").draggable).not.toBe(false);
     expect(view.nodes.find((n) => n.id === "301").parentId).toBeUndefined();
+    /* 拖過的單機照存的位置放（存在 groups：那台就是這個群組） */
+    const moved = applyView(buildFlow(topology, { showLabel: true, showInternet: true }), topology.edges, {
+      grouped: true,
+      isCollapsed: () => true,
+      positions: { groups: { "class:獨班": { x: 700, y: 30 } } },
+    });
+    expect(moved.nodes.find((n) => n.id === "301").position).toEqual({ x: 700, y: 30 });
     /* 資二甲有三台，搜尋只命中一台：框還在，才看得出它是哪一班的 */
     const searched = applyView(flow(), TOPOLOGY.edges, { grouped: true, filter: { query: "vm-102" } });
     expect(searched.nodes.some((n) => n.id === groupNodeId(CLASS_KEY))).toBe(true);
@@ -145,6 +157,79 @@ describe("applyView 分組模式", () => {
       positions: { groups: { [PERSONAL_KEY]: { x: 999, y: 888 } } },
     });
     expect(view.nodes.find((n) => n.id === groupNodeId(PERSONAL_KEY)).position).toEqual({ x: 999, y: 888 });
+  });
+});
+
+describe("群組框內的機器拖曳", () => {
+  const frameOf = (view) => view.nodes.find((n) => n.id === groupNodeId(CLASS_KEY));
+  const at = (view, id) => view.nodes.find((n) => n.id === id).position;
+  const grouped = (positions) => applyView(flow(), TOPOLOGY.edges, { grouped: true, positions });
+
+  test("沒拖過：框內格狀排列，框的大小跟原本一樣", () => {
+    const view = grouped({});
+    expect([at(view, "101"), at(view, "102"), at(view, "103")]).toEqual([
+      { x: 16, y: 58 }, { x: 226, y: 58 }, { x: 436, y: 58 },
+    ]);
+    expect(frameOf(view).style).toEqual({ width: 662, height: 162 });
+  });
+
+  test("拖過的機器照存的位置放，沒拖過的補進沒被佔走的格子", () => {
+    const view = grouped({ members: { [CLASS_KEY]: { 102: { x: 16, y: 58 } } } });
+    expect(at(view, "102")).toEqual({ x: 16, y: 58 });
+    expect(at(view, "101")).toEqual({ x: 226, y: 58 });
+    expect(at(view, "103")).toEqual({ x: 436, y: 58 });
+  });
+
+  test("框貼著機器外圍：拖遠了框跟著長大", () => {
+    const view = grouped({ members: { [CLASS_KEY]: {
+      101: { x: 16, y: 58 }, 102: { x: 16, y: 300 }, 103: { x: 500, y: 58 },
+    } } });
+    /* 右邊留 46、下面留 36（跟格狀版面最後一欄／列外的留白一樣） */
+    expect(frameOf(view).style).toEqual({ width: 500 + 180 + 46, height: 300 + 68 + 36 });
+  });
+
+  test("拖到框的左上方：框往左上長，機器在畫面上不動", () => {
+    const view = grouped({
+      groups: { [CLASS_KEY]: { x: 100, y: 100 } },
+      members: { [CLASS_KEY]: { 101: { x: -84, y: 18 }, 102: { x: 16, y: 58 }, 103: { x: 226, y: 58 } } },
+    });
+    const frame = frameOf(view);
+    expect(frame.position).toEqual({ x: 0, y: 60 });
+    expect(frame.data.memberShift).toEqual({ x: -100, y: -40 });
+    /* 畫布上的絕對位置＝框＋相對位置，跟存的一樣 */
+    expect(at(view, "101")).toEqual({ x: 16, y: 58 });
+    expect(at(view, "102")).toEqual({ x: 116, y: 98 });
+  });
+});
+
+describe("拖完框內機器後重新貼合群組框", () => {
+  const frame = (extra = {}) => ({
+    id: "g", type: "vmGroup", position: { x: 100, y: 100 },
+    data: { groupKey: CLASS_KEY, memberShift: { x: 0, y: 0 } }, style: { width: 662, height: 162 }, ...extra,
+  });
+  const child = (id, x, y) => ({ id, type: "vm", parentId: "g", position: { x, y } });
+
+  test("拖到框外：框長大、位置不變；框內每台的位置都回報（沒拖的也釘住）", () => {
+    const refit = refitGroup([frame(), child("a", 16, 58), child("b", 300, 200)], "g");
+    expect(refit).toMatchObject({ id: "g", groupKey: CLASS_KEY, position: { x: 100, y: 100 }, width: 526, height: 304 });
+    expect(Object.fromEntries(refit.members)).toEqual({ a: { x: 16, y: 58 }, b: { x: 300, y: 200 } });
+  });
+
+  test("拖到框的左上方：框往左上挪，機器換算成新框的相對位置", () => {
+    const refit = refitGroup([frame({ data: { groupKey: CLASS_KEY, memberShift: { x: 5, y: 0 } } }),
+      child("a", 16, 58), child("b", -50, 10)], "g");
+    expect(refit.position).toEqual({ x: 34, y: 52 });
+    expect(Object.fromEntries(refit.members)).toEqual({ a: { x: 82, y: 106 }, b: { x: 16, y: 58 } });
+    /* 篩掉沒畫出來的機器：存的位置要減掉畫出來時的位移（memberShift）加上這次的 */
+    expect(refit.savedOffset).toEqual({ x: -61, y: -48 });
+  });
+
+  test("套到畫布：框的位置、大小（含 expandParent 寫進去的 width／height）與機器位置一起換", () => {
+    const nodes = [frame({ width: 900, height: 500 }), child("a", 16, 58), child("b", 300, 200), { id: "other", position: { x: 1, y: 1 } }];
+    const next = applyGroupRefits(nodes, [refitGroup(nodes, "g")]);
+    expect(next[0]).toMatchObject({ width: 526, height: 304, style: { width: 526, height: 304 } });
+    expect(next[3]).toBe(nodes[3]);
+    expect(applyGroupRefits(nodes, [])).toBe(nodes);
   });
 });
 

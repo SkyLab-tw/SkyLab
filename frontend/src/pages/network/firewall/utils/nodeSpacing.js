@@ -58,18 +58,64 @@ export function nearestFreeSpot(rect, obstacles, gap = NODE_GAP) {
  */
 export function settleDroppedNodes(nodes, droppedIds, { gap = NODE_GAP, movable = () => true } = {}) {
   const dropped = new Set(droppedIds);
-  /* 群組框裡的機器座標是相對於群組的、本身也拖不動：只比最上層的節點（群組框、單機、網際網路） */
-  const topLevel = nodes.filter((node) => !node.parentId && !node.hidden);
+  const visible = nodes.filter((node) => !node.hidden);
+  /* 只跟同一層比：最上層（群組框、單機、網際網路）彼此比；
+     群組框裡的機器座標相對於框，只跟同一個框裡的機器比（框會跟著機器長大，不必躲框外的東西） */
+  const layerOf = (node) => node.parentId ?? "";
   const rectOf = (node) => ({ ...sizeOf(node), x: node.position.x, y: node.position.y });
-  const placed = topLevel.filter((node) => !dropped.has(node.id)).map(rectOf);
+  const placed = new Map(); // 層 → 已放好的範圍
+  const place = (node, rect) => {
+    const layer = layerOf(node);
+    if (!placed.has(layer)) placed.set(layer, []);
+    placed.get(layer).push(rect);
+  };
+  for (const node of visible) {
+    if (!dropped.has(node.id)) place(node, rectOf(node));
+  }
 
   const moves = new Map();
   /* 一次拖好幾台（框選後拖）：逐台安置，挪好的那台也算進後面的障礙 */
-  for (const node of topLevel.filter((n) => dropped.has(n.id))) {
+  for (const node of visible.filter((n) => dropped.has(n.id))) {
     const rect = rectOf(node);
-    const spot = movable(node) ? nearestFreeSpot(rect, placed, gap) : null;
+    const spot = movable(node) ? nearestFreeSpot(rect, placed.get(layerOf(node)) ?? [], gap) : null;
     if (spot) moves.set(node.id, spot);
-    placed.push(spot ? { ...rect, ...spot } : rect);
+    place(node, spot ? { ...rect, ...spot } : rect);
+  }
+  return moves;
+}
+
+/**
+ * 某些節點變大或換了位置（群組框跟著框內機器撐大）之後，把被它們蓋到的最上層節點挪開。
+ * 被挪的節點若又壓到別的，接著挪那一個（連鎖），每個節點最多挪一次；固定的節點本身不動。
+ *
+ * @param {Array} nodes 畫布上所有節點（固定的節點已是新的位置與尺寸）
+ * @param {Iterable<string>} fixedIds 不動、要讓位給它的節點
+ * @param {{ gap?: number }} [options]
+ * @returns {Map<string, { x: number, y: number }>} 要挪的節點 → 新位置
+ */
+export function makeRoomFor(nodes, fixedIds, { gap = NODE_GAP } = {}) {
+  const topLevel = nodes.filter((node) => !node.parentId && !node.hidden);
+  const rects = new Map(topLevel.map((node) => [node.id, { ...sizeOf(node), x: node.position.x, y: node.position.y }]));
+  const settled = new Set([...fixedIds].filter((id) => rects.has(id)));
+  const queue = [...settled];
+  const moves = new Map();
+  const tooClose = (a, b) => (
+    a.x < b.x + b.w + gap && b.x - gap < a.x + a.w
+    && a.y < b.y + b.h + gap && b.y - gap < a.y + a.h
+  );
+  while (queue.length) {
+    const pusher = rects.get(queue.shift());
+    for (const node of topLevel) {
+      if (settled.has(node.id)) continue;
+      const rect = rects.get(node.id);
+      if (!tooClose(pusher, rect)) continue;
+      const spot = nearestFreeSpot(rect, [...settled].map((id) => rects.get(id)), gap);
+      if (!spot) continue;
+      rects.set(node.id, { ...rect, ...spot });
+      moves.set(node.id, spot);
+      settled.add(node.id);
+      queue.push(node.id);
+    }
   }
   return moves;
 }
