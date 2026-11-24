@@ -20,7 +20,6 @@ vi.mock("react-i18next", () => ({
 }));
 
 import { LANG_OPTIONS, LanguagePicker, Notice } from "./wizardParts";
-import PageShell from "../login/PageShell";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -62,11 +61,4 @@ test("LanguagePicker 遇到不支援的語言時標出預設語言", async () =>
   await act(async () => root.render(<LanguagePicker ariaLabel="lang" />));
   const checked = host.querySelector('[aria-pressed="true"]');
   expect(checked.getAttribute("lang")).toBe("zh-TW");
-});
-
-test("登入頁 PageShell 把 cardClassName 加到卡片上，背景不疊光暈", async () => {
-  await act(async () => root.render(<PageShell cardClassName="wide-extra">body</PageShell>));
-  const card = [...host.querySelectorAll("div")].find((d) => d.textContent === "body" && d.children.length === 0);
-  expect(card.className).toContain("wide-extra");
-  expect(host.querySelector('[aria-hidden="true"]')).toBeNull();
 });

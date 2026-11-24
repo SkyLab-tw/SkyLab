@@ -4,6 +4,7 @@ import TotpEnrollment from "../../components/TotpEnrollment/TotpEnrollment";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../hooks/useToast";
 import PageShell from "./PageShell";
+import BackButton from "./views/BackButton";
 import styles from "./LoginPage.module.scss";
 
 /**
@@ -21,15 +22,12 @@ export default function TotpEnrollPage() {
   }
 
   return (
-    <PageShell cardClassName={styles.cardWide}>
-      <button type="button" className={styles.backBtn} onClick={logout}>
-        <MIcon name="logout" size={18} />
+    <PageShell scene="enroll" wide>
+      <BackButton icon="logout" onClick={logout}>
         {t("TotpEnrollPage.logout")}
-      </button>
+      </BackButton>
       <h1 className={styles.title}>{t("TotpEnrollPage.title")}</h1>
-      <p className={styles.subtitle}>
-        {t("TotpEnrollPage.subtitle", { email: user?.email ?? "" })}
-      </p>
+      <p className={styles.lead}>{t("TotpEnrollPage.subtitle", { email: user?.email ?? "" })}</p>
       <div className={styles.deviceNotice}>
         <MIcon name="security" size={20} />
         <span>{t("TotpEnrollPage.notice")}</span>

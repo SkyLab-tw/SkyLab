@@ -1,15 +1,16 @@
 import { memo, useEffect, useRef } from "react";
-import PixelSprite from "../../../components/PixelArt/PixelSprite";
-import { DOTS, PLUS, SPARKLE } from "../../../components/PixelArt/pixelArt";
-import { CLOUD_SEA_BACK, CLOUD_SEA_FRONT, SKY_CLOUDS } from "../../../components/PixelArt/pixelScenery";
-import styles from "./PixelPageShell.module.scss";
-
-const SOFT = { f: "var(--px-sky-cloud)", s: "var(--px-sky-cloud-shade)" };
-const SEA_BACK = { f: "var(--px-sea-back)" };
-const SEA_FRONT = { f: "var(--px-sea-front)" };
-const GOLD = { x: "var(--px-gold)", X: "var(--px-gold-hi)" };
-const BLUE = { x: "var(--px-star-blue)", X: "var(--px-star-blue)" };
-const DOT = { x: "var(--px-dots)" };
+import PixelSprite from "../../components/PixelArt/PixelSprite";
+import { DOTS, PLUS, SPARKLE } from "../../components/PixelArt/pixelArt";
+import { CLOUD_SEA_BACK, CLOUD_SEA_FRONT, SKY_CLOUDS } from "../../components/PixelArt/pixelScenery";
+import {
+  BLUE_PALETTE as BLUE,
+  DOT_PALETTE,
+  GOLD_PALETTE as GOLD,
+  SEA_BACK_PALETTE,
+  SEA_FRONT_PALETTE,
+  SKY_CLOUD_PALETTE,
+} from "./palettes";
+import styles from "./PageShell.module.scss";
 
 /* 背景雲：位置用視窗百分比，depth 越大跟游標視差移得越多（越近） */
 const CLOUDS = [
@@ -69,7 +70,7 @@ function PixelSky() {
           className={styles.skyItem}
           style={{ left: c.left, top: c.top, "--depth": c.depth }}
         >
-          <PixelSprite className={`${styles.skyCloud} ${styles[c.drift]}`} rows={c.rows} palette={SOFT} cell={c.cell} />
+          <PixelSprite className={`${styles.skyCloud} ${styles[c.drift]}`} rows={c.rows} palette={SKY_CLOUD_PALETTE} cell={c.cell} />
         </div>
       ))}
       {STARS.map((s, i) => (
@@ -81,11 +82,11 @@ function PixelSky() {
           <PixelSprite className={styles.skyStar} rows={s.rows} palette={s.palette} cell={s.cell} />
         </div>
       ))}
-      <PixelSprite className={`${styles.skyDots} ${styles.skyDotsTop}`} rows={DOTS} palette={DOT} cell={6} />
-      <PixelSprite className={`${styles.skyDots} ${styles.skyDotsBottom}`} rows={DOTS} palette={DOT} cell={6} />
+      <PixelSprite className={`${styles.skyDots} ${styles.skyDotsTop}`} rows={DOTS} palette={DOT_PALETTE} cell={6} />
+      <PixelSprite className={`${styles.skyDots} ${styles.skyDotsBottom}`} rows={DOTS} palette={DOT_PALETTE} cell={6} />
       <div className={styles.sea}>
-        <PixelSprite className={styles.seaBack} rows={CLOUD_SEA_BACK} palette={SEA_BACK} cell={8} />
-        <PixelSprite className={styles.seaFront} rows={CLOUD_SEA_FRONT} palette={SEA_FRONT} cell={8} />
+        <PixelSprite className={styles.seaBack} rows={CLOUD_SEA_BACK} palette={SEA_BACK_PALETTE} cell={8} />
+        <PixelSprite className={styles.seaFront} rows={CLOUD_SEA_FRONT} palette={SEA_FRONT_PALETTE} cell={8} />
       </div>
     </div>
   );

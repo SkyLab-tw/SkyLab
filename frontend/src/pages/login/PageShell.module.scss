@@ -1,3 +1,4 @@
+@use "sass:list";
 @use "sass:math";
 @use "@/assets/styles/pixel" as *;
 
@@ -30,6 +31,8 @@
   --px-card-drop: #cddaf4;
   --px-bubble-line: #202748;
   --px-bubble-fill: #ffffff;
+  /* 泡泡在深色模式也是淺底，字一律深色 */
+  --px-bubble-ink: #202748;
   --px-night-star: transparent;
 
   position: relative;
@@ -160,7 +163,7 @@ $night-stars: ();
 @for $i from 1 through 70 {
   $x: ($i * 137) % 1000;
   $y: ($i * 271) % 620;
-  $night-stars: append($night-stars, #{math.div($x, 10)}vw #{math.div($y, 10)}vh 0 0 var(--px-night-star), comma);
+  $night-stars: list.append($night-stars, #{math.div($x, 10)}vw #{math.div($y, 10)}vh 0 0 var(--px-night-star), comma);
 }
 
 .nightStars {
@@ -224,6 +227,15 @@ $night-stars: ();
   }
 }
 
+/* 卡片放寬（強制綁定兩步驟驗證：放得下 QR code 與步驟說明） */
+.layoutWide {
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 520px);
+
+  @media (max-width: 1023.98px) {
+    grid-template-columns: minmax(0, 520px);
+  }
+}
+
 .hero {
   display: flex;
   flex-direction: column;
@@ -262,15 +274,15 @@ $night-stars: ();
   animation: px-twinkle 3.6s steps(1, end) infinite;
 }
 
-/* 星星避開右上的對話泡泡：金色星芒在左上、十字星在右側雲腰 */
-.stageStarLeft {
+/* 星星避開右上的對話泡泡：十字星在右側雲腰、金色星芒在左上 */
+.stagePlus {
   right: 0;
   top: calc(var(--cell) * 15);
   width: calc(var(--cell) * 3);
   height: calc(var(--cell) * 3);
 }
 
-.stageStarRight {
+.stageSparkle {
   left: calc(var(--cell) * 2);
   top: calc(var(--cell) * 3);
   width: calc(var(--cell) * 5);
@@ -305,7 +317,7 @@ $night-stars: ();
   width: max-content;
   max-width: 240px;
   padding: 9px 15px 10px;
-  color: #202748;
+  color: var(--px-bubble-ink);
   font-size: $font-size-14;
   font-weight: $font-weight-700;
   line-height: 1.45;
@@ -378,7 +390,7 @@ $night-stars: ();
   }
 }
 
-/* ── 登入卡 ── */
+/* ── 卡片 ── */
 .cardWrap {
   min-width: 0;
 }
