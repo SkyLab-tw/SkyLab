@@ -15,7 +15,12 @@
   "modeToNight": "Switch to night mode",
   "scrollHint": "Scroll to explore",
   "hero": {
-    "tagline": "The campus's own private cloud",
+    "tagline": "Campus cloud for teaching and labs, made efficient",
+    "taglineRotate": {
+      "before": "Campus cloud for teaching and labs, made ",
+      "words": ["efficient", "smart", "secure", "flexible", "open"],
+      "after": ""
+    },
     "sub": "One platform for every compute resource on campus — from request to running VM"
   },
   "overview": {

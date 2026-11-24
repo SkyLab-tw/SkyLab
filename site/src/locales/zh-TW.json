@@ -15,7 +15,12 @@
   "modeToNight": "切換夜間模式",
   "scrollHint": "滾動探索",
   "hero": {
-    "tagline": "校園裡的私有雲",
+    "tagline": "校園的高效雲端教學與實作基地",
+    "taglineRotate": {
+      "before": "校園的",
+      "words": ["高效", "智慧", "安全", "彈性", "開源"],
+      "after": "雲端教學與實作基地"
+    },
     "sub": "從申請到開機,一個平台管理整個校園的運算資源"
   },
   "overview": {
