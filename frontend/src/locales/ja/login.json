@@ -313,8 +313,6 @@
   "LoginPreflight.latency": "{{ms}} ms",
   "LoginPreflight.retry": "再チェック",
   "LoginPreflight.logout": "ログアウト",
-  "PixelLogin.heroTagline": "キャンパスのプライベートクラウド",
-  "PixelLogin.heroSub": "申請から起動まで、キャンパスの計算資源をひとつのプラットフォームで",
   "PixelLogin.octoLabel": "タコ博士（クリックであいさつ）",
   "PixelLogin.say.login": "やあ！おかえりなさい～",
   "PixelLogin.say.totp": "最後に認証コードを",

@@ -313,8 +313,6 @@
   "LoginPreflight.latency": "{{ms}} ms",
   "LoginPreflight.retry": "重新檢查",
   "LoginPreflight.logout": "登出",
-  "PixelLogin.heroTagline": "校園裡的私有雲",
-  "PixelLogin.heroSub": "從申請到開機，一個平台管理整個校園的運算資源",
   "PixelLogin.octoLabel": "章魚學士（點一下跟牠打招呼）",
   "PixelLogin.say.login": "嗨！歡迎回來～",
   "PixelLogin.say.totp": "最後一步，輸入驗證碼",
