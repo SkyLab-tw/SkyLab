@@ -117,7 +117,11 @@ export default function RoomScene({ roomId, roles, stations, onTry, onWatch }) {
   const [step, setStep] = useState(0);
   const [hovering, setHovering] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [reduce] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  // 預渲染（Node）沒有 window：先當成不減少動態，掛上之後再讀偏好，伺服器與瀏覽器第一次畫的才一樣
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    setReduce(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
   const paused = hovering || focused || reduce || !inView;
   const order = room.items.map((item) => item.facet);
   const current = room.items[step];

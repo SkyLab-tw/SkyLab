@@ -1,3 +1,4 @@
+@use "sass:list";
 @use "sass:math";
 @use "pixel" as *;
 @use "ui" as *;
@@ -6,7 +7,7 @@ $night-stars: ();
 @for $i from 1 through 80 {
   $x: ($i * 137) % 1000;
   $y: ($i * 271) % 900;
-  $night-stars: append($night-stars, #{math.div($x, 10)}vw #{math.div($y, 10)}vh 0 0 #dfe8ff, comma);
+  $night-stars: list.append($night-stars, #{math.div($x, 10)}vw #{math.div($y, 10)}vh 0 0 #dfe8ff, comma);
 }
 
 /* 官網像素版：海報風長頁。白天是晴空（#eef3fc），晚上是夜空；

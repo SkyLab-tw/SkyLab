@@ -4,6 +4,7 @@ import { BOOK, WORDMARK } from "../../../frontend/src/components/PixelArt/pixelA
 import { CLOUD_SEA_BACK, CLOUD_SEA_FRONT, HERO_CLOUD } from "../../../frontend/src/components/PixelArt/pixelScenery";
 import { CONTACT_EMAIL, DOCS_URL, GITHUB_URL } from "../config";
 import { LANGUAGES, languageInfo } from "../languages";
+import { rememberLanguageChoice } from "../languagePreference";
 import RotatingTagline from "../RotatingTagline";
 import { ICONS } from "./icons";
 import Octo from "./Octo";
@@ -462,11 +463,11 @@ function ShotDialog({ station, lang, onClose }) {
 }
 
 /**
- * 官網像素版（預覽中，site/pixel.html；尚未取代原版 LandingPage）。
- * 第一屏先問身分（掛繩識別證）：學生進學生篇章魚導覽，老師、管理員打開校園地圖上的那一棟。
- * 接著是像素校園地圖：機房（管理員）、辦公室（老師、管理員）、教室（老師）、宿舍或家裡（學生），
- * 一棟一頁，每頁是那棟的房間，房間裡的東西自動一步步講這裡在做的事；「跟章魚試一次」進全功能導覽的那一章、
- * 「看實際畫面」彈窗播操作影片（導覽都學 The Evolution of Trust）。
+ * 官網首頁（像素版；三個語言各自預渲染在 /、/en/、/ja/，原版 LandingPage 保留在 classic.html）。
+ * 由上而下：第一屏 → 功能一覽 → 從機房到家裡（像素校園地圖：機房＝管理員、辦公室＝管理員、教室＝老師、
+ * 宿舍或家裡＝學生，一棟一頁，房間裡的東西自動一步步講這裡在做的事）→ 用你的身分走一遍（識別證）→ 結尾聯絡。
+ * 「跟章魚試一次」進全功能導覽的那一章、「看實際畫面」彈窗播操作影片（導覽都學 The Evolution of Trust）。
+ * 預渲染（Node）也會畫這一頁：畫面上用到 window 的都放在 effect 裡，伺服器與瀏覽器第一次畫的要一樣。
  */
 export default function PixelLandingPage({ lang }) {
   const { t } = useTranslation("pixel");
@@ -510,7 +511,6 @@ export default function PixelLandingPage({ lang }) {
   const pickRole = (role) => openTour(role.chapter, role.set);
 
   const docsHref = `${DOCS_URL}${languageInfo(lang).docsPath}guides/deployment`;
-  const langHref = (code) => (code === "zh-TW" ? "?" : `?lang=${code}`);
 
   return (
     <div className={styles.page} data-mode={mode}>
@@ -535,8 +535,10 @@ export default function PixelLandingPage({ lang }) {
           {LANGUAGES.map((l) => (
             <a
               key={l.code}
-              href={langHref(l.code)}
+              href={l.path}
               hrefLang={l.code}
+              // 記住點過的語言：之後打開根網址會直接到這個語言（languagePreference.js）
+              onClick={() => rememberLanguageChoice(l.code)}
               aria-current={lang === l.code ? "page" : undefined}
               className={`${styles.langBtn} ${lang === l.code ? styles.langBtnOn : ""}`}
             >

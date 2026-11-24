@@ -1,10 +1,11 @@
+import { decorativeSvg } from "./decorativeSvg";
 import styles from "./PixelLanding.module.scss";
 
 /* 品牌素材的章魚學士動作（桌面「品牌元素\章魚動作\svg」，32×26 像素畫布），直接內嵌 svg 才能用 CSS 換深色模式的顏色 */
 const POSES = import.meta.glob("./assets/octo/*.svg", { query: "?raw", import: "default", eager: true });
 
 function svgOf(name) {
-  return POSES[`./assets/octo/${name}.svg`] ?? "";
+  return decorativeSvg(POSES[`./assets/octo/${name}.svg`] ?? "");
 }
 
 /**
