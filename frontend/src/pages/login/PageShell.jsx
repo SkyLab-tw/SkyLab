@@ -109,10 +109,7 @@ export default function PageShell({ children, scene: initialScene = "login", wid
                 <i />
               </p>
             </div>
-            <PixelSprite className={styles.wordmark} rows={WORDMARK} palette={WORDMARK_PALETTE} label="SkyLab" />
-            <p className={styles.tagline}>{t("PixelLogin.heroTagline")}</p>
-            <p className={styles.heroSub}>{t("PixelLogin.heroSub")}</p>
-          </section>
+            <PixelSprite className={styles.wordmark} rows={WORDMARK} palette={WORDMARK_PALETTE} label="SkyLab" />          </section>
           <main className={styles.cardWrap}>
             <div className={styles.card}>{children}</div>
           </main>

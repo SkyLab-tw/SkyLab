@@ -360,20 +360,6 @@ $night-stars: ();
   height: calc((var(--cell) + 2px) * 7);
 }
 
-.tagline {
-  margin-top: 18px;
-  color: var(--px-ink);
-  font-size: $font-size-24;
-  font-weight: $font-weight-700;
-  letter-spacing: 0.06em;
-}
-
-.heroSub {
-  margin-top: 6px;
-  color: var(--px-ink-soft);
-  font-size: $font-size-16;
-}
-
 @media (max-width: 1023.98px) {
   .stage {
     margin-bottom: calc(var(--cell) * 2);
@@ -382,11 +368,6 @@ $night-stars: ();
   .bubble {
     max-width: 160px;
     font-size: $font-size-12;
-  }
-
-  .tagline,
-  .heroSub {
-    display: none;
   }
 }
 

@@ -315,8 +315,6 @@
   "LoginPreflight.latency": "{{ms}} ms",
   "LoginPreflight.retry": "Check again",
   "LoginPreflight.logout": "Sign out",
-  "PixelLogin.heroTagline": "A private cloud for your campus",
-  "PixelLogin.heroSub": "From request to boot, one platform for every campus compute resource",
   "PixelLogin.octoLabel": "Professor Octo (click to say hi)",
   "PixelLogin.say.login": "Hi! Welcome back~",
   "PixelLogin.say.totp": "One last step: the code",
