@@ -34,14 +34,18 @@ import ConnectionEdge   from "./edges/ConnectionEdge";
 import ConnectionDetailPanel from "./ConnectionDetailPanel";
 import { GATEWAY_KEY, buildFlow, focusEdges, isOutboundEdge, portLabel, routeEdges, withPortIndexing } from "./utils/buildFlow";
 import { mergePendingLayout, toLayoutEntry, topologyView } from "./utils/pageState";
-import { applyMoves, settleDraggedNodes } from "./utils/nodeSpacing";
+import { applyMoves, makeRoomFor, settleDraggedNodes } from "./utils/nodeSpacing";
 import {
+  GROUP_LAYOUT,
   GROUP_THRESHOLD,
+  applyGroupRefits,
   applyView,
   defaultCollapsed,
+  groupKeyOf,
   groupLabelOf,
   isGroupNodeId,
   listGroupKeys,
+  refitGroup,
 } from "./utils/grouping";
 import { useTheme } from "../../../contexts/ThemeContext";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -68,16 +72,18 @@ const FIT_MAX_ZOOM = 1.1;
 /* 右上篩選列與左上工具列之間至少要留的距離 */
 const FILTER_PANEL_GAP = 12;
 
-/* 分組模式的群組框／網際網路節點位置：自動排好的版面只是預設，
-   使用者拖過的位置存在瀏覽器本機（後端只存單機位置，分組框是純前端的檢視） */
+/* 分組模式的群組框、框內機器、網際網路節點位置：自動排好的版面只是預設，
+   使用者拖過的位置存在瀏覽器本機（後端只存不分組時的單機位置，分組框是純前端的檢視） */
 const GROUP_LAYOUT_STORAGE_KEY = "skylab:firewall-group-layout";
+
+const emptyGroupLayout = () => ({ groups: {}, gateway: null, members: {} });
 
 function loadGroupLayout() {
   try {
     const parsed = JSON.parse(localStorage.getItem(GROUP_LAYOUT_STORAGE_KEY) ?? "{}");
-    return { groups: parsed.groups ?? {}, gateway: parsed.gateway ?? null };
+    return { groups: parsed.groups ?? {}, gateway: parsed.gateway ?? null, members: parsed.members ?? {} };
   } catch {
-    return { groups: {}, gateway: null };
+    return emptyGroupLayout();
   }
 }
 
@@ -298,9 +304,9 @@ export default function FirewallPage() {
 
   /* ── 自動排列 ── */
   const autoArrange = useCallback(() => {
-    /* 分組模式：丟掉拖過的群組位置，回到依序堆疊的預設版面 */
+    /* 分組模式：丟掉拖過的群組框與框內機器位置，回到依序堆疊、框內格狀的預設版面 */
     if (grouped) {
-      groupLayoutRef.current = { groups: {}, gateway: null };
+      groupLayoutRef.current = emptyGroupLayout();
       storeGroupLayout(groupLayoutRef.current);
       setLayoutVersion((v) => v + 1);
       return;
@@ -350,23 +356,52 @@ export default function FirewallPage() {
   const onNodeDragStop = useCallback((_, __, droppedNodes) => {
     /* 放得離別台太近（徽章互壓、連線短到放不下標籤）就推開到最近的空處，存的是推開後的位置。
        群組框（展開或收合）不推：它是大容器、上下只隔 40px 堆疊，往下拖一點就碰到下一個群組，
-       「最近的空處」常常就是原位，放開後被拉回去會像拖不動；群組框照放，但仍算網際網路節點的障礙 */
+       「最近的空處」常常就是原位，放開後被拉回去會像拖不動；群組框照放，但仍算網際網路節點的障礙。
+       框內的機器只跟同一框的機器比（見 settleDroppedNodes） */
+    const canvasNodes = rfInstance.current?.getNodes() ?? [];
     const { moves, dragged: draggedNodes } = settleDraggedNodes(
-      rfInstance.current?.getNodes() ?? [],
+      canvasNodes,
       droppedNodes,
       { movable: (node) => node.type !== "vmGroup" },
     );
-    setNodes((prev) => applyMoves(prev, moves));
-    /* 分組模式：機器固定在群組框的格子裡，能拖的只有群組框與網際網路，位置存本機 */
+    /* 分組模式：群組框、框內機器、單機群組、網際網路都能拖，位置存本機 */
     if (grouped) {
       const layout = groupLayoutRef.current;
+      const finalById = new Map((draggedNodes ?? []).map((node) => [node.id, node]));
+      const settled = canvasNodes.map((node) => finalById.get(node.id) ?? node);
+      const frameIds = new Set();
+      const saveTopLevel = (node, position) => {
+        if (node.type === "vmGroup") layout.groups[node.data.groupKey] = { ...position };
+        else if (node.id === GATEWAY_KEY) layout.gateway = { ...position };
+        /* 只有一台的群組不畫框，那台機器本身就是這個群組 */
+        else layout.groups[groupKeyOf(node.data)] = { ...position };
+      };
       for (const node of draggedNodes ?? []) {
-        if (node.type === "vmGroup") layout.groups[node.data.groupKey] = { ...node.position };
-        else if (node.id === GATEWAY_KEY) layout.gateway = { ...node.position };
+        if (node.parentId) frameIds.add(node.parentId);
+        else saveTopLevel(node, node.position);
       }
+      /* 拖過框內機器的群組：框重新貼合機器，框與框內每一台的位置一起存（沒拖的那幾台也釘住，之後不會被補位擠動） */
+      const refits = [...frameIds].map((id) => refitGroup(settled, id)).filter(Boolean);
+      for (const refit of refits) {
+        layout.groups[refit.groupKey] = refit.position;
+        /* 篩選中沒畫出來的機器存的位置跟著框一起挪，相對位置才不會走樣 */
+        const previous = Object.entries(layout.members[refit.groupKey] ?? {}).map(([id, p]) => (
+          [id, { x: p.x - refit.savedOffset.x, y: p.y - refit.savedOffset.y }]
+        ));
+        layout.members[refit.groupKey] = { ...Object.fromEntries(previous), ...Object.fromEntries(refit.members) };
+      }
+      /* 框撐大後蓋到下面的群組、單機或網際網路：被蓋到的讓開（連鎖），讓開後的位置也存起來 */
+      const refitted = applyGroupRefits(settled, refits);
+      const room = makeRoomFor(refitted, refits.map((refit) => refit.id), { gap: GROUP_LAYOUT.gap });
+      for (const [id, position] of room) {
+        const node = refitted.find((n) => n.id === id);
+        if (node) saveTopLevel(node, position);
+      }
+      setNodes((prev) => applyMoves(applyGroupRefits(applyMoves(prev, moves), refits), room));
       storeGroupLayout(layout);
       return;
     }
+    setNodes((prev) => applyMoves(prev, moves));
     mergePendingLayout(pendingLayout.current, draggedNodes, GATEWAY_KEY);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flushPendingLayout, SAVE_DEBOUNCE);

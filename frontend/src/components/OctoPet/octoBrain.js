@@ -6,6 +6,7 @@
  *   thinking  AI 回覆中：拿出筆電寫程式，飄出 0 和 1
  *   done      回覆好了但還沒被看：^_^ 跳一下，頭上冒「…」對話泡泡直到被看
  *   error     出錯：嚇一跳噴墨，之後一樣冒泡泡（嘴往上拱）提醒有訊息沒看
+ *   shy       不偷看：舉起書擋在面前，直到 activity 換掉才收書（登入頁輸入密碼時）
  * 點擊交給外層按鈕（打開助手），章魚自己只回應 hover 與在頭上來回滑（摸頭）。
  * walkRange > 0 時，待機的空檔會隨機往左走幾格再走回來（只往左：預設貼在畫面右側）。
  * quiet 時只呼吸、眨眼、晃帽穗、看游標（摸頭照樣冒愛心），不會自己看書、走路、睡覺；放在訊息旁邊用。
@@ -132,7 +133,8 @@ export function brainEvent(b, type, now, value) {
     if (!value) return;
     b.lastPlay = b.lastActive = now;
     if (b.state === "sleep") { setState(b, "wake"); hop(b, -32); }
-    else if (b.state === "read") setState(b, "stow", "idle");
+    // shy 時書是拿來擋臉的，滑過去也不收
+    else if (b.state === "read" && b.activity !== "shy") setState(b, "stow", "idle");
     else if (b.state === "walk") setState(b, "idle");
   } else if (type === "rub") {
     // value：這次移動的距離（px）；停超過 0.45 秒重新累計
@@ -147,7 +149,10 @@ export function brainEvent(b, type, now, value) {
 function onActivityChange(b, next) {
   const prev = b.activity;
   b.activity = next;
-  if (next === "thinking") {
+  if (next === "shy") {
+    // 不偷看：舉起書擋在面前，眼睛盯著書（登入頁輸入密碼時）
+    if (b.state !== "read") setState(b, "read");
+  } else if (next === "thinking") {
     if (b.state !== "code") setState(b, "code");
   } else if (next === "done") {
     // 正在敲鍵盤就先「程式跑起來了」一下，再轉成提醒
@@ -156,6 +161,8 @@ function onActivityChange(b, next) {
   } else if (next === "error") {
     setState(b, "ink");
   } else if (prev === "thinking" && b.state === "code") {
+    setState(b, "stow", "idle");
+  } else if (prev === "shy" && b.state === "read") {
     setState(b, "stow", "idle");
   } else if (b.state === "cheer") {
     setState(b, "idle");

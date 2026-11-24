@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { NODE_GAP, applyMoves, nearestFreeSpot, settleDraggedNodes, settleDroppedNodes } from "./nodeSpacing";
+import { NODE_GAP, applyMoves, makeRoomFor, nearestFreeSpot, settleDraggedNodes, settleDroppedNodes } from "./nodeSpacing";
 
 const vm = (id, x, y, extra = {}) => ({
   id, type: "vm", position: { x, y }, measured: { width: 180, height: 68 }, ...extra,
@@ -42,7 +42,25 @@ describe("settleDroppedNodes", () => {
     expect(spaced(rect, { x: 0, y: 68 + NODE_GAP, w: 180, h: 68 })).toBe(true);
   });
 
-  it("只比最上層的節點：群組框裡的機器（相對座標）與藏起來的節點不算", () => {
+  it("群組框撐大蓋到下面的群組：下面的讓開，再往下的接著讓（連鎖），框裡的機器不動", () => {
+    const grown = vm("grown", 0, 0, { type: "vmGroup", measured: { width: 662, height: 252 } });
+    const card = vm("card", 0, 202, { type: "vmGroup", measured: { width: 260, height: 84 } });
+    const next = vm("next", 0, 326, { type: "vmGroup", measured: { width: 662, height: 162 } });
+    const child = vm("child", 16, 58, { parentId: "grown" });
+    const moves = makeRoomFor([grown, card, next, child], ["grown"], { gap: 40 });
+    expect(moves.get("card")).toEqual({ x: 0, y: 252 + 40 });
+    expect(moves.get("next")).toEqual({ x: 0, y: 252 + 40 + 84 + 40 });
+    expect(moves.has("grown")).toBe(false);
+    expect(moves.has("child")).toBe(false);
+  });
+
+  it("沒蓋到就什麼都不挪", () => {
+    const grown = vm("grown", 0, 0, { type: "vmGroup", measured: { width: 662, height: 162 } });
+    const below = vm("below", 0, 202, { type: "vmGroup", measured: { width: 260, height: 84 } });
+    expect(makeRoomFor([grown, below], ["grown"], { gap: 40 }).size).toBe(0);
+  });
+
+  it("只跟同一層比：最上層的節點不管群組框裡的機器（相對座標），藏起來的節點也不算", () => {
     const nodes = [
       vm("group", 0, 0, { type: "vmGroup", measured: { width: 440, height: 160 } }),
       vm("child", 500, 0, { parentId: "group" }),
@@ -50,6 +68,18 @@ describe("settleDroppedNodes", () => {
       vm("dropped", 500, 0),
     ];
     expect(settleDroppedNodes(nodes, ["dropped"]).size).toBe(0);
+  });
+
+  it("群組框裡的機器只跟同一個框的機器保持間距，不管框外與別的框", () => {
+    const nodes = [
+      vm("group", 0, 0, { type: "vmGroup", measured: { width: 662, height: 162 } }),
+      vm("sibling", 16, 58, { parentId: "group" }),
+      vm("elsewhere", 230, 58, { parentId: "other-group" }),
+      vm("top", 230, 58),
+      vm("dropped", 200, 58, { parentId: "group" }),
+    ];
+    /* 只被同框的 sibling 推開到隔 NODE_GAP；座標相同的別框機器、最上層節點都不算 */
+    expect(settleDroppedNodes(nodes, ["dropped"]).get("dropped")).toEqual({ x: 16 + 180 + NODE_GAP, y: 58 });
   });
 
   it("movable 排除的節點（群組框）照放不推，但仍是其他節點的障礙", () => {
