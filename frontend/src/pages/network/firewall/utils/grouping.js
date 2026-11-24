@@ -6,12 +6,14 @@
  * - 收合：群組收成一張摘要卡，群組內往外的連線併成一條並標條數；群組內彼此的連線先不畫
  * - 篩選：搜尋名稱／IP、只看某個群組、只看有規則的機器，被篩掉的台數另外回報
  *
- * 分組模式下機器位置由這裡算（格狀），不吃後端存的單機位置；
- * 群組框與網際網路節點的拖曳位置由頁面存在瀏覽器本機，透過 positions 傳進來。
+ * 分組模式下機器位置由這裡算，不吃後端存的單機位置（那是不分組時的版面）：
+ * 框內預設格狀排列，使用者拖過的機器照拖的位置放，群組框貼著框內機器的外圍算大小。
+ * 群組框、框內機器與網際網路節點的拖曳位置由頁面存在瀏覽器本機，透過 positions 傳進來。
  */
 
 import { KIND_META, resolveKind } from "../../../../components/MachineKindBadge/machineKind";
 import { GATEWAY_KEY, isOutboundEdge } from "./buildFlow";
+import { NODE_GAP } from "./nodeSpacing";
 
 /** 機器數達到這個量才預設分組 */
 export const GROUP_THRESHOLD = 12;
@@ -31,7 +33,8 @@ export const GROUP_LAYOUT = {
   padX: 16,
   header: 58,
   padBottom: 8,
-  /* 單機卡（.vmNode）的高度：只有一台的群組不畫框，那台直接排在堆疊裡 */
+  /* 機器卡（.vmNode）的尺寸：只有一台的群組不畫框，那台直接排在堆疊裡 */
+  cardW: 180,
   cardH: 68,
   collapsedW: 260,
   /* 收合卡：標題列（10＋35）＋摘要行（6＋23）＋下內距 10 ≈ 84（實測），原本 96 底下會空一截 */
@@ -157,15 +160,136 @@ function relane(edges) {
   }));
 }
 
-function groupSize(group, collapsed) {
+/* 框內機器卡到框右緣／下緣的距離：格狀排列的最後一欄、最後一列外面還留著格距（格寬−卡寬、格高−卡高），
+   框照內容算大小時沿用同樣的留白，沒拖過的群組才會跟格狀版面一模一樣 */
+const FRAME_PAD_RIGHT = GROUP_LAYOUT.padX + GROUP_LAYOUT.cellW - GROUP_LAYOUT.cardW;
+const FRAME_PAD_BOTTOM = GROUP_LAYOUT.padBottom + GROUP_LAYOUT.cellH - GROUP_LAYOUT.cardH;
+/* 框最窄是一欄格子寬，標題列（名稱、台數、對外開放數）才放得下 */
+const FRAME_MIN_W = GROUP_LAYOUT.padX * 2 + GROUP_LAYOUT.cellW;
+
+/** 框內第 i 格的位置（相對於群組框） */
+function gridSlot(i) {
   const L = GROUP_LAYOUT;
-  if (collapsed) return { width: L.collapsedW, height: L.collapsedH };
-  const cols = Math.max(1, Math.min(L.cols, group.total));
-  const rows = Math.ceil(group.total / cols);
   return {
-    width: L.padX * 2 + cols * L.cellW,
-    height: L.header + rows * L.cellH + L.padBottom,
+    x: L.padX + (i % L.cols) * L.cellW,
+    y: L.header + Math.floor(i / L.cols) * L.cellH,
   };
+}
+
+/**
+ * 框內每台機器的位置（相對於群組框）：拖過的用存下來的位置，
+ * 其他的依序補進下一個沒被拖過的機器佔走的格子。都沒拖過就是原本的格狀排列。
+ *
+ * @param {Array<{ id: string }>} vmNodes 群組內要畫的機器（已排序）
+ * @param {Record<string, { x: number, y: number }>} [saved] 這個群組存下來的機器位置
+ * @returns {Map<string, { x: number, y: number }>}
+ */
+export function placeGroupMembers(vmNodes, saved = {}) {
+  const L = GROUP_LAYOUT;
+  const placed = new Map();
+  const taken = [];
+  for (const vm of vmNodes) {
+    const position = saved?.[vm.id];
+    if (!position) continue;
+    placed.set(vm.id, { x: position.x, y: position.y });
+    taken.push(position);
+  }
+  const blocked = (slot) => taken.some((p) => (
+    slot.x < p.x + L.cardW + NODE_GAP && p.x - NODE_GAP < slot.x + L.cardW
+    && slot.y < p.y + L.cardH + NODE_GAP && p.y - NODE_GAP < slot.y + L.cardH
+  ));
+  let index = 0;
+  for (const vm of vmNodes) {
+    if (placed.has(vm.id)) continue;
+    while (blocked(gridSlot(index))) index += 1;
+    placed.set(vm.id, gridSlot(index));
+    index += 1;
+  }
+  return placed;
+}
+
+/**
+ * 依框內機器的位置算群組框：左邊留 padX、上面留標題列、右下留格距，
+ * 機器拖到框外框就長大、往內收框就跟著縮。
+ *
+ * @param {Iterable<{ x: number, y: number }>} memberPositions 機器相對於框的位置
+ * @returns {{ shift: { x: number, y: number }, width: number, height: number }}
+ *   shift：機器位置都要減掉、框位置要加上的量（最左上那台回到 padX／標題列下方，畫面上機器原地不動）
+ */
+export function fitGroupFrame(memberPositions) {
+  const L = GROUP_LAYOUT;
+  const list = [...memberPositions];
+  if (!list.length) {
+    return { shift: { x: 0, y: 0 }, width: FRAME_MIN_W, height: L.header + L.cardH + FRAME_PAD_BOTTOM };
+  }
+  const xs = list.map((p) => p.x);
+  const ys = list.map((p) => p.y);
+  const shift = {
+    x: Math.round(Math.min(...xs) - L.padX),
+    y: Math.round(Math.min(...ys) - L.header),
+  };
+  return {
+    shift,
+    width: Math.max(FRAME_MIN_W, Math.round(Math.max(...xs) - shift.x + L.cardW + FRAME_PAD_RIGHT)),
+    height: Math.round(Math.max(...ys) - shift.y + L.cardH + FRAME_PAD_BOTTOM),
+  };
+}
+
+/**
+ * 拖完框內機器後，把群組框重新貼合框內機器（頁面的 onNodeDragStop 用）。
+ * 拖曳中 expandParent 只會把框撐大、而且框邊緊貼著卡片；放開時照 fitGroupFrame 補回留白，往內收的也縮回來。
+ *
+ * @param {Array} nodes 畫布上所有節點（拖曳結束、推開後的位置）
+ * @param {string} groupId 群組框節點 id
+ * @returns {{ id: string, groupKey: string, position: { x: number, y: number },
+ *   width: number, height: number, savedOffset: { x: number, y: number },
+ *   members: Map<string, { x: number, y: number }> } | null}
+ *   框的新位置與大小、框內每台機器的新位置（相對於框）；
+ *   savedOffset：篩選中沒畫出來的機器，存的位置要減掉這個量才會跟新的框對得上
+ */
+export function refitGroup(nodes, groupId) {
+  const frame = nodes.find((node) => node.id === groupId);
+  const children = nodes.filter((node) => node.parentId === groupId && !node.hidden);
+  if (!frame || !children.length) return null;
+  const { shift, width, height } = fitGroupFrame(children.map((node) => node.position));
+  /* 存的位置畫出來時已減過 memberShift，這次貼合再減 shift */
+  const drawn = frame.data?.memberShift ?? { x: 0, y: 0 };
+  return {
+    id: groupId,
+    groupKey: frame.data.groupKey,
+    position: { x: Math.round(frame.position.x + shift.x), y: Math.round(frame.position.y + shift.y) },
+    width,
+    height,
+    savedOffset: { x: drawn.x + shift.x, y: drawn.y + shift.y },
+    members: new Map(children.map((node) => [node.id, {
+      x: Math.round(node.position.x - shift.x),
+      y: Math.round(node.position.y - shift.y),
+    }])),
+  };
+}
+
+/** 把 refitGroup 的結果套到畫布節點上；沒有要改的就原陣列照回 */
+export function applyGroupRefits(nodes, refits) {
+  if (!refits.length) return nodes;
+  const frames = new Map(refits.map((refit) => [refit.id, refit]));
+  const members = new Map(refits.flatMap((refit) => [...refit.members]));
+  return nodes.map((node) => {
+    const frame = frames.get(node.id);
+    if (frame) {
+      /* width／height 也要寫：拖曳中 expandParent 寫進去的屬性比 style 優先，不覆蓋框會停在撐大的尺寸 */
+      /* measured 也先換成新尺寸：接著要拿它算讓位（makeRoomFor），ReactFlow 量到後會再覆蓋 */
+      return {
+        ...node,
+        position: frame.position,
+        width: frame.width,
+        height: frame.height,
+        measured: { width: frame.width, height: frame.height },
+        style: { ...node.style, width: frame.width, height: frame.height },
+      };
+    }
+    const position = members.get(node.id);
+    return position ? { ...node, position } : node;
+  });
 }
 
 /**
@@ -177,7 +301,9 @@ function groupSize(group, collapsed) {
  * @param {boolean} options.grouped
  * @param {(group) => boolean} options.isCollapsed 群組是否收合（搜尋中由這裡強制展開）
  * @param {object} options.filter { query, groupKey, onlyExposed }
- * @param {object} options.positions 分組模式的拖曳位置 { groups: { [key]: {x,y} }, gateway: {x,y} }
+ * @param {object} options.positions 分組模式的拖曳位置
+ *   { groups: { [key]: {x,y} }, gateway: {x,y}, members: { [key]: { [vm id]: {x,y} } } }
+ *   groups 是群組框（只有一台、不畫框的群組就是那台機器）的位置；members 是框內機器相對於框的位置
  * @param {(key) => void} options.onExpandGroup 點收合後的合併連線時展開群組
  * @param {(key) => void} options.onToggleGroup 群組標題的收合切換
  * @returns {{ nodes, edges, groups, totalVms, visibleVms }}
@@ -231,20 +357,28 @@ export function applyView(flow, rawEdges, {
 
   for (const group of groups) {
     if (group.single) {
-      /* 單機：對齊群組框內第一欄的卡片位置，不可拖（分組模式的位置都由這裡算） */
+      /* 單機：預設對齊群組框內第一欄的卡片位置；拖過就照拖的位置（存在 groups，它就是這個群組） */
       nodes.push({
         ...group.vmNodes[0],
-        draggable: false,
-        position: { x: L.originX + L.padX, y: cursorY },
+        position: positions.groups?.[group.key] ?? { x: L.originX + L.padX, y: cursorY },
       });
       cursorY += L.cardH + L.gap;
-      maxWidth = Math.max(maxWidth, L.padX * 2 + L.cellW);
+      maxWidth = Math.max(maxWidth, FRAME_MIN_W);
       continue;
     }
     const id = groupNodeId(group.key);
-    const { width, height } = groupSize(group, group.collapsed);
+    /* 展開：框內機器先定位，框再貼著它們算大小；收合只是一張固定大小的摘要卡 */
+    const members = group.collapsed ? null : placeGroupMembers(group.vmNodes, positions.members?.[group.key]);
+    const frame = members
+      ? fitGroupFrame(members.values())
+      : { shift: { x: 0, y: 0 }, width: L.collapsedW, height: L.collapsedH };
+    const { width, height, shift } = frame;
     const saved = positions.groups?.[group.key];
-    const position = saved ?? { x: L.originX, y: cursorY };
+    /* 機器被篩掉、刪掉後最左上那台換人，框要跟著挪才包得住、機器才不會跟著跳；
+       沒拖過的框照堆疊位置排（存檔時框與機器一起存，所以自動排的框不會有位移） */
+    const position = saved
+      ? { x: saved.x + shift.x, y: saved.y + shift.y }
+      : { x: L.originX, y: cursorY };
     cursorY += height + L.gap;
     maxWidth = Math.max(maxWidth, width);
 
@@ -262,6 +396,8 @@ export function applyView(flow, rawEdges, {
         exposed: group.exposed,
         rules: group.rules,
         collapsed: group.collapsed,
+        /* 存下來的機器位置畫出來時減掉的量：篩選中沒畫出來的機器，存的位置要靠它換算（見 refitGroup） */
+        memberShift: shift,
         /* 搜尋中群組被強制展開，這時切收合只會寫進覆寫、清掉搜尋後才突然收起：先不給切 */
         onToggle: searching ? undefined : onToggleGroup,
       },
@@ -269,24 +405,22 @@ export function applyView(flow, rawEdges, {
       zIndex: -1,
     });
 
-    group.vmNodes.forEach((vm, i) => {
-      if (group.collapsed) {
+    for (const vm of group.vmNodes) {
+      if (!members) {
         owner.set(vm.id, id);
-        return;
+        continue;
       }
+      const member = members.get(vm.id);
       nodes.push({
         ...vm,
         /* 框標題已寫明班級／類型，框內的卡不再掛來源徽章 */
         data: { ...vm.data, inGroup: true },
         parentId: id,
-        extent: "parent",
-        draggable: false,
-        position: {
-          x: L.padX + (i % L.cols) * L.cellW,
-          y: L.header + Math.floor(i / L.cols) * L.cellH,
-        },
+        /* 可以拖到框外：拖的當下框就跟著長大，放開後頁面再用 fitGroupFrame 把框貼回機器外圍 */
+        expandParent: true,
+        position: { x: member.x - shift.x, y: member.y - shift.y },
       });
-    });
+    }
   }
 
   if (gateway) {
