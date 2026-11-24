@@ -8,11 +8,11 @@
 從 repository 根目錄執行（backend 虛擬環境）：
 
     cd backend
-    uv run python ../scripts/test_teacher_judge_live.py                      # 列出 case
-    uv run python ../scripts/test_teacher_judge_live.py --live --tag missing-path
-    uv run python ../scripts/test_teacher_judge_live.py --live --case P1-multi
-    uv run python ../scripts/test_teacher_judge_live.py --live                # 全跑
-    uv run python ../scripts/test_teacher_judge_live.py --check               # 只重新判定 latest.json
+    uv run python ../scripts/AI_live_test/teacher_judge_live.py                      # 列出 case
+    uv run python ../scripts/AI_live_test/teacher_judge_live.py --live --tag missing-path
+    uv run python ../scripts/AI_live_test/teacher_judge_live.py --live --case P1-multi
+    uv run python ../scripts/AI_live_test/teacher_judge_live.py --live                # 全跑
+    uv run python ../scripts/AI_live_test/teacher_judge_live.py --check               # 只重新判定 latest.json
 
 只覆寫 test-results/teacher-judge-live/latest.json 與 latest.log；不輸出任何 key。
 自動判定只檢查契約（數量、狀態、必要詞），語意正確性要人工讀 latest.log。
@@ -39,7 +39,7 @@ from urllib.parse import urlsplit
 
 from app.ai.teacher_judge import attachment_itemwise
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPO_ROOT / "backend"
 REPORT_DIR = REPO_ROOT / "test-results" / "teacher-judge-live"
 REPORT_JSON = REPORT_DIR / "latest.json"

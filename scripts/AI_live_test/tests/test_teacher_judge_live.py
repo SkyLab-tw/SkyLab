@@ -14,7 +14,7 @@ import pytest
 
 @pytest.fixture(scope="module")
 def runner():
-    path = Path(__file__).resolve().parents[1] / "test_teacher_judge_live.py"
+    path = Path(__file__).resolve().parents[1] / "teacher_judge_live.py"
     spec = importlib.util.spec_from_file_location("teacher_judge_live_runner", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

@@ -12,7 +12,7 @@ place them in the local, ignored ``.env.ai-api-load.local`` file:
 Run from the repository root (or use the default paths resolved from this
 file):
 
-    python scripts/test_ai_api_load.py --requests 100 --concurrency 10
+    python scripts/AI_live_test/ai_api_load_live.py --requests 100 --concurrency 10
 
 The report is always written to ``test-results/ai-api-load/latest.json`` by
 default.  Secrets are never printed or written to the report.
@@ -40,7 +40,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = REPO_ROOT / ".env.ai-api-load.local"
 DEFAULT_REPORT_FILE = REPO_ROOT / "test-results" / "ai-api-load" / "latest.json"
 DEFAULT_PROMPT = "Reply with OK."
