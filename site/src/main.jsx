@@ -1,16 +1,16 @@
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
-import PixelLandingPage from "./pixel/PixelLandingPage";
-import { createPixelI18n } from "./pixel/i18n";
+import LandingPage from "./landing/LandingPage";
+import { createI18n } from "./i18n";
 import { languageFromPath } from "./languages";
 import "./site.scss";
 
-/* 官網首頁＝像素版（原版 LandingPage 保留在 classic.html，dev server 才看得到） */
+/* 官網首頁＝原版介紹頁（像素版保留在 pixel.html，dev server 才看得到） */
 const lang = languageFromPath(window.location.pathname);
 const container = document.getElementById("root");
 const app = (
-  <I18nextProvider i18n={createPixelI18n(lang)}>
-    <PixelLandingPage lang={lang} />
+  <I18nextProvider i18n={createI18n(lang)}>
+    <LandingPage />
   </I18nextProvider>
 );
 
