@@ -95,6 +95,12 @@
   outline: none;
   max-width: 220px;
 
+  /* 起訖日期也用這個 class：iPad 上原生日期欄會比旁邊的下拉高 */
+  &[type="date"] {
+    @include native-date-reset;
+    max-width: 220px;
+  }
+
   &:focus {
     border-color: var(--color-primary);
   }
