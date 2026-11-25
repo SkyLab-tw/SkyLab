@@ -335,6 +335,16 @@
   padding: 18px 24px 24px;
 }
 
+/* 開場畫面（只有一張圖、沒有可以操作的東西）：不套白底卡片，圖直接放在頁面底色上 */
+.stage[data-bare] {
+  filter: none;
+
+  &::before,
+  &::after {
+    display: none;
+  }
+}
+
 /* 正在等你按的那顆：一上一下跳格（按鈕都有像素缺角的 clip-path，外框會被裁掉，所以用跳動） */
 $hint-events: created snapshot resized recycled approved moved built fixed checked picked web db course "cmd:whoami"
   "cmd:skylab" "cmd:ls" submitted broke restored passed;
@@ -497,6 +507,39 @@ $hint-events: created snapshot resized recycled approved moved built fixed check
   align-items: center;
   gap: 12px;
   margin-top: 24px;
+}
+
+/*
+ * 開場畫面（沒有小遊戲、只有一張圖）的章節，左右並排時：
+ * 右邊那一區撐滿剩下的高度、圖放正中間，下半頁才不會空一大片（設上限，大螢幕不會離泡泡太遠）。
+ */
+@media (min-width: 901px) {
+  .body[data-fill] {
+    align-items: stretch;
+    align-content: stretch;
+
+    .narrator {
+      align-self: start;
+    }
+
+    .stage {
+      display: grid;
+      max-height: 720px;
+    }
+
+    .intro {
+      justify-content: center;
+    }
+  }
+
+  /* 章魚搬到右邊舞台上的章節：泡泡的尾巴改從右側伸出去指向牠，不要朝下指著空白 */
+  .narrator[data-no-octo] .bubble > i {
+    left: auto;
+    right: -12px;
+    top: 26px;
+    bottom: auto;
+    rotate: -90deg;
+  }
 }
 
 /* 筆電窄一點：講話那欄縮窄，遊戲仍在右邊 */
