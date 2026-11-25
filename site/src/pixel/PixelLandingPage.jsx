@@ -10,6 +10,7 @@ import { ICONS } from "./icons";
 import Octo from "./Octo";
 import OctoPose from "./OctoPose";
 import PixelSprite from "./PixelSprite";
+import PlayIcon from "./PlayIcon";
 import { STUDENT_CHAPTERS } from "./tour/studentChapters";
 import Tour from "./tour/Tour";
 import CampusMap from "./campus/CampusMap";
@@ -319,7 +320,7 @@ function RoleBadge({ role, index, onPick }) {
         <span className={styles.badgeInfo}>
           <b>{t(`fork.${role.id}.name`)}</b>
           <span>{t(`fork.${role.id}.line`)}</span>
-          <em>{t(`fork.${role.id}.go`)}</em>
+          <em><PlayIcon />{t(`fork.${role.id}.go`)}</em>
         </span>
       </span>
     </button>
@@ -367,7 +368,7 @@ function Shot({ shot, lang, autoPlay = false }) {
         <button type="button" className={styles.shotPlay} onClick={() => setPlaying(true)} aria-label={t("route.play")}>
           <img className={styles.shotMedia} src={`${base}/${shot.id}.jpg`} alt="" loading="lazy" />
           <span className={styles.shotPlayLabel} aria-hidden="true">
-            ▶ <span className={styles.playLong}>{t("route.play")}</span>
+            <PlayIcon /><span className={styles.playLong}>{t("route.play")}</span>
             <span className={styles.playShort}>{t("route.playShort")}</span>
           </span>
         </button>

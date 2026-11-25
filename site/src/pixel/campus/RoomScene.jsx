@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import OctoPose from "../OctoPose";
 import PixelSprite from "../PixelSprite";
+import PlayIcon from "../PlayIcon";
 import RoleKicker from "./RoleKicker";
 import { ROOMS, ROOM_H, ROOM_W } from "./roomArt";
 import styles from "./Room.module.scss";
@@ -266,7 +267,7 @@ export default function RoomScene({ roomId, roles, stations, onTry, onWatch }) {
           {!paused && <span key={step} className={styles.timer} aria-hidden="true" />}
           <div className={styles.actions}>
             <button type="button" className={styles.try} onClick={() => onTry(station.chapter)}>
-              ▶ {t("route.try")}
+              <PlayIcon />{t("route.try")}
             </button>
             {station.shot && (
               /* 只有這件事有實際畫面時才出現 */
