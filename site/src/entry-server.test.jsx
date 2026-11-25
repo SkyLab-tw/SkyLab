@@ -10,7 +10,7 @@ import zhTW from "./locales/zh-TW.json";
 import en from "./locales/en.json";
 import ja from "./locales/ja.json";
 
-/* 首頁是像素版：除了聯繫方式，也確認畫出來的是像素版才有的「功能一覽」 */
+/* 首頁是原版介紹頁：除了聯繫方式，也確認畫出來的不是像素版（像素版才有「功能一覽」） */
 describe.each([
   ["zh-TW", "SkyLab — 校園的高效雲端教學與實作基地", "聯繫我們", "功能一覽"],
   ["en", "SkyLab — An efficient campus cloud for teaching and labs", "Contact us", "Features at a glance"],
@@ -20,7 +20,7 @@ describe.each([
     const { html, head } = render(lang);
     expect(head).toContain(`<title>${title}</title>`);
     expect(html).toContain(contact);
-    expect(html).toContain(specs);
+    expect(html).not.toContain(specs);
     expect(html).toContain(CONTACT_EMAIL);
   });
 });

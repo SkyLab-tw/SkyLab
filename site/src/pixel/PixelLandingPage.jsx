@@ -10,6 +10,7 @@ import { ICONS } from "./icons";
 import Octo from "./Octo";
 import OctoPose from "./OctoPose";
 import PixelSprite from "./PixelSprite";
+import PlayIcon from "./PlayIcon";
 import { STUDENT_CHAPTERS } from "./tour/studentChapters";
 import Tour from "./tour/Tour";
 import CampusMap from "./campus/CampusMap";
@@ -319,7 +320,7 @@ function RoleBadge({ role, index, onPick }) {
         <span className={styles.badgeInfo}>
           <b>{t(`fork.${role.id}.name`)}</b>
           <span>{t(`fork.${role.id}.line`)}</span>
-          <em>{t(`fork.${role.id}.go`)}</em>
+          <em><PlayIcon />{t(`fork.${role.id}.go`)}</em>
         </span>
       </span>
     </button>
@@ -367,7 +368,7 @@ function Shot({ shot, lang, autoPlay = false }) {
         <button type="button" className={styles.shotPlay} onClick={() => setPlaying(true)} aria-label={t("route.play")}>
           <img className={styles.shotMedia} src={`${base}/${shot.id}.jpg`} alt="" loading="lazy" />
           <span className={styles.shotPlayLabel} aria-hidden="true">
-            ▶ <span className={styles.playLong}>{t("route.play")}</span>
+            <PlayIcon /><span className={styles.playLong}>{t("route.play")}</span>
             <span className={styles.playShort}>{t("route.playShort")}</span>
           </span>
         </button>
@@ -463,7 +464,7 @@ function ShotDialog({ station, lang, onClose }) {
 }
 
 /**
- * 官網首頁（像素版；三個語言各自預渲染在 /、/en/、/ja/，原版 LandingPage 保留在 classic.html）。
+ * 官網像素版首頁（目前只在 pixel.html 預覽；正式首頁是原版 LandingPage）。
  * 由上而下：第一屏 → 功能一覽 → 從機房到家裡（像素校園地圖：機房＝管理員、辦公室＝管理員、教室＝老師、
  * 宿舍或家裡＝學生，一棟一頁，房間裡的東西自動一步步講這裡在做的事）→ 用你的身分走一遍（識別證）→ 結尾聯絡。
  * 「跟章魚試一次」進全功能導覽的那一章、「看實際畫面」彈窗播操作影片（導覽都學 The Evolution of Trust）。

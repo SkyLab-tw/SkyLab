@@ -7,6 +7,25 @@ import styles from "./Tour.module.scss";
 // 做完動作後停一下（看得到結果、章魚開心一下）再自動換下一句；這段時間不放「下一步」，免得按鈕冒出來又被收走
 const ADVANCE_MS = 600;
 
+/* 從手指底下的元素往上找：這個拖曳方向（dx、dy 是想捲動的量）上有沒有還能捲的內層區塊。
+   沒有的話這一下拖曳會變成捲整個頁面，導覽開著時要擋掉 */
+function canScrollInside(target, dx, dy) {
+  if (target instanceof HTMLInputElement && target.type === "range") return true;
+  const vertical = Math.abs(dy) >= Math.abs(dx);
+  const root = document.documentElement;
+  for (let el = target; el instanceof Element && el !== root && el !== document.body; el = el.parentElement) {
+    const style = getComputedStyle(el);
+    const overflow = vertical ? style.overflowY : style.overflowX;
+    if (overflow !== "auto" && overflow !== "scroll") continue;
+    const pos = vertical ? el.scrollTop : el.scrollLeft;
+    const max = vertical ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth;
+    const delta = vertical ? dy : dx;
+    if (max <= 0) continue;
+    if (delta > 0 ? pos < max - 1 : pos > 0) return true;
+  }
+  return false;
+}
+
 /* 手機寬度：章魚縮小一號，講話那一列才不會佔掉半個畫面 */
 function useNarrow() {
   const query = "(max-width: 720px)";
@@ -101,8 +120,27 @@ export default function Tour({
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
+    /* iOS／iPadOS 的瀏覽器不完全理會 html 的 overflow: hidden：手指拖在捲不動的地方
+       （頁面頂列、內容沒超出的導覽主體、已捲到底的區塊），捲動會傳到底下的首頁。
+       所以觸控另外擋：這一下拖曳方向上沒有任何內層區塊能捲，就不讓它變成頁面捲動 */
+    let startX = 0;
+    let startY = 0;
+    const onTouchStart = (e) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    };
+    const onTouchMove = (e) => {
+      if (e.touches.length > 1 || !e.cancelable) return;
+      const dx = startX - e.touches[0].clientX;
+      const dy = startY - e.touches[0].clientY;
+      if (!canScrollInside(e.target, dx, dy)) e.preventDefault();
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
     return () => {
       html.style.overflow = prev;
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("keydown", onKey);
       window.clearTimeout(timer.current);
       back?.focus?.({ preventScroll: true });
@@ -237,7 +275,7 @@ export default function Tour({
         </button>
       </header>
 
-      <div className={styles.body}>
+      <div className={styles.body} data-fill={Scene ? "" : undefined}>
         {/* 章名在上面的章節列已經反白，這裡不再重複；手機上這一塊固定在頂部，捲到遊戲下方也看得到指示 */}
         <aside className={styles.narrator} data-no-octo={chapter.hideNarrator || undefined}>
           <p key={`${ch}-${beat}`} className={styles.bubble} aria-live="polite">
@@ -295,8 +333,8 @@ export default function Tour({
           )}
         </aside>
 
-        {/* data-want：正在等的事件，遊戲裡 data-act 對得上的按鈕會跳動提示 */}
-        <section className={styles.stage} data-want={waiting ? def.wait : undefined}>
+        {/* data-want：正在等的事件，遊戲裡 data-act 對得上的按鈕會跳動提示；data-bare：開場畫面不套白底卡片 */}
+        <section className={styles.stage} data-want={waiting ? def.wait : undefined} data-bare={Scene ? "" : undefined}>
           {Game && (
             <>
               <div className={styles.stageBar}>

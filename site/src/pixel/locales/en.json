@@ -439,17 +439,17 @@
     "student": {
       "name": "Student",
       "line": "I need a machine for my assignment",
-      "go": "▶ Take the tour with Octo, about 2 min"
+      "go": "Take the tour with Octo, about 2 min"
     },
     "teacher": {
       "name": "Teacher",
       "line": "I run courses and watch the whole class",
-      "go": "▶ Run a class with Octo"
+      "go": "Run a class with Octo"
     },
     "admin": {
       "name": "Admin",
       "line": "I manage the whole campus's resources",
-      "go": "▶ Build a machine with Octo"
+      "go": "Build a machine with Octo"
     },
     "all": "Want it all? Take the full feature tour"
   },
