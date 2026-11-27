@@ -121,6 +121,15 @@ def test_system_prompt_forbids_describing_position() -> None:
     assert "scroll down" in system
 
 
+def test_system_prompt_forbids_guessing_ordinal_references() -> None:
+    """情境裡的元素順序是宣告順序，不是畫面順序；「第二個欄位」不能照清單猜。"""
+    from app.ai.contextual_help.prompt import build_messages
+
+    system = build_messages("page_overview", {"surface": {}}, "?")[0]["content"]
+    assert "not the on-screen order" in system
+    assert "ask for the label shown on screen" in system
+
+
 # ----------------------------------------------------------------- 權限
 
 
