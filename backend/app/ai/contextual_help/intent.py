@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import re
+
 from app.ai.contextual_help.schemas import HelpIntent
 from app.ai.utils import mentions
 
@@ -55,6 +57,23 @@ _WHOLE_PAGE_KEYWORDS = (
     "這頁", "這一頁", "本頁", "整頁", "這個頁面", "頁面", "介紹", "導覽",
     "使用說明", "新手", "完整", "有哪些功能", "有什麼功能", "功能有哪些",
 )
+
+
+# 用位置或順序指稱元素（「第二個欄位」「最後一格」）。情境裡的元素是宣告順序，
+# 不是畫面順序，沒有選中元素時對應不到，只能請使用者講出欄位名稱。
+# 每個量詞前後都是互斥的字元集合，沒有可回溯的重疊。
+_POSITION_REFERENCE_RE = re.compile(
+    r"第\s*[一二兩三四五六七八九十\d]+\s*(?:個|欄|格|項|列|行)"
+    r"|(?:最上面|最下面|上面|下面|左邊|右邊|最後)(?:那|的)?一?(?:個|欄|格|項)"
+    r"|(?:前|後)一(?:個|欄|格|項)"
+    r"|\b(?:first|second|third|last) (?:field|box|item|one)\b",
+    re.IGNORECASE,
+)
+
+
+def refers_by_position(question: str) -> bool:
+    """問題是否只用位置或順序指稱某個元素。"""
+    return _POSITION_REFERENCE_RE.search(question) is not None
 
 
 def classify(

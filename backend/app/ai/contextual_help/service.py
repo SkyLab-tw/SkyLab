@@ -31,7 +31,7 @@ from app.ai.contextual_help.guide import (
     render_page_guide,
     visible_dialogs,
 )
-from app.ai.contextual_help.intent import classify
+from app.ai.contextual_help.intent import classify, refers_by_position
 from app.ai.contextual_help.prompt import build_messages
 from app.ai.contextual_help.resolver import (
     LEVEL_SURFACE,
@@ -75,6 +75,9 @@ _TEMPERATURE = 0.2
 _MAX_ANSWER_CHARS = 400
 # 整頁導覽引用了哪些定義，依輸出順序
 _GUIDE_PARTS = ("purpose", "when_to_use", "features", "dialogs", "related")
+POSITION_REFERENCE_ANSWER = (
+    "我無法從位置或順序判斷你指的是哪一個欄位，請告訴我畫面上顯示的欄位名稱。"
+)
 CONTEXTUAL_HELP_CONTRACT = RoleContract(
     role_id="contextual_help",
     output_mode=OutputMode.MODEL_FREE_TEXT,
@@ -285,6 +288,15 @@ async def explain(
         named_dialog=dialog is not None,
         has_dialogs=bool(dialogs),
     )
+    # 「第二個欄位」這類指稱：情境的元素順序不是畫面順序，沒有選中或點名元素時
+    # 對應不到，直接請使用者講名稱，不交給模型猜。
+    if active_target is None and refers_by_position(request.question):
+        return ExplainResponse(
+            intent=intent,
+            answer=POSITION_REFERENCE_ANSWER,
+            context_version=request.context_version,
+            used_model=False,
+        )
     related = related_targets(surface, get_routes_for_user(current_user))
 
     # 導覽與視窗說明：定義裡就有完整答案，照排版輸出，不打模型。

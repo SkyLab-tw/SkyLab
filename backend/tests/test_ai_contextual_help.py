@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from app.ai.contextual_help import service as help_service
-from app.ai.contextual_help.intent import classify
+from app.ai.contextual_help.intent import classify, refers_by_position
 from app.ai.contextual_help.resolver import resolve_context, sanitize_state
 from app.ai.contextual_help.schemas import ElementState, ExplainRequest
 from app.ai.contextual_help.surfaces import (
@@ -275,6 +275,70 @@ async def test_nothing_blocked_says_so_instead_of_inventing_a_reason(
     )
     assert result.used_model is False
     assert "沒有任何驗證錯誤" in result.answer
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("第二個欄位是什麼？", True),
+        ("第2欄怎麼填", True),
+        ("最後一格要填什麼", True),
+        ("上面那個是什麼", True),
+        ("What is the second field?", True),
+        ("GPU 欄位要怎麼選？", False),
+        ("上面的錯誤訊息是什麼", False),
+        ("這頁在做什麼？", False),
+    ],
+)
+def test_position_reference_detection(question: str, expected: bool) -> None:
+    assert refers_by_position(question) is expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", ["第二個欄位是什麼？", "最後一格要填什麼"])
+async def test_position_reference_without_a_target_asks_for_the_label(
+    monkeypatch: pytest.MonkeyPatch, question: str
+) -> None:
+    """情境的元素順序是宣告順序，不是畫面順序；對應不到就反問，不打模型。"""
+    async def _unexpected_check(*_args, **_kwargs):
+        raise AssertionError("position reference must not call adherence checker")
+
+    monkeypatch.setattr(help_service, "check_adherence", _unexpected_check)
+    seen = _use_model(monkeypatch, "第二個欄位是「作業系統」。")
+    result = await help_service.explain(
+        _request(question=question), _user(UserRole.student)
+    )
+    assert seen == []
+    assert result.used_model is False
+    assert result.answer == help_service.POSITION_REFERENCE_ANSWER
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "active_target"),
+    [
+        ("第二個欄位是什麼？", "request.gpu"),
+        ("作業系統第二個選項是什麼", None),
+    ],
+)
+async def test_position_reference_with_a_known_target_keeps_the_normal_flow(
+    monkeypatch: pytest.MonkeyPatch, question: str, active_target: str | None
+) -> None:
+    """有選中元素，或問題已點名元素時，序號指的是那個元素內的東西，照原流程回答。"""
+    async def _allow(*_args, **_kwargs) -> AdherenceResult:
+        return AdherenceResult(
+            verdict=AdherenceVerdict.ALLOW, reason_code=AdherenceReason.NONE
+        )
+
+    monkeypatch.setattr(help_service, "check_adherence", _allow)
+    seen = _use_model(monkeypatch, "模型的回答")
+    result = await help_service.explain(
+        _request(question=question, active_target=active_target),
+        _user(UserRole.student),
+    )
+    assert result.answer != help_service.POSITION_REFERENCE_ANSWER
+    assert result.intent == "field_help"
+    assert len(seen) == 1
 
 
 @pytest.mark.asyncio
