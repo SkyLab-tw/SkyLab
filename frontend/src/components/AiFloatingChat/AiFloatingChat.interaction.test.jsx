@@ -289,3 +289,17 @@ test("建立課程 starts class guidance while preserving the old environment ta
   expect(selected.textContent).toBe("建立班級");
   expect(host.querySelectorAll('button[aria-pressed]').length).toBe(2);
 });
+
+test("an answer from the current page keeps other related pages as buttons", async () => {
+  AiNavigationService.resolve.mockResolvedValueOnce({
+    action: "answer",
+    answer: "你目前就在「防火牆」。按「新增連線」選「開放服務給外部」。",
+    suggestions: [{ title: "我的機器", path: "/my-resources" }],
+  });
+  await send("防火牆要怎麼開 port 給外部？");
+  expect(host.textContent).toContain("你目前就在「防火牆」");
+  const target = [...host.querySelectorAll("button")].find((button) => button.textContent.includes("我的機器"));
+  expect(target).toBeTruthy();
+  await act(async () => target.click());
+  expect(host.querySelector('[data-testid="path"]').textContent).toBe("/my-resources");
+});

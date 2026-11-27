@@ -535,3 +535,88 @@ async def test_usage_records_reported_tokens_when_decision_is_invalid(
     assert records[0]["status"] == "error"
     assert records[0]["metrics"]["prompt_tokens"] == 120
     assert records[0]["metrics"]["completion_tokens"] == 9
+
+
+# ----------------------------------------------------------- 已在目標頁
+
+
+def _use_help(monkeypatch: pytest.MonkeyPatch, answer: str | None) -> list[dict[str, Any]]:
+    """頁面說明的模型；answer=None 代表不該被呼叫。adherence 一律放行。"""
+    from app.ai.contextual_help import service as help_service
+    from app.ai.role_contracts import (
+        AdherenceReason,
+        AdherenceResult,
+        AdherenceVerdict,
+    )
+
+    seen: list[dict[str, Any]] = []
+
+    async def _capture(payload, *, profile, timeout: float, request_id: str | None = None):
+        assert answer is not None, "不是目前頁時不該呼叫頁面說明"
+        seen.append(payload)
+        return {"choices": [{"finish_reason": "stop", "message": {"content": answer}}]}
+
+    async def _allow(*_args, **_kwargs) -> AdherenceResult:
+        return AdherenceResult(AdherenceVerdict.ALLOW, AdherenceReason.NONE)
+
+    monkeypatch.setattr(help_service.help_client, "create_chat_completion", _capture)
+    monkeypatch.setattr(help_service, "check_adherence", _allow)
+    return seen
+
+
+@pytest.mark.asyncio
+async def test_choosing_the_current_page_answers_from_page_help(monkeypatch) -> None:
+    _use_model(monkeypatch, '{"candidate_ids":["route:/firewall","route:/my-resources"]}')
+    help_payloads = _use_help(monkeypatch, "按「新增連線」選「開放服務給外部」。")
+    result = await navigation_service.resolve_navigation(
+        "防火牆要怎麼開 port 給外部？",
+        _user(UserRole.student),
+        history=[NavigationMessage(role="user", content="帶我去防火牆")],
+        current_path="/firewall",
+        surface_id="firewall",
+    )
+    assert result.action == "answer"
+    assert result.primary is None
+    assert result.answer == "你目前就在「防火牆」。按「新增連線」選「開放服務給外部」。"
+    assert "/my-resources" in [item.path for item in result.suggestions]
+    assert "/firewall" not in [item.path for item in result.suggestions]
+    context = help_payloads[0]["messages"][1]["content"]
+    assert '"id":"firewall"' in context and '"features"' in context
+
+
+@pytest.mark.parametrize(
+    ("help_answer", "expected"),
+    [
+        ("按「新增連線」。", "你目前就在「防火牆」。按「新增連線」。"),
+        # 說明第一句已經講明在這頁：不疊前綴
+        ("你目前就在防火牆頁面，這裡管理連線規則。", "你目前就在防火牆頁面，這裡管理連線規則。"),
+        ("你已經在防火牆了，按「新增連線」。", "你已經在防火牆了，按「新增連線」。"),
+        # 只有後面的句子提到「已經在」不算
+        ("按「新增連線」。規則已經在清單裡。", "你目前就在「防火牆」。按「新增連線」。規則已經在清單裡。"),
+    ],
+)
+def test_same_page_answer_does_not_repeat_the_prefix(help_answer, expected) -> None:
+    assert navigation_service._same_page_answer("防火牆", help_answer) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("chosen", "current_path", "surface_id", "primary"),
+    [
+        # 目前頁只出現在其他建議：照常導覽，只拿掉指向自己的那顆
+        ('["route:/my-resources","route:/firewall"]', "/firewall", "firewall", "/my-resources"),
+        # 詳細頁回列表是另一頁
+        ('["route:/my-resources"]', "/my-resources/101", "resource-detail", "/my-resources"),
+        # 對不上畫面定義就不猜，照原本導覽
+        ('["route:/firewall"]', "/firewall", "no-such-surface", "/firewall"),
+    ],
+)
+async def test_other_pages_still_navigate(monkeypatch, chosen, current_path, surface_id, primary) -> None:
+    _use_model(monkeypatch, f'{{"candidate_ids":{chosen}}}')
+    _use_help(monkeypatch, None)
+    result = await navigation_service.resolve_navigation(
+        "帶我過去", _user(UserRole.student), current_path=current_path, surface_id=surface_id
+    )
+    assert result.action in {"navigate", "suggest"}
+    assert result.primary is not None and result.primary.path == primary
+    assert current_path not in [item.path for item in result.suggestions]

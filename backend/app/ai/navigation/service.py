@@ -11,7 +11,8 @@ from typing import Any
 from sqlmodel import Session
 
 from app.ai.contextual_help.resolver import resolve_context
-from app.ai.contextual_help.schemas import ElementState
+from app.ai.contextual_help.schemas import ElementState, ExplainRequest
+from app.ai.contextual_help.service import explain
 from app.ai.contextual_help.surfaces import get_surfaces_for_user
 from app.ai.monitoring import (
     CALL_AI_NAVIGATION,
@@ -324,6 +325,73 @@ def _screen_context(
     return {}
 
 
+def _page_key(path: str | None) -> str:
+    return (path or "").split("?")[0].rstrip("/") or "/"
+
+
+_HERE_MARKERS = ("目前就在", "已經在")
+
+
+def _same_page_answer(title: str, answer: str) -> str:
+    """說明第一句已經講明「就在這頁」時不再疊前綴，避免同一句話講兩次。"""
+    first_sentence = answer.split("。")[0]
+    if any(marker in first_sentence for marker in _HERE_MARKERS):
+        return answer
+    return f"你目前就在「{title}」。{answer}"
+
+
+async def _answer_on_current_page(
+    result: NavigationResolveResponse,
+    *,
+    query: str,
+    current_user: User,
+    session: Session | None,
+    current_path: str | None,
+    context: dict[str, Any],
+    screen_state: dict[str, ElementState] | None,
+) -> NavigationResolveResponse:
+    """選中的頁就是目前這一頁：改用頁面說明回答，不給指向自己的連結。"""
+    if result.action not in {"navigate", "suggest"} or not current_path:
+        return result
+    here = _page_key(current_path)
+    others = [item for item in result.suggestions if _page_key(item.path) != here]
+    surface = context.get("surface", {})
+    if (
+        result.primary is None
+        or _page_key(result.primary.path) != here
+        or not surface.get("id")
+    ):
+        result.suggestions = others
+        return result
+
+    help_response = await explain(
+        ExplainRequest(
+            question=query[:500], surface_id=surface["id"], state=screen_state or {}
+        ),
+        current_user,
+        session=session,
+    )
+    seen = {here}
+    suggestions: list[NavigationTarget] = []
+    for item in [
+        *others,
+        *(
+            NavigationTarget(title=r.title, path=r.path, reason=r.reason)
+            for r in help_response.related
+        ),
+    ]:
+        if _page_key(item.path) not in seen:
+            seen.add(_page_key(item.path))
+            suggestions.append(item)
+    return NavigationResolveResponse(
+        intent=query,
+        confidence=result.confidence,
+        action="answer",
+        answer=_same_page_answer(surface["title"], help_response.answer),
+        suggestions=suggestions,
+    )
+
+
 def _environment_next_step(context: dict[str, Any]) -> str | None:
     if context.get("surface", {}).get("id") not in {
         "course-template-new",
@@ -545,7 +613,6 @@ async def resolve_navigation(
             )
             observation.terminal_reason = "reply"
             _log(metrics=metrics)
-            return result
         except Exception as exc:  # pragma: no cover - defensive fallback
             logger.exception(
                 "Navigation resolve failed, using fixed fallback: %s", exc
@@ -564,3 +631,16 @@ async def resolve_navigation(
             observation.outcome = "fallback"
             observation.terminal_reason = "model_timeout" if isinstance(exc, TimeoutError) or "Timeout" in type(exc).__name__ else "invalid_or_failed_model"
             return fallback()
+        # 說明有自己的模型呼叫、用量紀錄與後備答案，放在 try 外，失敗不會被記成導覽錯誤
+        answered = await _answer_on_current_page(
+            result,
+            query=clean_query,
+            current_user=current_user,
+            session=session,
+            current_path=current_path,
+            context=context,
+            screen_state=screen_state,
+        )
+        if answered is not result:
+            observation.terminal_reason = "same_page_help"
+        return answered

@@ -860,6 +860,17 @@ async def test_page_overview_gives_the_model_when_to_use_and_related_pages(
     assert result.related, "頁面簡介也要附上可以改去的頁面"
 
 
+def test_page_overview_carries_feature_usage() -> None:
+    """「這頁怎麼開 port」要靠功能用法回答；只有用途與時機答不到。"""
+    surface = find_surface("firewall", all_surfaces())
+    assert surface is not None and surface.features
+    context, grounded, _ = resolve_context(
+        surface, "page_overview", active_target=None, state={}
+    )
+    assert context["surface"]["features"] == list(surface.features)
+    assert "firewall.features" in grounded
+
+
 @pytest.mark.asyncio
 async def test_page_overview_fallback_mentions_when_to_use(
     monkeypatch: pytest.MonkeyPatch,

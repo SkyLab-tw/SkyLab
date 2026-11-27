@@ -744,7 +744,9 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
     const steps = data.steps ?? [];
 
     if (data.action === "answer" && data.answer) {
-      appendAssistant(data.answer);
+      /* 已在目標頁時後端改回說明；其他相關頁面仍附成按鈕（後端已排除目前頁） */
+      const targets = (data.suggestions ?? []).filter((target) => target?.path && target?.title);
+      appendAssistant(data.answer, targets.length ? { targets } : {});
       return true;
     }
 
