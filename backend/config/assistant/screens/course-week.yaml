@@ -1,0 +1,41 @@
+# 本週內容（/courses/:classId/weeks/:weekId）
+id: course-week
+path: /courses/:classId/weeks/:weekId
+title: 本週內容
+access: learner
+order: 40
+purpose: 某一週的檢查回饋、老師回覆、課堂機器與教材。
+when_to_use: 想看某一週的檢查結果、老師評語，或這週要用的機器與教材。
+sections:
+  - 檢查回饋
+  - 課堂機器
+  - 本週教材
+features:
+  - 「檢查回饋」顯示老師這週的回覆，以及每個檢查項目的最新結果：狀態（等待檢查、檢查中、已通過、部分完成、等待老師確認、未通過、環境異常等）、分數與評語；多台機器的作業會標出這一項在哪台機器上檢查。
+  - 「課堂機器」列出這門課可以使用的所有機器：有對外網址時按「開啟網站」，有對外 port 時直接顯示連線位址（不知道入口主機時寫「對外 port N（入口主機請詢問老師）」），已建好的機器按「機器與主控台」前往「我的資源」，在那裡開關機或開控制台／終端機。還沒有任何機器時顯示「本週沒有可用機器」。
+  - 「本週教材」列出老師這週提供的檔案，以及 AI 導師檢查任務附的原始文件，點一下在新分頁開啟；這週沒有教材時不顯示這一區。
+  - 按「返回課程」回到課程頁。
+elements:
+  - id: courseweek.feedback
+    role: list
+    label: 檢查回饋
+    help: 只顯示你最新的檢查結果與老師可公開的回饋；老師還沒發布檢查項目時顯示「本週尚無檢查項目」。
+    section: 檢查回饋
+  - id: courseweek.machines
+    role: list
+    label: 課堂機器
+    help: 這門課可以使用的所有機器；還沒發布網址的機器顯示「尚未發布網址」。
+    section: 課堂機器
+  - id: courseweek.open_machine
+    role: button
+    label: 機器與主控台
+    help: 機器建好（有 VMID）才有這顆按鈕。前往「我的資源」清單：在那裡替這台機器開關機、開控制台或終端機；點機器名稱可再進資源詳情頁看連線資訊、帳號密碼、規格與設定。
+    section: 課堂機器
+  - id: courseweek.files
+    role: list
+    label: 本週教材
+    help: 點檔名在新分頁開啟教材。
+    section: 本週教材
+related:
+  - path: /my-resources
+    when: 要開關機，或用控制台／終端機連進這台機器

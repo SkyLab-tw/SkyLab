@@ -49,11 +49,11 @@ export async function endFrame(s) {
 // Three PVE entry points: the main teaching cluster (default), a GPU cluster
 // and an old single host that is being retired.
 export function connections(m) {
-  const base = { api_timeout: 30, pool_name: "SkyLab", iso_storage: "local", task_check_interval: 2, enabled: true, is_default: false, has_ca_cert: false, verify_ssl: false, backup_storage: null, gateway_ip: null, local_subnet: null, default_node: null };
+  const base = { api_timeout: 30, pool_name: "SkyLab", iso_storage: "local", task_check_interval: 2, enabled: true, is_default: false, has_ca_cert: false, verify_ssl: false, backup_storage: null, gateway_ip: null, default_node: null };
   return [
-    { ...base, id: 1, name: m.L("Main Cluster", "主叢集"), host: "172.20.202.11", port: 8006, user: "skylab@pve", data_storage: "ceph-vm", backup_storage: "pbs-backup", gateway_ip: "10.20.0.1", local_subnet: "10.20.0.0/16", default_node: "pve-01", is_default: true, verify_ssl: true, has_ca_cert: true, node_count: 3, updated_at: ago(3 * D) },
-    { ...base, id: 2, name: m.L("GPU Cluster", "GPU 叢集"), host: "172.20.202.31", port: 8006, user: "skylab@pve", data_storage: "nvme-lvm", gateway_ip: "10.40.0.1", local_subnet: "10.40.0.0/16", default_node: "gpu-01", node_count: 2, updated_at: ago(10 * D) },
-    { ...base, id: 3, name: m.L("Old Lab PVE", "舊機房 PVE"), host: "192.168.50.10", port: 8006, user: "root@pam", data_storage: "local-lvm", enabled: false, node_count: 1, updated_at: ago(60 * D) },
+    { ...base, id: 1, name: m.L("Main Cluster", "主叢集"), host: "172.20.202.11", port: 8006, user: "skylab@pve", backup_storage: "pbs-backup", gateway_ip: "10.20.0.1", default_node: "pve-01", is_default: true, verify_ssl: true, has_ca_cert: true, node_count: 3, updated_at: ago(3 * D) },
+    { ...base, id: 2, name: m.L("GPU Cluster", "GPU 叢集"), host: "172.20.202.31", port: 8006, user: "skylab@pve", gateway_ip: "10.40.0.1", default_node: "gpu-01", node_count: 2, updated_at: ago(10 * D) },
+    { ...base, id: 3, name: m.L("Old Lab PVE", "舊機房 PVE"), host: "192.168.50.10", port: 8006, user: "root@pam", enabled: false, node_count: 1, updated_at: ago(60 * D) },
   ];
 }
 

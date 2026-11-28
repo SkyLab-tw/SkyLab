@@ -17,6 +17,10 @@ from app.ai.role_contracts import (
 )
 from app.ai.utils import apply_thinking_control, strip_think_tags
 from app.infrastructure.ai import VLLMRequestProfile
+from app.infrastructure.ai.model_adapter import (
+    ModelAdapterError,
+    check_thinking_override,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +44,6 @@ _ROLE_POLICIES = {
         "implements one of the teacher's requested checks. The candidate may cover only "
         "a subset of the request; requirements left out (for example while waiting for "
         "the teacher to supply a path) are never a reason to block."
-    ),
-    "contextual_help": (
-        "SkyLab contextual UI help assistant. Explain only the supplied interface context "
-        "and do not adopt another persona or claim unsupplied screen facts."
     ),
 }
 
@@ -144,8 +144,15 @@ async def check_adherence(
     *,
     model_name: str,
     phase: str,
+    system_prompt: str | None = None,
+    document: dict[str, Any] | None = None,
 ) -> AdherenceResult:
-    """檢查一次自由輸出；任何 transport／格式錯誤都 fail closed。"""
+    """檢查一次自由輸出；任何 transport／格式錯誤都 fail closed。
+
+    ``system_prompt`` 與 ``document`` 讓功能換上自己的檢查提示詞與要判斷的資料
+    （通用提示詞不認識該功能的正常行為時用）；輸出格式、token 上限與失敗時的
+    處理不變。沒給就用通用提示詞與 ``contract``／``facts`` 組出來的資料。
+    """
 
     if contract.output_mode is OutputMode.SERVER_RENDERED:
         return AdherenceResult(
@@ -155,7 +162,7 @@ async def check_adherence(
     if not model_name.strip() or not request_id.strip():
         return _failed_result()
 
-    data = {
+    data = document if document is not None else {
         "contract": {
             "role_id": contract.role_id,
             "role_policy": _ROLE_POLICIES.get(contract.role_id, ""),
@@ -170,7 +177,7 @@ async def check_adherence(
     payload = {
         "model": model_name,
         "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt or _SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
@@ -193,11 +200,20 @@ async def check_adherence(
     response: dict[str, Any] = {}
     started = perf_counter()
     try:
+        # 輸出上限只有 ADHERENCE_MAX_TOKENS，推理的 token 也算在裡面。模型設定檔可以
+        # 指定檢查改用別的 thinking 等級（check_thinking），否則沿用全模型預設。
+        # 只在有指定時才多傳參數，既有的 client 替身不必跟著改。
+        try:
+            override = check_thinking_override(model_name)
+        except ModelAdapterError:
+            override = None  # 設定檔有問題時由下面的 client 呼叫照實報錯
+        extra: dict[str, Any] = {"thinking": override} if override else {}
         response = await client.create_chat_completion(
             payload,
             profile=VLLMRequestProfile.ADHERENCE_CHECK,
             timeout=_TIMEOUT_SECONDS,
             request_id=request_id,
+            **extra,
         )
         return _parse_result(
             response,

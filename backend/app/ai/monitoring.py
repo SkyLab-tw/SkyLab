@@ -22,8 +22,8 @@ from app.services.llm_gateway import ai_gateway_service
 from app.services.llm_gateway.usage_writer import get_usage_writer
 from app.services.monitoring import ai_metrics
 
-CALL_AI_NAVIGATION = "ai_nav"
-CALL_AI_CONTEXTUAL_HELP = "ai_help"
+CALL_AI_ASSISTANT = "ai_assistant"
+CALL_AI_ASSISTANT_ADHERENCE = "ai_assistant_adherence"
 logger = logging.getLogger(__name__)
 
 

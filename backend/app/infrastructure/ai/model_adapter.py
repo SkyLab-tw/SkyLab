@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 ResponseFormat = Literal["json_object", "json_schema"]
 ToolChoiceMode = Literal["auto", "none", "required", "named"]
+# 單次請求可以指定的 thinking 等級；None 代表沿用模型設定檔的全模型預設。
+ThinkingLevel = Literal["none", "low", "medium", "high"]
+_THINKING_LEVELS = frozenset({"none", "low", "medium", "high"})
 ModelName = Annotated[str, Field(min_length=1)]
 _LEGACY_THINKING = frozenset({"none", "off", "low", "medium", "high"})
 
@@ -33,6 +36,9 @@ class ModelProfile(BaseModel):
     response_formats: tuple[ResponseFormat, ...]
     native_tool_calls: bool
     tool_choice_modes: tuple[ToolChoiceMode, ...]
+    # 遵循檢查的輸出上限很緊（128 token，推理也算在內）。推理比較多話的模型開著
+    # 推理會在寫出結果前就被截斷，可以在這裡指定檢查改用「關」；不設就沿用 thinking。
+    check_thinking: Literal["none"] | None = None
 
     @field_validator("response_formats", "tool_choice_modes", mode="before")
     @classmethod
@@ -111,8 +117,23 @@ def load_model_profiles() -> ModelProfiles:
         raise ModelAdapterError(f"Invalid {CONFIG_FILE}: {exc}") from exc
 
 
-def adapt_chat_request(payload: dict[str, Any]) -> dict[str, Any]:
-    """Copy and adapt only model-owned fields; leave budgets and business data alone."""
+def check_thinking_override(model: str) -> ThinkingLevel | None:
+    """遵循檢查該用的 thinking 等級；設定檔沒有指定（或模型沒登錄）就回 None。"""
+    profile = load_model_profiles().models.get(model)
+    return profile.check_thinking if profile is not None else None
+
+
+def adapt_chat_request(
+    payload: dict[str, Any], *, thinking: ThinkingLevel | None = None
+) -> dict[str, Any]:
+    """Copy and adapt only model-owned fields; leave budgets and business data alone.
+
+    ``thinking`` 是呼叫端（功能模組）明確要求的等級，只能由後端程式傳入；payload 裡的
+    legacy 欄位仍一律被覆寫。沒給就用設定檔的全模型預設。只有開／關的模型
+    （``enable_thinking``）把 low／medium／high 都當成「開」。
+    """
+    if thinking is not None and thinking not in _THINKING_LEVELS:
+        raise ModelAdapterError(f"Invalid thinking level: {thinking!r}")
     model = payload.get("model")
     if not isinstance(model, str) or not model.strip():
         raise ModelAdapterError("A non-empty model is required")
@@ -161,29 +182,40 @@ def adapt_chat_request(payload: dict[str, Any]) -> dict[str, Any]:
                 f"Model {model!r} does not support this tool_choice"
             )
 
+    level: str = thinking if thinking is not None else profile.thinking
     wire = dict(payload)
     wire.pop("reasoning_effort", None)
     template_kwargs.pop("reasoning_effort", None)
     template_kwargs.pop("enable_thinking", None)
     if profile.thinking_parameter == "reasoning_effort":
-        wire["reasoning_effort"] = profile.thinking
+        # 頂層 reasoning_effort 能不能送 "none" 看模型：設定檔的 thinking 或
+        # check_thinking 寫了 "none"，代表這個模型收得下（例如 BIRC-LLM）；沒寫的
+        # 模型只有強度、沒有開關，要求關閉時不能默默改成最低強度。
+        if level == "none" and "none" not in {profile.thinking, profile.check_thinking}:
+            raise ModelAdapterError(f"Model {model!r} cannot disable reasoning")
+        wire["reasoning_effort"] = level
         if template_kwargs:
             wire["chat_template_kwargs"] = template_kwargs
         else:
             wire.pop("chat_template_kwargs", None)
     elif profile.thinking_parameter == "chat_template_reasoning_effort":
+        if level == "none":
+            wire["chat_template_kwargs"] = {**template_kwargs, "enable_thinking": False}
+        else:
+            wire["chat_template_kwargs"] = {
+                **template_kwargs,
+                "enable_thinking": True,
+                "reasoning_effort": level,
+            }
+    else:
         wire["chat_template_kwargs"] = {
             **template_kwargs,
-            "enable_thinking": True,
-            "reasoning_effort": profile.thinking,
+            "enable_thinking": level != "none",
         }
-    else:
-        enabled = profile.thinking == "low"
-        wire["chat_template_kwargs"] = {**template_kwargs, "enable_thinking": enabled}
     logger.debug(
         "System AI model contract: model=%s thinking=%s parameter=%s",
         model,
-        profile.thinking,
+        level,
         profile.thinking_parameter,
     )
     return wire

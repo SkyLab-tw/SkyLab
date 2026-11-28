@@ -92,7 +92,7 @@ If you are not ready, click **Submit later**; the class opens in its workspace a
 
 ### Use the AI Assistant
 
-While you are on this page, the **AI Assistant** knows which step you are on, whether the class is saved, how many students it has, whether an environment is saved, how many published environments are available and, on the last step, why submitting is blocked. Ask it what to do next and it answers from that state. It only guides you; it never saves, creates or submits anything for you. See [Navigation AI: teaching workflows](/guides/ai-navigation-teaching-workflows).
+While you are on this page, the **AI Assistant** knows which step you are on, whether the class is saved, how many students it has, whether an environment is saved, how many published environments are available and, on the last step, why submitting is blocked. Ask it what to do next and it answers from that state. It only guides you; it never saves, creates or submits anything for you. See [Built-in AI assistant](/guides/ai-assistant).
 
 ![Use the AI Assistant](/manual-shots/en/class-setup/s07.webp)
 

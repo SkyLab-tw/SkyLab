@@ -1,0 +1,211 @@
+# 使用者管理（/admin）
+id: admin
+path: /admin
+title: 使用者管理
+access: admin
+order: 410
+purpose: 管理使用者帳號、角色與啟用狀態，以及註冊設定、待審核註冊與使用者群組（例如一個班）。
+when_to_use: 要新增帳號、改某人的角色（學生、教師、管理者）、停用或刪除帳號、要求或重設兩步驟驗證、審核自行註冊的帳號、調整註冊方式，或建立群組把學生分班。
+sections:
+  - 註冊設定
+  - 待審核註冊
+  - 使用者清單
+  - 角色
+  - 啟用狀態
+  - 使用者群組
+features:
+  - 「註冊設定」收在對話框裡：按「註冊設定」打開，勾選「允許自行註冊」「註冊後需管理員審核」「允許 Google 首次登入自動建帳」並填「學號信箱網域」，改完按「儲存」四項才一起生效；沒有修改時「儲存」不能按。註冊設定還沒載入完成時「註冊設定」按鈕不能按。
+  - 「註冊設定」對話框有未儲存的修改時，按「取消」、關閉、Esc 或點視窗外都會先跳「尚未儲存的變更」確認，按「捨棄修改」才會關閉；儲存失敗時對話框與修改都會留著，可以改完再存。
+  - 「待審核註冊」列出等待核准的自行註冊帳號，逐筆按「核准」或「拒絕」。這個區塊預設收起，標題括號裡是待審核人數；點標題展開或收起，這個瀏覽器會記住上次的開合。
+  - 統計卡顯示總使用者、啟用中、教師與管理者人數。
+  - 清單每頁 50 位，每列顯示姓名、Email、角色、狀態（啟用、停用、待驗證信箱、待管理員審核、註冊已拒絕）、「建立於」日期，以及 LDAP、2FA 標記；有群組時可以用群組篩選，搜尋框比對姓名、Email 或角色徽章上的名稱（學生、教師、管理者）。
+  - 超過 50 位時用分頁列換頁：顯示「共 N 位」，按上一頁、下一頁或頁碼切換；頁數超過 7 頁（或畫面很窄）時可以在「前往 __ 頁」輸入頁碼，按 Enter 或離開欄位就跳過去，超出範圍會跳到第一頁或最後一頁。改搜尋或群組篩選會回到第一頁。
+  - 按「新增使用者」開啟建立帳號的視窗；每列的「編輯」開啟「編輯使用者」。不能變更自己的角色或停用自己，也不能刪除自己。
+  - 「刪除」會先確認：刪除後帳號無法登入或使用服務，AI API 金鑰會失效，用量、申請與稽核等紀錄會保留；帳號無法恢復，原 Email 不可重新註冊；仍持有已開通資源的帳號會被拒絕刪除。
+  - 勾選這一頁的使用者後，工具列換成批量操作：「啟用」「停用」（只送狀態不同的帳號，停用會先確認）、「加入群組」「移出群組」（要先建立群組）與「刪除」；失敗的帳號保留勾選，可以再試一次。
+  - 「群組管理」可以新增、改名、刪除群組，並用 CSV 匯入成員；刪除群組只拿掉群組本身，帳號不受影響，已經從群組匯入的班級名單也不會變。
+elements:
+  - id: admin.create_user
+    role: button
+    label: 新增使用者
+    section: 使用者清單
+  - id: admin.edit_user
+    role: button
+    label: 編輯
+    help: 每列的編輯按鈕，開啟「編輯使用者」視窗。
+    section: 使用者清單
+  - id: admin.delete_user
+    role: button
+    label: 刪除
+    help: 先跳出「刪除使用者」確認。不能刪除自己的帳號；仍持有已開通資源時會被拒絕。
+    section: 使用者清單
+  - id: admin.search
+    role: text
+    label: 搜尋姓名、Email 或角色
+    help: 比對姓名、Email 與角色徽章上的名稱（學生、教師、管理者），輸入一部分就找得到。
+    section: 使用者清單
+  - id: admin.group_filter
+    role: select
+    label: 所有群組
+    help: 有群組時才會出現，選一個群組只列出它的成員；選項後面的數字是成員數。
+    section: 使用者群組
+  - id: admin.manage_groups
+    role: button
+    label: 群組管理
+    help: 開啟群組管理視窗：新增、改名、刪除群組，或用 CSV 匯入成員。
+    section: 使用者群組
+  - id: admin.password
+    role: text
+    label: 密碼
+    help: 新增使用者時必填；編輯既有使用者時欄位叫「新密碼」，留空表示不變更。LDAP 帳號的密碼由目錄管理，欄位鎖住。
+    constraints:
+      - 8 到 128 個字元
+      - 需同時包含大寫英文字母、小寫英文字母、數字與特殊符號
+    section: 使用者清單
+    sensitive: true
+  - id: admin.status_active
+    role: readonly
+    label: 啟用
+    section: 啟用狀態
+  - id: admin.status_inactive
+    role: readonly
+    label: 停用
+    help: 停用的帳號無法登入，之後可以再啟用。
+    section: 啟用狀態
+  - id: admin.status_pending_review
+    role: readonly
+    label: 待管理員審核
+    help: 自行註冊、等待核准的帳號，要在「待審核註冊」按「核准」。
+    section: 啟用狀態
+  - id: admin.status_pending_email
+    role: readonly
+    label: 待驗證信箱
+    help: 自行註冊後還沒完成信箱驗證。
+    section: 啟用狀態
+  - id: admin.registration_settings
+    role: button
+    label: 註冊設定
+    help: 打開「註冊設定」對話框，調整三個註冊選項與學號信箱網域；註冊設定還沒載入完成時不能按。
+    section: 註冊設定
+  - id: admin.signup_enabled
+    role: toggle
+    label: 允許自行註冊
+    help: 在「註冊設定」對話框裡。開啟後，任何信箱都可從登入頁申請註冊；關閉時只停止信箱註冊，審核與 Google 設定會保留，現有帳號仍可登入。勾選後要按「儲存」才生效。
+    section: 註冊設定
+  - id: admin.approval_required
+    role: toggle
+    label: 註冊後需管理員審核
+    help: 在「註冊設定」對話框裡。可獨立設定；開放信箱註冊或 Google 自動建帳期間，所有新帳號（包含學校信箱的帳號）都須經核准，既有待審核帳號仍須處理。勾選後要按「儲存」才生效。
+    section: 註冊設定
+  - id: admin.google_signup_enabled
+    role: toggle
+    label: 允許 Google 首次登入自動建帳
+    help: 在「註冊設定」對話框裡。與信箱註冊分開控制，不需要 SMTP。開啟後，尚未有帳號的 Google 信箱首次登入會自動建立學生帳號；關閉時只有既有帳號能用 Google 登入。只在部署時設定了 Google 登入才有作用。勾選後要按「儲存」才生效。
+    section: 註冊設定
+  - id: admin.student_email_domain
+    role: text
+    label: 學號信箱網域
+    help: 在「註冊設定」對話框裡。班級名單與群組的 CSV 只填學號時，補在學號後面的網域，例如 school.edu.tw；留空時名單必須填完整 Email。改完按「儲存」。
+    section: 註冊設定
+  - id: admin.pending_registrations
+    role: list
+    label: 待審核註冊
+    help: 等待核准的自行註冊帳號，逐筆按「核准」或「拒絕」；沒有時顯示「目前沒有待審核帳號」。區塊預設收起，標題括號裡是待審核人數，點標題展開或收起，這個瀏覽器會記住上次的開合。
+    section: 待審核註冊
+  - id: admin.created_at
+    role: readonly
+    label: 建立於
+    help: 每列顯示帳號的建立日期，寫成「建立於」加日期。
+    section: 使用者清單
+dialogs:
+  - id: registration-settings
+    title: 註冊設定
+    opened_by: 註冊設定
+    purpose: 一次調整開放自行註冊、註冊審核、Google 首次登入自動建帳與學號信箱網域。
+    fields:
+      - label: 允許自行註冊
+        help: 開啟後，任何信箱都可從登入頁申請註冊；關閉時只停止信箱註冊，審核與 Google 設定會保留，現有帳號仍可登入。
+      - label: 註冊後需管理員審核
+        help: 可獨立設定；開放信箱註冊或 Google 自動建帳期間，所有新帳號都須經核准，核准在「待審核註冊」按「核准」。
+      - label: 允許 Google 首次登入自動建帳
+        help: 與信箱註冊分開控制，不需要 SMTP；開啟後尚未有帳號的 Google 信箱首次登入會自動建立學生帳號。只在部署時設定了 Google 登入才有作用。
+      - label: 學號信箱網域
+        help: 班級名單與群組的 CSV 只填學號時補上的網域，例如 school.edu.tw；留空時名單必須填完整 Email。
+    notes:
+      - 開啟時取當下的設定當起點，改完按「儲存」四項一起送出，成功後跳「註冊設定已儲存」並關閉；沒有修改時「儲存」不能按。
+      - 有未儲存的修改時按「取消」、關閉、Esc 或點視窗外，會先跳「尚未儲存的變更」確認，按「捨棄修改」才會關閉。
+      - 儲存失敗時對話框與修改都會留著，改一改可以直接再存；儲存中不能關閉。
+  - id: user
+    title: 新增使用者
+    opened_by: 新增使用者
+    purpose: 建立一個新帳號。
+    fields:
+      - label: Email
+        help: 登入用的帳號，最多 255 個字元。
+        required: true
+      - label: 姓名
+        help: 可留空。
+      - label: 密碼
+        help: 8 到 128 個字元，且要同時有大寫、小寫、數字與特殊符號；規則會逐條標出是否已符合。
+        required: true
+      - label: 角色
+        help: 學生、教師或管理者，預設學生。
+      - label: 啟用帳戶
+        help: 取消勾選後無法登入。
+      - label: 強制兩步驟驗證
+        help: 勾選後，此使用者尚未綁定時登入只能先完成綁定；綁定後不可自行停用，手機遺失由管理員重設。
+  - id: edit-user
+    title: 編輯使用者
+    opened_by: 編輯
+    purpose: 修改既有帳號的資料、角色、啟用狀態與兩步驟驗證設定。
+    fields:
+      - label: Email
+        help: 登入用的帳號。
+        required: true
+      - label: 姓名
+        help: 可留空。
+      - label: 新密碼
+        help: 留空表示不變更；要改時同樣是 8 到 128 個字元並包含大寫、小寫、數字與特殊符號。LDAP 帳號的密碼由目錄管理，欄位鎖住。
+      - label: 角色
+        help: 學生、教師或管理者；編輯自己的帳號時不能改。
+      - label: 啟用帳戶
+        help: 取消勾選後無法登入；編輯自己的帳號時不能改。還在等信箱驗證或等審核的帳號不能在這裡啟用，待審核的要用「待審核註冊」的「核准」。
+      - label: 強制兩步驟驗證
+        help: 勾選後，此使用者尚未綁定時登入只能先完成綁定；綁定後不可自行停用。
+    notes:
+      - 對方已啟用兩步驟驗證時，可以按「重設兩步驟驗證」（例如手機遺失）：確認後對方所有登入立即失效，下次登入只需密碼，可再自行重新綁定。
+  - id: group-manager
+    title: 群組管理
+    opened_by: 群組管理
+    purpose: 建立、改名、刪除使用者群組，並用 CSV 匯入成員。
+    fields:
+      - label: 新增群組
+        help: 群組名稱，例如：資管三甲，最多 120 個字；填好按「新增」。
+    notes:
+      - 每個群組列出成員數與學生數，可以「匯入 CSV」「改名」「刪除」。
+      - CSV 第一欄放 Email 或學號（只填學號會補上「學號信箱網域」；沒設網域時整份退回並列出那些學號），第一列可以是標題；只會加入已存在的帳號，找不到的會列出筆數。
+      - 刪除群組只會拿掉群組本身，帳號不受影響；已經從這個群組匯入的班級名單也不會變。
+      - 要從清單勾選帳號加入群組，關掉這個視窗，勾選使用者後按「加入群組」。
+  - id: group-add
+    title: "將 {{count}} 位使用者加入群組"
+    opened_by: 加入群組
+    purpose: 把勾選的使用者一次加入某個群組。
+    fields:
+      - label: 群組
+        help: 選要加入的群組；正在用群組篩選時預設選那個群組。
+        required: true
+  - id: group-remove
+    title: "將 {{count}} 位使用者移出群組"
+    opened_by: 移出群組
+    purpose: 把勾選的使用者一次移出某個群組。
+    fields:
+      - label: 群組
+        help: 選要移出的群組。
+        required: true
+related:
+  - path: /ldap
+    when: 要讓帳號改由學校目錄管理
+  - path: /governance
+    when: 要調整某人的資源配額
+  - path: /audit
+    when: 要查某個帳號做過的操作

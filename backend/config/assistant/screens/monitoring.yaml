@@ -1,0 +1,88 @@
+# 資源監控（/monitoring）
+id: monitoring
+path: /monitoring
+title: 資源監控
+access: admin
+order: 300
+purpose: 查看平台系統健康、叢集資源用量、活動警告、挖礦事件、節點趨勢與最吃資源的機器。
+when_to_use: 要確認平台元件或排程任務有沒有異常、叢集是否過載、哪個節點或機器吃掉最多資源、有沒有警告或疑似挖礦的事件。
+sections:
+  - 系統健康
+  - 叢集用量
+  - 閾值警告
+  - 挖礦事件
+  - 節點趨勢
+features:
+  - 「系統健康」標題旁是整體狀態，標題列寫著「N 個排程任務異常」或「N 個排程任務皆正常」；各依賴元件（資料庫、Redis、背景 Worker、各 PVE 連線、Gateway、AI Gateway 與 AI 模型等）的狀態一直顯示，正常時附回應毫秒數。點標題列展開背景迴圈與排程任務明細（上次執行、上次成功、連續失敗、耗時、最近錯誤），明細預設收起，這個瀏覽器會記住上次的開合。
+  - PVE 連不上時顯示「無法取得監控資料，請確認 Proxmox 連線狀態。」，叢集用量、節點用量與 Top 5 都不顯示；「系統健康」與警告、挖礦事件分頁照樣顯示。
+  - 叢集用量卡顯示 CPU 用量、記憶體用量、磁碟用量的百分比，以及節點在線、VM 運行、LXC 運行的數量；資料每 30 秒更新。
+  - 「活動警告」分頁列出資源用量超過閾值與平台健康異常的警告，每 30 秒更新，分頁角標是目前的警告筆數；按「確認」只標成「已確認」，警告會留在清單上直到系統判定狀況解除。
+  - 「挖礦事件」分頁列出 CPU 長期滿載、已自動存證並暫停的疑似挖礦資源，分頁角標是待處理筆數；待處理的事件可以「停權」擁有者或「誤判解除」，VMID 可以點進那台機器的資源詳情。
+  - 「節點用量」整張卡預設收起，標題列寫著「N/M 在線」，點標題列展開或收起，這個瀏覽器會記住上次的開合；展開後點在線節點的那一列看最近 1 天的 CPU % 與記憶體 % 趨勢圖（每 60 秒更新），離線節點不能展開。
+  - 「CPU 用量 Top 5」「記憶體用量 Top 5」列出最吃資源的機器。
+  - 畫面較窄時各表格會把次要欄位收進主要欄位：節點用量依序收起 VM / LXC、運行時間、磁碟、記憶體、CPU（用量改寫成百分比，90% 以上標紅）；挖礦事件依序收起觀察視窗、存證快照、平均 CPU、偵測時間、擁有者（收起的內容改顯示在 VMID 與狀態欄）；排程任務明細與 Top 5 也會這樣收欄。
+  - 有啟用監控 stack 時才會出現「在 Grafana 查看詳細」，在新分頁開啟 Grafana，不必另外登入。
+elements:
+  - id: monitoring.system_health
+    role: list
+    label: 系統健康
+    help: 平台依賴元件與背景排程任務的健康狀態；標題列顯示有幾個排程任務異常，點標題列展開或收起任務明細（預設收起）。
+    section: 系統健康
+  - id: monitoring.active_alerts
+    role: list
+    label: 活動警告
+    help: 資源用量超過閾值與平台健康異常的警告，每 30 秒更新；分頁角標是警告筆數，有叢集名稱時會標出屬於哪個 PVE 連線。
+    section: 閾值警告
+  - id: monitoring.acknowledge
+    role: button
+    label: 確認
+    help: 把這筆警告標成「已確認」；不會讓警告消失，狀況解除後才會離開清單。
+    section: 閾值警告
+  - id: monitoring.mining_incidents
+    role: table
+    label: 挖礦事件
+    help: 疑似挖礦的資源，欄位有 VMID、擁有者、平均 CPU、觀察視窗、存證快照、狀態（已偵測、已暫停、已停權、已解除）與偵測時間；待處理的排在前面。
+    section: 挖礦事件
+  - id: monitoring.node_usage
+    role: list
+    label: 節點用量
+    help: 每個節點的狀態、CPU、記憶體、磁碟、VM / LXC 數量與運行時間；整張卡預設收起，點標題列展開，再點在線節點的那一列展開最近 1 天的趨勢圖。
+    section: 節點趨勢
+  - id: monitoring.top_cpu
+    role: table
+    label: CPU 用量 Top 5
+    section: 叢集用量
+  - id: monitoring.top_mem
+    role: table
+    label: 記憶體用量 Top 5
+    section: 叢集用量
+  - id: monitoring.grafana
+    role: button
+    label: 在 Grafana 查看詳細
+    help: 監控 stack 有啟用時才會出現。
+    section: 叢集用量
+dialogs:
+  - id: dismiss-mining
+    title: 解除挖礦事件
+    opened_by: 誤判解除
+    purpose: 把這筆事件標記為誤判，並嘗試恢復機器運行。
+    fields:
+      - label: 同時將此資源加入豁免（之後不再偵測）
+        help: 例如老師的模型訓練這類正常的高負載。
+      - label: 備註（選填）
+        help: 例如：教授的模型訓練工作負載。
+    notes:
+      - 按「確認解除」送出。恢復機器或清除存證快照失敗時事件仍會結案，失敗原因會附在事件的備註裡，需要手動處理。
+  - id: ban-mining
+    title: 確認停權帳號？
+    opened_by: 停權
+    purpose: 停用這台機器擁有者的帳號（無法登入），機器維持暫停狀態以保留證據。
+    notes:
+      - 按「確認停權」送出；之後可由管理員在使用者管理中還原帳號。
+related:
+  - path: /governance
+    when: 要調整警告閾值或挖礦偵測政策
+  - path: /resource-mgmt
+    when: 要處理某台機器
+  - path: /ai-monitoring
+    when: 要看 AI API 的用量

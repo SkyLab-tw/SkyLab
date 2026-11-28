@@ -5,7 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import AiFloatingChat from "./AiFloatingChat";
 import { LayoutContext } from "../../layout/layoutContext";
-import { AiNavigationService } from "../../services/aiNavigation";
+import { AiAssistantService } from "../../services/aiAssistant";
 import translations from "../../locales/zh-TW/components.json";
 
 const confirmLeave = vi.fn();
@@ -14,18 +14,15 @@ const onOpenChange = vi.fn();
 vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "student" } }) }));
 vi.mock("../../contexts/UnsavedChangesContext", () => ({ useUnsavedChanges: () => ({ confirmLeave }) }));
 vi.mock("react-i18next", async (importOriginal) => ({ ...(await importOriginal()), useTranslation: () => ({ t: translate }) }));
-vi.mock("../../services/aiNavigation", () => ({ AiNavigationService: { resolve: vi.fn(), intake: vi.fn() } }));
-vi.mock("../../services/aiTemplateRecommendation", () => ({ AiTemplateRecommendationApi: { chat: vi.fn(), recommend: vi.fn() } }));
-vi.mock("../../services/aiContextualHelp", () => ({
-  AiContextualHelpService: { surfaces: vi.fn().mockResolvedValue([]), explain: vi.fn() }, matchSurface: () => null,
+vi.mock("../../services/aiAssistant", async (importOriginal) => ({
+  ...(await importOriginal()),
+  AiAssistantService: { chat: vi.fn(), surfaces: vi.fn().mockResolvedValue([]), resetSurfaces: vi.fn() },
 }));
-vi.mock("../../services/resources", () => ({ ResourcesService: { list: vi.fn() } }));
-vi.mock("../../services/vmRequests", () => ({ VmRequestsService: { list: vi.fn(), create: vi.fn() } }));
-/* 機器清單經共用快取抓（queries/resources），會順帶抓快速練習 session，不讓它打真的 API */
-vi.mock("../../services/quickPractice", () => ({ QuickPracticeService: { listMySessions: vi.fn(async () => []) } }));
+vi.mock("../../services/aiTemplateRecommendation", () => ({ AiTemplateRecommendationApi: { recommend: vi.fn() } }));
+vi.mock("../OctoPet/OctoPet", () => ({ default: () => <span /> }));
 
-function translate(key, vars = {}) {
-  return Object.entries(vars).reduce((text, [name, value]) => text.replaceAll(`{{${name}}}`, value), translations[key] ?? key);
+function translate(key, vars) {
+  return Object.entries(vars ?? {}).reduce((text, [name, value]) => text.replaceAll(`{{${name}}}`, value), translations[key] ?? key);
 }
 
 let host, root;
@@ -55,24 +52,28 @@ async function askForFirewall() {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await act(async () => host.querySelector(`button[aria-label="${translate("AiFloatingChat.sendMessageAriaLabel")}"]`).click());
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 
 async function clickTarget() {
   const button = [...host.querySelectorAll("button")].find((item) => item.textContent.includes("防火牆設定"));
   expect(button).toBeTruthy();
   await act(async () => button.click());
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 
 const path = () => host.querySelector('[data-testid="path"]').textContent;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  AiNavigationService.resolve.mockResolvedValue({
-    action: "navigate", answer: "這裡可以設定", primary: { path: "/firewall", title: "防火牆設定" }, suggestions: [],
+  AiAssistantService.surfaces.mockResolvedValue([]);
+  AiAssistantService.chat.mockResolvedValue({
+    reply: "這裡可以設定", pages: [{ path: "/firewall", title: "防火牆設定", reason: "", state: null }],
   });
 });
 
@@ -112,4 +113,19 @@ test("overlay mode closes the panel before asking so the dialog is not covered",
   await clickTarget();
   expect(confirmLeave).toHaveBeenCalledTimes(1);
   expect(path()).toBe("/dashboard");
+});
+
+test("a second message cannot be sent while the first is still waiting", async () => {
+  setOverlay(false);
+  await renderChat();
+  let finish;
+  AiAssistantService.chat.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await askForFirewall();
+  // 等回覆的期間輸入框與送出鈕都停用：不會同時有兩輪在跑、歷史也不會錯位
+  expect(host.querySelector("textarea").disabled).toBe(true);
+  expect(AiAssistantService.chat).toHaveBeenCalledTimes(1);
+  await act(async () => finish({ reply: "好了" }));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(host.querySelector("textarea").disabled).toBe(false);
+  expect(host.textContent).toContain("好了");
 });

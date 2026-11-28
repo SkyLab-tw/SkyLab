@@ -1,0 +1,13 @@
+{
+  "aiAssistant.unavailable": "しばらくしてからもう一度お試しください。",
+  "aiAssistant.degradedPageGuide": "代わりにこのページの固定の説明を表示します：",
+  "aiAssistant.outOfScope": "SkyLab の操作と説明についてのみお手伝いできます。操作したいページ、マシン、機能を教えてください。",
+  "aiAssistant.plan.purpose.question": "このマシンは主に何に使いますか？",
+  "aiAssistant.plan.purpose.options": "授業の課題|プロジェクト開発|Web サイトの公開|AI の学習|データベース",
+  "aiAssistant.plan.gpu.question": "GPU は必要ですか？",
+  "aiAssistant.plan.gpu.options": "GPU が必要|GPU は不要|わからないので判断してほしい",
+  "aiAssistant.plan.display.question": "Windows またはグラフィカルデスクトップは必要ですか？",
+  "aiAssistant.plan.display.options": "グラフィカルデスクトップが必要|Windows が必要|Linux のコマンドラインで十分",
+  "aiAssistant.plan.duration.question": "どのくらいの期間使いますか？",
+  "aiAssistant.plan.duration.options": "3 日|2 週間|1 か月|3 か月"
+}

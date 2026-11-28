@@ -1,0 +1,6 @@
+# 班級（/class-management/:classId/:section）
+# 同一個班級工作頁的分頁網址；內容與 class-workspace 完全相同。
+id: class-workspace-section
+path: /class-management/:classId/:section
+extends: class-workspace
+order: 190

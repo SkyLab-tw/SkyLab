@@ -1,0 +1,232 @@
+# 班級（/class-management/:classId）
+# 進入某個班級後的分頁：班級總覽、加入學生、上課環境、每週內容、課堂監看。
+id: class-workspace
+path: /class-management/:classId
+title: 班級
+access: staff
+order: 170
+purpose: 單一班級的工作區：建機準備、學生名單、上課環境、每週內容，以及上課時的監看與全班電源。
+when_to_use: 已經建立的班級要補學生、看建機進度、安排每週內容、上課時監看全班機器，或延長、封存班級。
+sections:
+  - 班級總覽
+  - 加入學生
+  - 上課環境
+  - 每週內容
+  - 課堂監看
+features:
+  - 分頁：班級還沒可以上課時只有「班級總覽」、「加入學生」、「上課環境」、「每週內容」四步；可以上課後多出「課堂監看」與「AI 導師檢查」，六個分頁平行切換（視窗太窄放不下時，其餘分頁收進「更多」），而且直接點進可以上課的班級會先停在「課堂監看」。
+  - 「班級總覽」：建機準備（學生名單與上課環境兩項）、本週或下一次的課程、機器就緒數與「班級資訊」；兩項都完成且容量預檢通過後按「確認並送出建機」，確認「送出審核」後設定會鎖定並等待管理員審核，審核期間頁面會自動更新進度。
+  - 建機有失敗時，「班級總覽」會出現「重試失敗項目」，只重新送出失敗的學生（要重建機器時會再經過審核）；如果還沒有任何機器建好，也可以按「解除鎖定並返回編輯」，釋放預留的容量與 IP 後修改學生、課程環境或課表再重新送出。
+  - 「加入學生」：「加入學生」貼上 Email，或「匯入 CSV」、「從群組匯入」；可以搜尋姓名或 Email、勾選多位一起移除。送出建機後名單就鎖定，不能再加入或移除。
+  - 「上課環境」：準備中的班級從「選擇已發布課程環境」挑一個已發布的版本（點整列就是選用，選中的標「已選擇」），每位學生會拿到相同的一組機器，選好後可看「機器與網路拓撲」；沒有合適的可以按「建立新課程環境」。送出建機後只顯示已套用的環境、每位學生與全班的資源用量與拓撲圖，設定已鎖定。
+  - 拓撲圖不能改，但機器可以拖開來看（放得離別台太近會自動推開），只影響畫面，不會改到課程環境存的位置；點一條連線可以看細節，「上網線」可以顯示或隱藏每台機器連到網際網路的線。
+  - 「每週內容」：每週填主題／任務、上傳任務檔案，學生可見選「草稿」或「發布」（要先填主題才能發布），學生只看得到發布的週次；主題與發布狀態要按「儲存每週內容」才會保存。班級結束後就不能再改。
+  - 「課堂監看」：學生使用率熱力圖每 10 秒更新，可切換課堂機器與 CPU／RAM；「需要注意」列出高負載（80% 以上，由高到低）的學生，以及有人開機時仍關機的學生，全班都關機時只顯示「全部機器目前都是關機狀態。」；點執行中的機器可開啟學生的桌面或終端機。
+  - 「課堂監看」也能「全班開機」、「全班關機」，或在「直播示範」選一台自己執行中的 VM 直播給全班看，按「結束直播」停止。
+  - 「AI 導師檢查」分頁是另一個畫面，用來建立檢查表、產生並執行檢查腳本、核查學生結果。
+  - 「更多班級操作」選單（⋮）：「編輯班級與課表」（只有準備中的班級）、「延長課程日期」、「封存並回收」（不可逆，會回收班上的機器）；班級結束後這個選單就不會出現。
+elements:
+  - id: classmgmt.pending_review
+    role: readonly
+    label: 等待建機審核
+    help: 設定已鎖定，等管理員審核；審核通過後會開始建立全班環境。
+    section: 班級總覽
+  - id: classmgmt.status_provisioning
+    role: readonly
+    label: 正在建立全班環境
+    help: 系統正在處理每位學生的機器，結果會自動更新。
+    section: 班級總覽
+  - id: classmgmt.status_partial_failed
+    role: readonly
+    label: 部分機器或網路設定失敗
+    help: 有機器或網路設定沒有成功，要處理過才能正常上課；可以按「重試失敗項目」。
+    section: 班級總覽
+  - id: classmgmt.retry_failed
+    role: button
+    label: 重試失敗項目
+    help: 只重新送出失敗的學生，已建好的機器不受影響；有機器要重建時班級會回到等待審核，只剩網路設定要補時會直接重新套用，成功後班級就可以上課。
+    section: 班級總覽
+  - id: classmgmt.unlock_edit
+    role: button
+    label: 解除鎖定並返回編輯
+    help: 只有建機失敗而且還沒有任何機器建好時才出現。確認「返回編輯」後會釋放預留的容量與 IP，班級回到準備中，可以修改學生、課程環境或課表後重新送出。
+    section: 班級總覽
+  - id: classmgmt.boot_lead
+    role: readonly
+    label: 提前開機
+    help: 機器會在上課時段前先開好；分鐘數在「班級資訊」裡。
+    section: 班級總覽
+  - id: classmgmt.shutdown_grace
+    role: readonly
+    label: 下課後關機
+    help: 下課後機器會多留這段時間才自動關機，讓學生有時間收尾；分鐘數在「班級資訊」裡。
+    section: 班級總覽
+  - id: classmgmt.class_info_fold
+    role: button
+    label: 班級資訊
+    help: 收合的課表摘要（課程期間與提前開機分鐘數），點開可看課程期間、提前開機與下課後關機。
+    section: 班級總覽
+  - id: classmgmt.more_menu
+    role: button
+    label: 更多班級操作
+    help: ⋮ 按鈕。編輯班級與課表、延長課程日期、封存並回收都收在這裡；班級結束後不會出現。
+    section: 班級總覽
+  - id: classmgmt.edit_schedule
+    role: button
+    label: 編輯班級與課表
+    help: 在「更多班級操作」選單裡，只有準備中（還沒送出建機）的班級才有。
+    section: 班級總覽
+  - id: classmgmt.extend_class
+    role: button
+    label: 延長課程日期
+    help: 在「更多班級操作」選單裡。延長後會自動補上新的課次，機器到期日一併順延。
+    section: 班級總覽
+  - id: classmgmt.archive_class
+    role: button
+    label: 封存並回收
+    help: 在「更多班級操作」選單裡，動作不可逆：會停止後續排程、取消未完成建機，並回收全班機器；班級與課程紀錄會保留。
+    section: 班級總覽
+  - id: classmgmt.retry_reclaim
+    role: button
+    label: 重試回收
+    help: 班級已結束但有機器沒有成功送出回收時才出現，按了會重新送出剩餘的資源回收。
+    section: 班級總覽
+  - id: classmgmt.submit_provision
+    role: button
+    label: 確認並送出建機
+    help: 學生名單與上課環境都完成、容量預檢通過後才能按；送出後學生名單、課程環境與課表鎖定並等待管理員審核。
+    section: 班級總覽
+  - id: classmgmt.add_students
+    role: button
+    label: 加入學生
+    help: 貼上學生 Email 加入班級；送出建機後名單會鎖定。
+    section: 加入學生
+  - id: classmgmt.import_csv
+    role: button
+    label: 匯入 CSV
+    help: 一次匯入多位學生，完成後會告訴你加入幾位、幾個帳號不存在、幾個不是學生身分。
+    constraints:
+      - 每列第一欄填一個 Email 或學號；第一列可以是標題（email、學號或帳號），會自動略過。
+      - 只填學號時，系統用管理員在註冊設定填的學生信箱網域補成 Email；沒設定網域時整份退回，要改填完整 Email。
+      - 檔案大小上限 1 MB。
+    section: 加入學生
+  - id: classmgmt.import_group
+    role: button
+    label: 從群組匯入
+    help: 從管理員建立的使用者群組挑一組，把群組目前的學生加進名單。
+    section: 加入學生
+  - id: classmgmt.roster_locked
+    role: readonly
+    label: 已送出建機，名單已鎖定
+    help: 送出建機後就不能再加入或移除學生。
+    section: 加入學生
+  - id: classmgmt.choose_environment
+    role: list
+    label: 選擇已發布課程環境
+    help: 只能選已發布、提供給正式課程的固定版本，清單只列出你自己的環境（管理員看得到全部）；每位學生會取得相同的一組機器。只有準備中的班級能換。
+    section: 上課環境
+  - id: classmgmt.create_environment
+    role: button
+    label: 建立新課程環境
+    help: 沒有合適的已發布環境時，另外建立一個，發布後再回來選用。
+    section: 上課環境
+  - id: classmgmt.settings_locked
+    role: readonly
+    label: 設定已鎖定
+    help: 送出建機後上課環境不能再換。
+    section: 上課環境
+  - id: classmgmt.week_visibility
+    role: toggle
+    label: 學生可見
+    help: 每一週選「草稿」或「發布」；設為「發布」後，學生才會在課程頁看到這週的主題與檔案。
+    constraints:
+      - 先填主題才能發布。
+    section: 每週內容
+  - id: classmgmt.save_weekly
+    role: button
+    label: 儲存每週內容
+    help: 每週主題與學生可見設定都要按這顆才會保存；任務檔案在上傳或移除時就已經生效。
+    section: 每週內容
+  - id: classmgmt.class_power_on
+    role: button
+    label: 全班開機
+    help: 對全班機器送出開機指令；只有可以上課的班級能用。不在上課時段開機的機器，會在練習時數到了之後自動關機。
+    section: 課堂監看
+  - id: classmgmt.class_power_off
+    role: button
+    label: 全班關機
+    help: 確認後對全班機器送出關機指令，學生尚未存檔的工作可能遺失。
+    section: 課堂監看
+  - id: classmgmt.broadcast
+    role: button
+    label: 直播示範
+    help: 從下拉選單選一台自己執行中的 VM，把它的畫面直播給全班看；按「結束直播」停止。切到別的分頁直播也會繼續。
+    section: 課堂監看
+dialogs:
+  - id: add-students
+    title: 加入學生
+    opened_by: 加入學生
+    purpose: 把學生帳號加入這個班級。
+    fields:
+      - label: Email，可使用逗號或換行分隔
+        help: 例如 student01@example.edu；逗號、分號、空白或換行都可以分隔。帳號必須已存在而且是學生身分。
+        required: true
+    notes:
+      - 重複的帳號會自動略過；找不到的帳號與不是學生身分的帳號會列出來，不會加入。
+      - 這裡要填完整 Email，只填學號不會自動補網域（用「匯入 CSV」才會）。
+  - id: group-import
+    title: 從群組匯入學生
+    opened_by: 從群組匯入
+    purpose: 從管理員建立的使用者群組，把群組目前的學生一次加進名單。
+    fields:
+      - label: 群組
+        help: 選項會顯示每個群組有幾位學生；預設選第一個有學生的群組。沒有學生的群組不能匯入。
+        required: true
+    notes:
+      - 只加入群組裡的學生，已在名單裡的略過；群組裡的老師或管理員帳號不會加入。
+      - 匯入只複製當下的成員，之後群組再有異動，不會改到這個班級。
+      - 群組由管理員維護，管理員還沒建立群組時清單是空的。
+  - id: edit-class
+    title: 編輯班級與課表
+    opened_by: 編輯班級與課表
+    purpose: 修改班級資料與固定上課時段；只有準備中的班級可以改。
+    fields:
+      - label: 班級名稱
+        help: 例如：Linux 系統管理｜114-1。
+        required: true
+      - label: 學期
+        help: 留空會存成「未指定」。
+      - label: 上課地點
+        help: 例如：電腦教室 A。
+      - label: 開始日期
+        required: true
+      - label: 結束日期
+        help: 不能早於開始日期，課程期間最長 104 週。
+        required: true
+      - label: 每週星期
+        required: true
+      - label: 上課時間
+        help: 開始與結束時間，結束必須晚於開始。
+        required: true
+      - label: 提前開機
+        help: 上課前多久把機器開好：準時開機或提前 5、10、15、30 分鐘。
+      - label: 下課後關機
+        help: 下課後多留多久才自動關機：下課即關機或下課後 10、30、60 分鐘。
+    notes:
+      - 已經有的週次不能被刪掉：改短結束日期或改上課日讓課次變少時，會被拒絕。
+      - 改課表後每一週的主題與教材會留在原本的第幾週，只有日期跟著調整。
+  - id: extend-class
+    title: 延長課程日期
+    opened_by: 延長課程日期
+    purpose: 把班級的結束日期往後延。
+    fields:
+      - label: 延長班級到期日
+        help: 必須晚於目前的結束日期，課程期間最長 104 週。
+        required: true
+    notes:
+      - 延長後會自動補上新的課次，機器的到期日也一併順延。
+related:
+  - path: /class-management
+    when: 回到班級清單
+  - path: /course-template-management
+    when: 上課環境沒有合適的版本，要建立或發布新環境

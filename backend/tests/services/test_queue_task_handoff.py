@@ -109,22 +109,22 @@ def test_run_reset_task_unpacks_payload(monkeypatch: pytest.MonkeyPatch) -> None
 # ─── 批次佈建 ─────────────────────────────────────────────────────────────────
 
 
-def test_approve_batch_job_enqueues_instead_of_threading(
+def test_approving_batch_jobs_enqueues_instead_of_threading(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     job_id, reviewer = uuid.uuid4(), uuid.uuid4()
     monkeypatch.setattr(
-        batch_provision_service.bp_repo, "get_job", lambda **_: SimpleNamespace(id=job_id)
-    )
-    monkeypatch.setattr(
         batch_provision_service.bp_repo,
-        "transition_pending_review",
-        lambda **_: SimpleNamespace(id=job_id),
+        "transition_pending_reviews",
+        lambda **_: [SimpleNamespace(id=job_id)],
     )
     calls = _capture_enqueue(monkeypatch, batch_provision_service)
 
-    batch_provision_service.approve_batch_job(
-        session=_Session(), job_id=job_id, reviewer_id=reviewer
+    batch_provision_service.review_batch_jobs(
+        session=_Session(),
+        job_ids=[job_id],
+        reviewer_id=reviewer,
+        decision=batch_provision_service.BatchProvisionJobStatus.approved,
     )
 
     assert calls == [

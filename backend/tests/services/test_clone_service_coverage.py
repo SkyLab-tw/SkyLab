@@ -221,8 +221,15 @@ def stubs(eng: Engine, monkeypatch: pytest.MonkeyPatch) -> dict[str, list]:
         "delete_rule": [],
         "cleanup": [],
         "scrub": [],
+        "get_config": [],
     }
     monkeypatch.setattr(cs.proxmox_ops, "vmid_allocation_lock", _no_lock)
+
+    def get_config(node: str, vmid: int, rtype: str) -> dict[str, Any]:
+        calls["get_config"].append((node, vmid, rtype))
+        return {"machine": "pc-q35-9.0+pve1"}
+
+    monkeypatch.setattr(cs.proxmox_ops, "get_config", get_config)
     monkeypatch.setattr(
         provisioning_service, "allocate_free_vmid", lambda session: NEW_VMID
     )
@@ -373,7 +380,11 @@ def test_run_clone_task_qemu_custom_hash_with_gpu(
         2048,
         20,
     )
-    assert stubs["update_config"] == [{"hostpci0": "mapping=gpu-a,mdev=nvidia-1"}]
+    # 克隆出來的機器是 q35 → 掛 GPU 時啟用 PCIe；機型讀的是新機器不是範本
+    assert stubs["update_config"] == [
+        {"hostpci0": "mapping=gpu-a,mdev=nvidia-1,pcie=1"}
+    ]
+    assert stubs["get_config"] == [("pve1", NEW_VMID, "qemu")]
     assert stubs["control"] == [("qemu", "start")]
     assert stubs["schedule"] == [NEW_VMID]
     created = stubs["create_resource"][0]

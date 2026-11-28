@@ -19,6 +19,7 @@ import {
   fetchWithTimeout,
 } from "./fetchWithTimeout";
 import { readResponseMessage } from "./responseMessage";
+import { EVENT_STREAM_IDLE_TIMEOUT_MS, readEventStream } from "./eventStream";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 const REFRESH_PATH = "/api/v1/login/refresh-token";
@@ -236,7 +237,7 @@ async function send(path, init, responseKind, authRetryCount = 0) {
 
   if (res.ok) {
     assertResponseSession(requestSnapshot);
-    const body = await responseKind.readBody(res);
+    const body = await responseKind.readBody(res, requestSnapshot);
     assertResponseSession(requestSnapshot);
     return body;
   }
@@ -302,6 +303,36 @@ export function apiPost(path, body, options = {}) {
     signal: options.signal,
     timeoutMs: options.timeoutMs,
   });
+}
+
+/**
+ * POST 後以 Server-Sent Events 讀回應：每收到一則事件呼叫 onEvent({ event, data })，
+ * 串流結束時 resolve。認證、401 續期與錯誤格式同 apiPost——串流開始前的失敗照樣丟
+ * { status, message }。
+ *
+ * timeoutMs 管到回應標頭回來為止；之後改看 idleTimeoutMs：伺服器閒著時會定期送
+ * keep-alive，超過這段時間完全沒有資料就當成斷線（丟 408）。登出或換帳號之後，
+ * 還沒處理的事件不會再交給 onEvent。
+ */
+export function apiPostEventStream(path, body, options = {}) {
+  const { onEvent, idleTimeoutMs = EVENT_STREAM_IDLE_TIMEOUT_MS } = options;
+  return send(
+    path,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { Accept: "text/event-stream", ...options.headers },
+      timeoutMs: options.timeoutMs,
+    },
+    {
+      defaultTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
+      readBody: (res, requestSnapshot) => readEventStream(res, {
+        onEvent,
+        idleTimeoutMs,
+        beforeEvent: () => assertResponseSession(requestSnapshot),
+      }),
+    },
+  );
 }
 
 /** POST（form-urlencoded，登入用，不帶 Authorization 也不重試）

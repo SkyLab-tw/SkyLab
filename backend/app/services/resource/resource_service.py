@@ -1828,13 +1828,20 @@ def direct_update_spec(
                 "At least one specification must be provided"
             )
 
+        disk_name: str | None = None
+        if disk_size:
+            # 放大的是主磁碟：VM 的開機磁碟不一定是 scsi0（Windows 沒裝 VirtIO
+            # 驅動時常見 sata0／ide0）。先找到再動手，找不到就整筆不做。
+            disk_name = proxmox_service.main_disk_key(node, vmid, resource_type)
+            if disk_name is None:
+                raise ProxmoxError(f"Resource {vmid} has no boot disk to resize")
+
         if config_params:
             proxmox_service.update_config(
                 node, vmid, resource_type, **config_params
             )
 
-        if disk_size:
-            disk_name = "scsi0" if resource_type == "qemu" else "rootfs"
+        if disk_size and disk_name:
             proxmox_service.resize_disk(
                 node, vmid, resource_type, disk_name, disk_size
             )

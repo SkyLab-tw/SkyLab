@@ -10,7 +10,7 @@ Every signed-in user. Which home page you see depends on your role:
 | --- | --- | --- |
 | Administrator | Admin home | Platform numbers, AI Operations Assistant, **Handle now** and **Sometime today** to-do lists |
 | Teacher | Teacher home | **Create Class**, **Active Classes** and **Next Class** cards, **Upcoming Classes** |
-| Student (any other account) | Student home | **Recently used machines**, **Current classes**, **Quick Practice Environments**, a link to request your own research environment |
+| Student (any other account) | Student home | **My machines**, **Current classes**, **Quick Practice Environments**, a link to request your own research environment |
 
 Click the guide button next to the page title to replay the guided tour of your home page.
 
@@ -111,7 +111,7 @@ Click a row to open the class. Click **All Classes** to see every class.
 
 ### Enter one of your machines
 
-**Recently used machines** shows up to four of your machines as cards. Each card shows the machine's status, its name (for class and quick practice machines, the environment name), and a small terminal-style panel with the VMID, operating system, last time you connected from this browser, uptime, IP address, usage, expiry date and any scheduled shutdown.
+**My machines** shows up to four of your machines as cards. Each card shows the machine's status, its name (for class and quick practice machines, the environment name), and a small terminal-style panel with the VMID, operating system, last time you connected from this browser, uptime, IP address, usage, expiry date and any scheduled shutdown.
 
 1. Find the machine and look at its main button:
    - **Enter Machine** when it is running;
@@ -139,7 +139,7 @@ If the machine is still starting after a while, the page asks you to try again s
 
 ### Open a class
 
-**Current classes** shows a ticket for each of your classes. The ticket shows its status (**In class now**, **Later today**, **Open for practice**, **Done for today**), the course title, teacher, date, time and room; the barcode on the stub is your practice progress (one bar per question, finished ones first).
+**Current classes** shows a ticket for each of your classes. The ticket shows its status (**In class now**, **Later today**, **Open for practice**, **Done for today**), the course title, teacher, date, time and room. Each course is one of your classes, and the barcode on the stub is only decoration; it does not show progress.
 
 1. Click a ticket to open that course.
 2. Click **View all courses** to see all your courses.

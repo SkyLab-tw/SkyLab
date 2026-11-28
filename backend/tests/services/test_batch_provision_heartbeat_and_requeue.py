@@ -421,31 +421,14 @@ def _pending_review_job(db: Session) -> BatchProvisionJob:
     return job
 
 
-def test_approve_succeeds_when_enqueue_fails(
-    db: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = _pending_review_job(db)
-
-    def broken_enqueue(**_kwargs: Any) -> None:
-        raise TimeoutError("redis unreachable")
-
-    monkeypatch.setattr(svc, "enqueue_task_sync", broken_enqueue)
-
-    svc.approve_batch_job(session=db, job_id=job.id, reviewer_id=REVIEWER)
-
-    db.expire_all()
-    refreshed = db.get(BatchProvisionJob, job.id)
-    assert refreshed.status == BatchProvisionJobStatus.approved
-    assert refreshed.reviewer_id == REVIEWER
-
-
+@pytest.mark.parametrize("error", [TimeoutError, ConnectionError])
 def test_class_review_succeeds_when_enqueue_fails(
-    db: Session, monkeypatch: pytest.MonkeyPatch
+    db: Session, monkeypatch: pytest.MonkeyPatch, error: type[Exception]
 ) -> None:
     job = _pending_review_job(db)
 
     def broken_enqueue(**_kwargs: Any) -> None:
-        raise ConnectionError("redis unreachable")
+        raise error("redis unreachable")
 
     monkeypatch.setattr(svc, "enqueue_task_sync", broken_enqueue)
 
@@ -458,7 +441,9 @@ def test_class_review_succeeds_when_enqueue_fails(
 
     assert [row.id for row in reviewed] == [job.id]
     db.expire_all()
-    assert db.get(BatchProvisionJob, job.id).status == BatchProvisionJobStatus.approved
+    refreshed = db.get(BatchProvisionJob, job.id)
+    assert refreshed.status == BatchProvisionJobStatus.approved
+    assert refreshed.reviewer_id == REVIEWER
 
 
 def test_requeue_picks_up_only_stalled_approved_jobs(

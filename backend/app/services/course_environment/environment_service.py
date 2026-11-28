@@ -49,6 +49,7 @@ from app.schemas.course_environment import (
 )
 from app.services import quick_practice
 from app.services.course_environment import upload_store
+from app.services.course_environment.publish_errors import publish_validation_message
 from app.services.proxmox import proxmox_service
 from app.services.teaching import course_publication_service
 from app.services.teaching.class_network_service import network_segments
@@ -567,10 +568,13 @@ def publish(
         draft = EnvironmentDraftIn.model_validate(version.draft_data)
         try:
             body = EnvironmentCreate.model_validate(draft.configuration)
-            if not body.name.strip():
-                raise ValueError("Environment name is required")
-        except (ValidationError, ValueError) as exc:
-            raise BadRequestError(str(exc)) from exc
+        except ValidationError as exc:
+            # pydantic 的原文是英文加欄位路徑，換成老師看得懂的一句話
+            raise BadRequestError(
+                publish_validation_message(exc, draft.configuration)
+            ) from exc
+        if not body.name.strip():
+            raise BadRequestError(t("course_env.publish_name_required"))
         assign_environment_fields(environment, body)
         replace_configuration(session, version, body, owner=owner)
         session.flush()
@@ -735,7 +739,10 @@ def environment_references(session: Session, environment_id: uuid.UUID) -> list[
 
 
 def delete_environment(session: Session, environment: CourseEnvironment) -> None:
-    """硬刪除；只允許沒有任何引用的環境，其餘一律走下架。"""
+    """硬刪除；只允許沒有任何引用的環境。
+
+    沒有下架或封存狀態：被用過的環境不想再提供快速練習，只能把套用方式收窄。
+    """
     reasons = environment_references(session, environment.id)
     if reasons:
         raise BadRequestError(

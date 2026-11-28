@@ -3,8 +3,11 @@ import { useTranslation } from "react-i18next";
 import styles from "./TemplatesPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import Modal from "../../../components/Modal/Modal";
+import PasswordRules from "../../../components/PasswordRules/PasswordRules";
 import { TemplatesService } from "../../../services/templates";
+import { WINDOWS_PASSWORD_RULES, windowsPasswordIssues } from "../../../utils/windowsPassword";
 import { useGpuOptionsQuery } from "../../../queries/gpu";
+import { useTemplateQuery } from "../../../queries/templates";
 import { useToast } from "../../../hooks/useToast";
 import { useLoadError } from "../../../hooks/useQueryLoadState";
 
@@ -44,8 +47,19 @@ export default function TemplateCloneDialog({ template, closing = false, onClose
   const [password, setPassword] = useState("");
   const [start, setStart] = useState(true);
   const [busy, setBusy] = useState(false);
+  /* 送出時密碼不合規則：把沒滿足的項目標紅，改了密碼就收起來 */
+  const [passwordFlagged, setPasswordFlagged] = useState(false);
 
   const needsGpu = Boolean(template?.requires_gpu) && template?.resource_type === "qemu";
+  /* 範本沒有 cloud-init 時平台設不了密碼，克隆機沿用範本內的帳密 */
+  const allowPassword = template?.password_settable !== false;
+  /* Windows 會拒絕不合複雜度的密碼，機器建好卻登不進去。後端克隆時會擋，這裡讓人送出前就
+     看到。是不是 Windows 要另外查（清單為了不逐筆打 PVE 不帶這一項）；還沒查到或查不到時
+     不列規則，交給後端把關。只有能自訂密碼的 VM 範本才需要查。 */
+  const detailQuery = useTemplateQuery(template?.id, {
+    enabled: Boolean(template?.id) && allowPassword && template?.resource_type === "qemu",
+  });
+  const isWindows = detailQuery.data?.is_windows === true;
   /* GPU 不可跨 PVE 連線：只列出與範本同叢集的 GPU。需要 GPU 的範本才抓（TanStack Query，不輪詢） */
   const gpuQuery = useGpuOptionsQuery(template?.node ? { node: template.node } : undefined, { enabled: needsGpu });
   const gpuData = gpuQuery.data;
@@ -61,8 +75,6 @@ export default function TemplateCloneDialog({ template, closing = false, onClose
   const [gpuMappingId, setGpuMappingId] = useState("");
   const [gpuProfile, setGpuProfile] = useState("");
 
-  /* 範本沒有 cloud-init 時平台設不了密碼，克隆機沿用範本內的帳密 */
-  const allowPassword = template?.password_settable !== false;
   const coresMax = Math.max(8, template?.default_cores || 0);
   const memoryMax = Math.max(32768, template?.default_memory || 0);
   const coreTicks = [...new Set([1, 2, 4, 6, 8, coresMax])].sort((a, b) => a - b);
@@ -92,6 +104,11 @@ export default function TemplateCloneDialog({ template, closing = false, onClose
   const countOutOfRange = count !== "" && String(clampedCount) !== String(count).trim();
 
   const handleSubmit = async () => {
+    if (allowPassword && password && isWindows && windowsPasswordIssues(password).length > 0) {
+      setPasswordFlagged(true);
+      toast.error(t("TemplateCloneDialog.passwordWindowsInvalid"));
+      return;
+    }
     if (allowPassword && password && password.length < 8) {
       toast.error(t("TemplateCloneDialog.passwordTooShort"));
       return;
@@ -257,8 +274,16 @@ export default function TemplateCloneDialog({ template, closing = false, onClose
             maxLength={64}
             placeholder={t("TemplateCloneDialog.passwordPlaceholder")}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordFlagged(false);
+            }}
+            aria-invalid={passwordFlagged || undefined}
           />
+          {/* 留空由系統產生（一定符合規則）；自己填才需要對照這份清單 */}
+          {isWindows && password && (
+            <PasswordRules password={password} rules={WINDOWS_PASSWORD_RULES} invalid={passwordFlagged} />
+          )}
           <div className={styles.policyNote}>
             <MIcon name="info" size={15} />
             {t("TemplateCloneDialog.passwordNotStoredNote")}

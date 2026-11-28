@@ -29,7 +29,6 @@ def _settings(**overrides: Any) -> ProxmoxSettings:
         "password": "pw",
         "verify_ssl": False,
         "iso_storage": "local",
-        "data_storage": "local-lvm",
         "api_timeout": 20,
         "task_check_interval": 7,
         "pool_name": "SkyLab",

@@ -781,7 +781,12 @@ export default function FirewallPage() {
             {rulesPanel.open && (
               <RulesPanel
                 key={rulesPanel.item.id}
-                node={{ vmid: Number(rulesPanel.item.id), name: rulesPanel.item.data.name }}
+                node={{
+                  vmid: Number(rulesPanel.item.id),
+                  name: rulesPanel.item.data.name,
+                  machine_kind: rulesPanel.item.data.machine_kind,
+                  teaching_class_name: rulesPanel.item.data.teaching_class_name,
+                }}
                 canManage={canManageNode(rulesPanel.item.data)}
                 closing={rulesPanel.closing}
                 onClose={() => setSelectedNode(null)}

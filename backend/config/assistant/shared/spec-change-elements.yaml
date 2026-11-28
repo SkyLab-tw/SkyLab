@@ -1,0 +1,35 @@
+# 規格調整（資源詳細頁的「規格」分頁）的欄位，使用者與管理員的資源詳細頁共用。
+elements:
+  - id: spec.cores
+    role: number
+    label: CPU 核心
+    help: 要調整成的核心數，可以拉桿或直接輸入；容器原本沒設核心上限時顯示「不限」，一動就變成設定上限。
+    constraints:
+      - 1 到 32 核
+      - 一般使用者最多只能調到「目前規格＋剩餘配額」
+    section: 規格
+  - id: spec.memory
+    role: number
+    label: 記憶體
+    help: 要調整成的記憶體大小，以 GB 輸入。
+    constraints:
+      - 0.5 到 64 GB，0.5 GB 一格
+      - 一般使用者最多只能調到「目前規格＋剩餘配額」
+    section: 規格
+  - id: spec.disk
+    role: number
+    label: 磁碟
+    help: 要放大到的磁碟大小（GB）；讀不到目前大小時暫時不能調整。
+    constraints:
+      - 只能放大，不能小於目前大小
+      - 最大 1000 GB（目前已超過時以目前大小為上限）
+      - 一般使用者最多只能調到「目前規格＋剩餘配額」
+    section: 規格
+  - id: spec.reason
+    role: textarea
+    label: 申請原因
+    help: 送出規格調整申請時要填，管理員審核時會看這一欄；管理員直接調整規格、或規格鎖住的課堂與快速練習機器，不會出現這一欄。
+    constraints:
+      - 必填
+      - 至少 10 個字元
+    section: 規格

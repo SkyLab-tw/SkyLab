@@ -23,7 +23,7 @@
   "FirewallPage.clearFocus": "Deselect",
   "FirewallPage.noMatch": "No machines match",
   "FirewallPage.internetLines": "Internet Lines",
-  "FirewallPage.hint": "Drag a node to move it; drag from the right side of a node to another node to create a connection; click a node to see its firewall rules; click a connection to see what it opens",
+  "FirewallPage.hint": "Drag a node to move it; drag from the edge of a node to another node to create a connection; click a node to see its firewall rules; click a connection to see what it opens",
   "FirewallPage.legendInbound": "Inbound",
   "FirewallPage.legendOutbound": "Outbound",
   "FirewallPage.legendInternal": "Internal",

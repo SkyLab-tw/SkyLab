@@ -62,7 +62,7 @@ If you leave the page with unsaved changes, you are asked to confirm first.
 
 | Field | Meaning | Notes |
 | --- | --- | --- |
-| CPU Overcommit Ratio | vCPUs allowed per physical core | 1–8, default 2 |
+| CPU Overcommit Ratio | vCPUs allowed per physical core | 1–8, default 5 |
 | Disk Overcommit Ratio | Disk space allowed per unit of real capacity | 1–5, default 1 (no overcommit) |
 | RAM Overcommit Ratio | Memory allocated to machines relative to physical memory; actual usage still cannot exceed physical memory | 1–2, default 1 (no overcommit) |
 | Node Reassignment Cost | Preference for keeping a machine on its current node | 0–5, default 0.15 |

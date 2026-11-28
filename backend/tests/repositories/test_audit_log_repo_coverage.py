@@ -77,6 +77,35 @@ def test_get_audit_logs_applies_every_filter(session: Session) -> None:
     assert count == 1 and "needle" in rows[0].details
 
 
+def test_search_matches_details_or_ip(session: Session) -> None:
+    """搜尋框提示寫「搜尋操作內容、IP」：輸入 IP 也要找得到。"""
+    _seed(session)
+    session.add(
+        AuditLog(
+            action=AuditAction.login_success.value,
+            details="system needle without address",
+            ip_address=None,
+            created_at=BASE + timedelta(minutes=10),
+        )
+    )
+    session.commit()
+
+    rows, count = repo.get_audit_logs(session=session, search="10.0.0.5")
+    assert count == 1 and rows[0].ip_address == "10.0.0.5"
+    # IP 的一部分也比對得到
+    _, count = repo.get_audit_logs(session=session, search="10.0.0.")
+    assert count == 6
+    # 沒有 IP 的紀錄仍然能用內容找到
+    rows, count = repo.get_audit_logs(session=session, search="needle")
+    assert count == 2
+    assert {row.ip_address for row in rows} == {"10.0.0.4", None}
+    # 匯出用同一組條件
+    exported = list(
+        repo.stream_audit_logs_for_export(session=session, search="10.0.0.5")
+    )
+    assert [row.ip_address for row in exported] == ["10.0.0.5"]
+
+
 def test_stream_export_paginates_with_keyset(session: Session) -> None:
     _, seeded = _seed(session)
 

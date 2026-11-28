@@ -301,6 +301,45 @@ def _build_gpu_hostpci(mapping_id: str, mdev_profile: str | None) -> str:
     return f"mapping={mapping_id}"
 
 
+def _is_q35_machine(machine: object) -> bool:
+    """VM config 的 ``machine`` 是不是 q35 機型。
+
+    格式是 ``[type=]<機型>[,viommu=…]``，q35 的機型寫成 ``q35`` 或
+    ``pc-q35-9.0+pve1``；沒設定時 PVE 用 i440fx。
+    """
+    if not machine:
+        return False
+    for part in str(machine).split(","):
+        key, has_value, value = part.strip().partition("=")
+        if not has_value:
+            return "q35" in key
+        if key == "type":
+            return "q35" in value
+    return False
+
+
+def build_gpu_hostpci_for_vm(
+    node: str, vmid: int, mapping_id: str, mdev_profile: str | None
+) -> str:
+    """要寫進這台 VM 的 GPU hostpci 字串；q35 機型會啟用 PCI-Express。
+
+    ``pcie=1`` 只有 q35 機型能用，其他機型帶了會開不了機，所以依這台機器
+    （克隆後沿用範本的機型）實際的 ``machine`` 決定。機型讀不到就讓建機
+    失敗，不猜。
+    """
+    hostpci = _build_gpu_hostpci(mapping_id, mdev_profile)
+    machine = proxmox_service.get_config(node, vmid, "qemu").get("machine")
+    if _is_q35_machine(machine):
+        return f"{hostpci},pcie=1"
+    logger.warning(
+        "VM %s 的機型是 %s（不是 q35），GPU %s 以一般 PCI 掛載，未啟用 PCIe",
+        vmid,
+        machine or "PVE 預設的 i440fx",
+        mapping_id,
+    )
+    return hostpci
+
+
 def _gpu_mapping_nodes(mapping_id: str | None) -> set[str]:
     if not mapping_id:
         return set()
@@ -886,8 +925,11 @@ def create_vm(
             config_updates["ciuser"] = vm_data.username
         gpu_mapping_id = getattr(vm_data, "gpu_mapping_id", None)
         if gpu_mapping_id:
-            config_updates["hostpci0"] = _build_gpu_hostpci(
-                gpu_mapping_id, getattr(vm_data, "gpu_mdev_profile", None)
+            config_updates["hostpci0"] = build_gpu_hostpci_for_vm(
+                target_node,
+                new_vmid,
+                gpu_mapping_id,
+                getattr(vm_data, "gpu_mdev_profile", None),
             )
         _ensure_resource_stopped(target_node, new_vmid, "qemu")
         proxmox_service.update_config(target_node, new_vmid, "qemu", **config_updates)
@@ -1410,8 +1452,11 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                     t("provisioning.vm_network_incomplete", vmid=new_vmid)
                 )
             if plan.get("gpu_mapping_id"):
-                config_updates["hostpci0"] = _build_gpu_hostpci(
-                    plan["gpu_mapping_id"], plan.get("gpu_mdev_profile")
+                config_updates["hostpci0"] = build_gpu_hostpci_for_vm(
+                    actual_node,
+                    new_vmid,
+                    plan["gpu_mapping_id"],
+                    plan.get("gpu_mdev_profile"),
                 )
             _ensure_resource_stopped(actual_node, new_vmid, "qemu")
             proxmox_service.update_config(

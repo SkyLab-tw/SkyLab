@@ -251,7 +251,7 @@ Notifications for unhealthy models, or for LiteLLM or its database being down, c
 |---|---|
 | `http_requests_total{method,path,status,workload}`, `http_request_duration_seconds{method,path,workload}` | Method/template classification: general API, AI generation, other; unmatched paths remain `<unmatched>`. Includes ASGI cleanup; the 600s bucket is not a timeout. |
 | `http_requests_in_progress` | Requests currently being handled |
-| `skylab_websocket_connections{kind}` | vnc / terminal / jobs / classroom / classroom_watch / course_progress |
+| `skylab_websocket_connections{kind}` | vnc / terminal / jobs / classroom / classroom_watch |
 | `skylab_scheduler_task_runs_total{loop,task,result}`, `skylab_scheduler_task_duration_seconds` | Scheduler task run count and duration |
 | `skylab_scheduler_task_last_success_timestamp_seconds`, `skylab_scheduler_task_consecutive_failures` | Heartbeats |
 | `skylab_scheduler_loop_last_tick_timestamp_seconds`, `skylab_scheduler_loop_is_leader` | Whether the loop is running, and whether this process is the leader |

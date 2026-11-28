@@ -1,0 +1,139 @@
+# 申請虛擬機 / 容器（/my-requests）
+id: request-form
+path: /my-requests
+title: 申請虛擬機 / 容器
+access: all
+order: 80
+purpose: 填寫申請表單後送出，管理員審核通過後系統會自動建立資源。密碼由申請人自己輸入（範本無法由平台設定密碼時，機器沿用範本內建的帳號密碼）。
+when_to_use: 需要一台自己的虛擬機或容器（做作業、專題、架服務），而且沒有現成的快速練習環境可用。
+sections:
+  - 申請模式
+  - 資源設定
+  - 硬體資源配置
+  - GPU 加速
+  - 租借時段
+  - 申請原因
+features:
+  - 資源設定：「資源名稱」只能用小寫英文、數字與連字符，不能以連字符開頭或結尾；「作業系統」可選老師／官方提供的環境範本，或虛擬機、容器的作業系統映像，選好後就決定建立成虛擬機還是容器，一次申請一台。
+  - 帳號：虛擬機要填「使用者名稱」並符合帳號命名規則；Windows 範本固定為 Admin、容器固定為 root。「密碼」至少 8 個字元，由你自己設定，平台不會保存；範本無法由平台設定密碼時不用填。
+  - 硬體資源配置：選了範本會帶入範本的建議規格，CPU、記憶體、硬碟都可以調整；可調範圍受你的剩餘配額限制，硬碟不能小於範本本身。機器數量已達配額上限（審核中的申請也算）時無法送出。
+  - GPU 加速：作業系統標示「（需 GPU）」或範本要求 GPU 時才出現，必須選一張 GPU；還沒選好租借時段（或用立即模式）時列出目前的可用數量，選好開始與結束時間後改依那個時段重新計算，送出前還會再即時檢查一次。
+  - 租借時段：要填開始與結束時間（未來三個月內），結束必須晚於開始；也可以用可用性月曆挑時段。送出前系統會確認這個時段有足夠資源。
+  - 老師與管理員多一個「申請模式」：「預約模式」同上，要等管理員審核；「立即模式」送出後直接核准並馬上開始部署，可勾「無限期 (No end date)」或設定結束時間。
+  - 「申請原因」至少 10 個字元，審核時會看這一欄；按「送出申請」送出，按「取消」或「返回」回到申請清單。
+  - 不知道選什麼規格時，可以請 AI 助手規劃配置，它會直接填進這張表（帳號與密碼不會代填，送出前請逐項確認）。
+# constraints 逐條對應 RequestFormPage.validate()，改動驗證規則時這裡要一起改。
+elements:
+  - id: request.hostname
+    role: text
+    label: 資源名稱
+    help: 這台機器在平台上的識別名稱；離開欄位時會自動轉成小寫，其他字元換成連字符。選容器範本時若還沒填會帶入範本名稱。
+    constraints:
+      - 必填
+      - 只能使用小寫英文字母、數字與連字符
+      - 不能以連字符開頭或結尾
+      - 最長 63 個字元
+    section: 資源設定
+  - id: request.os
+    role: select
+    label: 作業系統
+    help: 可以套用老師或官方準備好的環境範本，也可以從作業系統映像自行安裝；選好就決定建立成虛擬機還是容器。需要 GPU、Windows（或其他非 Linux 系統）、Docker／Kubernetes、VPN 或核心模組時選虛擬機；一般 Linux 服務（網站、資料庫、開發環境）用容器即可。一次申請一台。
+    constraints:
+      - 必填
+    section: 資源設定
+  - id: request.username
+    role: text
+    label: 使用者名稱
+    help: 登入這台機器要用的帳號，輸入時會即時檢查命名規則。
+    constraints:
+      - 虛擬機必填
+      - 必須符合帳號命名規則，標成錯誤的項目會擋住送出
+      - Windows 範本的登入帳號固定為 Admin，不需要填
+      - LXC 容器的登入帳號固定為 root，不需要填
+    section: 資源設定
+  - id: request.password
+    role: text
+    label: 密碼
+    help: 登入這台機器要用的密碼，一律由申請人自己輸入；平台不會保存，忘記只能到機器的進階設定重設。
+    constraints:
+      - 必填；範本無法由平台設定密碼時沒有輸入框，改寫明機器會沿用範本內建的帳號密碼
+      - 至少 8 個字元
+      - Windows 範本還要至少包含三類字元，且不能包含帳號名稱 Admin
+    sensitive: true
+    section: 資源設定
+  - id: request.cores
+    role: number
+    label: CPU 核心數
+    help: 選了範本會帶入範本的建議規格，可以依需求調整。
+    constraints:
+      - 1 到 8 核
+      - 不能超過剩餘配額
+    section: 硬體資源配置
+  - id: request.memory
+    role: number
+    label: 記憶體 (RAM)
+    help: 以 GB 輸入，選了範本會帶入範本的建議規格，可以依需求調整。
+    constraints:
+      - 0.5 到 32 GB，0.5 GB 一格
+      - 不能超過剩餘配額
+    section: 硬體資源配置
+  - id: request.disk
+    role: number
+    label: 硬碟空間 (Disk)
+    help: 選了範本會帶入範本本身的大小，可以放大。
+    constraints:
+      - 不可小於範本本身的大小（沒有範本時容器至少 8 GB、虛擬機至少 20 GB）
+      - 最大 500 GB（範本本身更大時以範本大小為準）
+      - 不能超過剩餘配額
+    section: 硬體資源配置
+  - id: request.gpu
+    role: select
+    label: 選擇 GPU
+    help: GPU 會依所選的租借時段重新計算可用性，已滿的不能選；送出前系統還會再做一次即時檢查。
+    constraints:
+      - 作業系統標示需要 GPU、或所選範本需要 GPU 時才出現，出現時必填
+      - 還沒選好租借時段時列出目前的可用數量，開始與結束時間都選好後依該時段重新計算
+    section: GPU 加速
+  - id: request.vgpu
+    role: select
+    label: vGPU 規格
+    help: 所選 GPU 可以切分時才出現；依需要的 GPU 記憶體選擇，預設是最小的可用規格，標「（記憶體不足）」的不能選。
+    section: GPU 加速
+  - id: request.mode
+    role: toggle
+    label: 申請模式
+    help: 只有老師與管理員看得到，學生一律是預約模式。預約模式要指定起訖時間並等管理員審核；立即模式送出後直接核准並開始部署，不需要選開始時間。
+    section: 申請模式
+  - id: request.start_at
+    role: date
+    label: 開始時間
+    constraints:
+      - 預約模式必填
+      - 必須在未來三個月內
+    section: 租借時段
+  - id: request.end_at
+    role: date
+    label: 結束時間
+    constraints:
+      - 預約模式必填
+      - 必須晚於開始時間
+      - 必須在未來三個月內
+      - 立即模式取消勾選「無限期 (No end date)」才要填，必須晚於現在
+    section: 租借時段
+  - id: request.reason
+    role: textarea
+    label: 申請原因
+    help: 說明這台機器要拿來做什麼，審核時會看這一欄。
+    constraints:
+      - 必填
+      - 至少 10 個字元
+    section: 申請原因
+  - id: request.submit
+    role: button
+    label: 送出申請
+    help: 預約模式送出後由管理員審核，通過才會開始建立；老師與管理員用立即模式送出時直接核准並開始建立。按下去才會檢查欄位，有問題的欄位會標紅並跳到第一個。
+related:
+  - path: /quick-create
+    when: 只是要練習，老師已經發布練習環境
+  - path: /my-resources
+    when: 已經有機器，只是要調規格或延長使用

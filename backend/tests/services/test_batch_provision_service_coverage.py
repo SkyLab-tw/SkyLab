@@ -169,25 +169,30 @@ def test_submit_requires_duration_for_recurrence(
 
 
 # ---------------------------------------------------------------------------
-# approve / reject / review
+# review
 # ---------------------------------------------------------------------------
 
 
-def test_approve_unknown_job(db: Session) -> None:
+def test_review_unknown_job(db: Session) -> None:
     with pytest.raises(BadRequestError):
-        svc.approve_batch_job(session=db, job_id=uuid.uuid4(), reviewer_id=REVIEWER)
+        svc.review_batch_jobs(
+            session=db,
+            job_ids=[uuid.uuid4()],
+            reviewer_id=REVIEWER,
+            decision=BatchProvisionJobStatus.approved,
+        )
 
 
-def test_approve_job_no_longer_pending(db: Session) -> None:
+def test_review_job_no_longer_pending(db: Session) -> None:
     item = _class(db)
     job = _job(db, item.id, users=[uuid.uuid4()])
     with pytest.raises(BadRequestError):
-        svc.approve_batch_job(session=db, job_id=job.id, reviewer_id=REVIEWER)
-
-
-def test_reject_unknown_job(db: Session) -> None:
-    with pytest.raises(BadRequestError):
-        svc.reject_batch_job(session=db, job_id=uuid.uuid4(), reviewer_id=REVIEWER)
+        svc.review_batch_jobs(
+            session=db,
+            job_ids=[job.id],
+            reviewer_id=REVIEWER,
+            decision=BatchProvisionJobStatus.approved,
+        )
 
 
 def test_reject_pending_job_then_again(db: Session) -> None:
@@ -199,13 +204,25 @@ def test_reject_pending_job_then_again(db: Session) -> None:
         status=BatchProvisionJobStatus.pending_review,
         reviewer_id=None,
     )
-    svc.reject_batch_job(
-        session=db, job_id=job.id, reviewer_id=REVIEWER, review_comment="no"
+    reviewed = svc.review_batch_jobs(
+        session=db,
+        job_ids=[job.id],
+        reviewer_id=REVIEWER,
+        decision=BatchProvisionJobStatus.rejected,
+        review_comment="no",
     )
+    assert [row.id for row in reviewed] == [job.id]
     db.expire_all()
-    assert db.get(BatchProvisionJob, job.id).status == BatchProvisionJobStatus.rejected
+    stored = db.get(BatchProvisionJob, job.id)
+    assert stored.status == BatchProvisionJobStatus.rejected
+    assert stored.review_comment == "no"
     with pytest.raises(BadRequestError):
-        svc.reject_batch_job(session=db, job_id=job.id, reviewer_id=REVIEWER)
+        svc.review_batch_jobs(
+            session=db,
+            job_ids=[job.id],
+            reviewer_id=REVIEWER,
+            decision=BatchProvisionJobStatus.rejected,
+        )
 
 
 def test_review_requires_job_ids(db: Session) -> None:

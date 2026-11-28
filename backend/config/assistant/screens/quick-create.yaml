@@ -1,0 +1,36 @@
+# 快速練習（/quick-create）
+id: quick-create
+path: /quick-create
+title: 快速練習
+access: all
+order: 90
+purpose: 列出目前可以直接啟動的練習環境模板，學生、教師與管理者都能用；選一個模板後到確認頁啟動，免人工審核。
+when_to_use: 想馬上有一組練習環境、不想等審核，而且老師已經發布了合適的練習模板。
+sections:
+  - 模板清單
+features:
+  - 每張資料夾卡片是一組老師發布成快速練習的教學環境：寫著環境名稱、說明，以及每人合計的 CPU、記憶體與可用時數；夾在裡面的每張紙是一台機器（名稱、VM 或 LXC、角色）。
+  - 清單不分班級，所有登入的人看到的都一樣。
+  - 點卡片進到「啟動快速練習」確認頁，還不會真的開始建立。
+  - 練習環境有時數限制，時間到系統會關機並回收整組機器；需要長期使用的機器請改走一般申請。
+elements:
+  - id: quick_create.empty
+    role: readonly
+    label: 目前沒有可快速練習的模板
+    help: 還沒有老師把教學環境發布成快速練習時顯示。
+    section: 模板清單
+  - id: quick_create.load_failed
+    role: readonly
+    label: 暫時無法載入練習環境
+    help: 清單載入失敗時顯示，按「重試」重新載入。
+    section: 模板清單
+  - id: quick_create.retry
+    role: button
+    label: 重試
+    help: 清單載入失敗時重新載入。
+    section: 模板清單
+related:
+  - path: /my-requests
+    when: 需要自己決定規格或長期使用的機器
+  - path: /my-resources
+    when: 已經啟動，要開始使用機器

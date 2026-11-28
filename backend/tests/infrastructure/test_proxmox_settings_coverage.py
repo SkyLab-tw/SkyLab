@@ -21,13 +21,11 @@ def _conn(cid: int) -> Any:
         user="root@pam",
         verify_ssl=False,
         iso_storage="local",
-        data_storage="local-lvm",
         api_timeout=15,
         task_check_interval=3,
         pool_name="SkyLab",
         ca_cert=None,
         gateway_ip=None,
-        local_subnet=None,
         default_node=None,
         backup_storage=None,
     )

@@ -940,7 +940,18 @@ def test_get_rrd_stats(monkeypatch) -> None:
 
 @pytest.fixture
 def spec_env(monkeypatch):
-    calls: dict[str, list] = {"config": [], "resize": [], "audit": []}
+    calls: dict[str, Any] = {
+        "config": [],
+        "resize": [],
+        "audit": [],
+        # 機器在 PVE 上的 config：direct_update_spec 靠它找要放大的開機磁碟
+        "vm_config": {"scsi0": "local-lvm:vm-1-disk-0,size=20G"},
+    }
+    monkeypatch.setattr(
+        resource_service.proxmox_service,
+        "get_config",
+        lambda node, vmid, rtype, *, current=False: calls["vm_config"],
+    )
     monkeypatch.setattr(
         resource_service.proxmox_service,
         "update_config",
@@ -972,6 +983,54 @@ def test_direct_update_spec_all_fields_qemu(spec_env) -> None:
     assert spec_env["config"] == [{"cores": 4, "memory": 2048}]
     assert spec_env["resize"] == [("scsi0", "+10G")]
     assert "Disk: +10G" in out["message"]
+
+
+def test_direct_update_spec_resizes_the_boot_disk_when_it_is_not_scsi0(
+    spec_env,
+) -> None:
+    # Windows 沒裝 VirtIO 驅動的機器：開機磁碟在 sata0，另掛驅動光碟
+    spec_env["vm_config"] = {
+        "sata0": "local-lvm:vm-1-disk-0,size=60G",
+        "ide2": "local:iso/virtio-win.iso,media=cdrom",
+    }
+    resource_service.direct_update_spec(
+        session=FakeSession(),
+        vmid=1,
+        resource_info={"node": "n", "type": "qemu"},
+        user_id=uuid.uuid4(),
+        disk_size="+10G",
+    )
+    assert spec_env["resize"] == [("sata0", "+10G")]
+
+
+def test_direct_update_spec_rejects_vm_without_boot_disk_before_any_change(
+    spec_env,
+) -> None:
+    spec_env["vm_config"] = {"cores": 2, "net0": "virtio=AA:BB:CC:DD:EE:FF"}
+    with pytest.raises(ProxmoxError):
+        resource_service.direct_update_spec(
+            session=FakeSession(),
+            vmid=1,
+            resource_info={"node": "n", "type": "qemu"},
+            user_id=uuid.uuid4(),
+            cores=4,
+            disk_size="+10G",
+        )
+    assert spec_env["resize"] == []
+    assert spec_env["config"] == []  # 找不到磁碟就整筆不做，不留下只改了 CPU 的機器
+    assert spec_env["audit"] == []
+
+
+def test_direct_update_spec_container_resizes_rootfs(spec_env) -> None:
+    spec_env["vm_config"] = {"rootfs": "local-lvm:subvol-1-disk-0,size=8G"}
+    resource_service.direct_update_spec(
+        session=FakeSession(),
+        vmid=1,
+        resource_info={"node": "n", "type": "lxc"},
+        user_id=uuid.uuid4(),
+        disk_size="+5G",
+    )
+    assert spec_env["resize"] == [("rootfs", "+5G")]
 
 
 def test_direct_update_spec_errors(spec_env) -> None:

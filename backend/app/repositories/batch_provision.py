@@ -75,46 +75,6 @@ def create_job(
     return job
 
 
-def transition_pending_review(
-    *,
-    session: Session,
-    job_id: uuid.UUID,
-    reviewer_id: uuid.UUID,
-    decision: BatchProvisionJobStatus,
-    review_comment: str | None = None,
-) -> BatchProvisionJob | None:
-    """Atomically transition a job from ``pending_review`` to ``decision``.
-
-    Uses a conditional UPDATE so two concurrent admin requests can't both
-    see ``pending_review`` and each spawn a worker. Returns the refreshed job
-    on success, or ``None`` if the job doesn't exist or is no longer pending
-    (i.e. another reviewer already won the race).
-    """
-    import sqlalchemy as sa
-
-    now = datetime.now(UTC)
-    result = session.exec(
-        sa.update(BatchProvisionJob)
-        .where(
-            BatchProvisionJob.id == job_id,
-            BatchProvisionJob.status == BatchProvisionJobStatus.pending_review,
-        )
-        .values(
-            status=decision,
-            reviewer_id=reviewer_id,
-            reviewed_at=now,
-            review_comment=(review_comment or None),
-        )
-    )
-    if result.rowcount == 0:
-        return None
-    session.commit()
-    job = session.get(BatchProvisionJob, job_id)
-    if job is not None:
-        session.refresh(job)
-    return job
-
-
 def transition_pending_reviews(
     *,
     session: Session,
@@ -123,7 +83,12 @@ def transition_pending_reviews(
     decision: BatchProvisionJobStatus,
     review_comment: str | None = None,
 ) -> list[BatchProvisionJob]:
-    """Atomically review every job in one teaching-class submission."""
+    """Atomically review every job in one teaching-class submission.
+
+    Uses a conditional UPDATE so two concurrent admin requests can't both see
+    ``pending_review`` and each spawn workers: unless every job is still
+    pending, nothing changes and an empty list comes back.
+    """
     import sqlalchemy as sa
 
     wanted = list(dict.fromkeys(job_ids))

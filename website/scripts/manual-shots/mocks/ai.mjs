@@ -396,7 +396,7 @@ export function monitoringMocks(m, opts = {}) {
       return { data, count: 1268 };
     }],
     ["GET", /^\/api\/v1\/ai-api\/monitoring\/template-calls$/, () => {
-      const types = ["template_recommendation", "ai_navigation", "teacher_judge", "pve_log_chat", "contextual_help"];
+      const types = ["template_recommendation", "ai_assistant", "teacher_judge", "pve_log_chat", "ai_assistant_adherence"];
       const data = Array.from({ length: 12 }, (_, i) => {
         const u = who[(i + 2) % who.length];
         const input = 900 + ((i * 211) % 2400);

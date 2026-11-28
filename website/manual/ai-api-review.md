@@ -1,6 +1,6 @@
 # AI API review
 
-Review the AI API key requests that users submit on their AI API page. Approving a request immediately issues the applicant a key that starts with `ccai_`. Sidebar: Review → AI API review. Path: `/ai-api-review`. The page title reads **Request Review**.
+Review the AI API key requests that users submit on their AI API page. Approving a request immediately issues the applicant a key that starts with `ccai_`. Sidebar: Review → AI API review. Path: `/ai-api-review`.
 
 ## Who can use it
 

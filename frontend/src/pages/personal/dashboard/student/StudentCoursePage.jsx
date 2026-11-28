@@ -16,8 +16,8 @@ import { ResourcesService } from "../../../../services/resources";
 import {
   courseKeys,
   useAiAssignmentsQuery,
-  useCoursePathQuery,
-  useCoursePathsQuery,
+  useCourseClassQuery,
+  useCourseClassesQuery,
   useCourseScheduleQuery,
   usePracticeMachinesQuery,
   useWeeklyTasksQuery,
@@ -28,8 +28,8 @@ import {
   buildPracticeMachines,
   formatAssignmentDate,
   normalizeSchedule,
+  pickCurrentCourse,
   pickCurrentWeek,
-  pickInProgress,
   practiceMachineActionLabel,
   waitForPracticeMachine,
 } from "./studentDashboard";
@@ -55,18 +55,9 @@ function createGuideDemoCourse(t) {
     loading: false,
     hasError: false,
     resources: [],
-    activePath: {
+    activeCourse: {
       id: "demo",
       title: t("StudentCoursePage.guideDemoCourseTitle"),
-      description: t("StudentCoursePage.guideDemoCourseDescription"),
-      progress_percent: 50,
-    },
-    pathDetail: {
-      rooms: [{
-        id: "demo-room",
-        title: t("StudentCoursePage.guideDemoWeekTitle"),
-        progress_percent: 50,
-      }],
     },
     aiAssignments: [{
       id: "demo-assignment",
@@ -100,15 +91,15 @@ function createGuideDemoCourse(t) {
 }
 
 /**
- * 學生端單一課程頁（/courses/:pathId）。
+ * 學生端單一課程頁（/courses/:classId）。課程就是學生所在的班級，classId 是班級 id。
  * 內容分三塊：課堂卡片（進度與環境）、課堂機器、截至今天的 AI 任務。
  */
 export default function StudentCoursePage() {
   const { t } = useTranslation("personal");
   const navigate = useNavigate();
   const location = useLocation();
-  const { pathId } = useParams();
-  const isGuideDemo = pathId === "demo";
+  const { classId } = useParams();
+  const isGuideDemo = classId === "demo";
 
   const queryClient = useQueryClient();
   const [expandedAssignmentId, setExpandedAssignmentId] = useState(null);
@@ -119,29 +110,34 @@ export default function StudentCoursePage() {
   /* 課程清單、課表與我的機器跟首頁／課程列表／我的資源頁共用快取；選定課程後才抓該課程的
      任務、週次與機器（與週任務頁共用同一份，點進週次不必再等）。導覽示範模式不讀課程 API。 */
   const live = !isGuideDemo;
-  const pathsQuery = useCoursePathsQuery({ enabled: live });
+  const classesQuery = useCourseClassesQuery({ enabled: live });
   const resourcesQuery = useMyResourcesQuery();
   const scheduleQuery = useCourseScheduleQuery({ enabled: live });
-
-  // 網址指定的課程優先；找不到時退回目前進行中的課程。
-  // 退回時畫面顯示的是另一門課，後續導覽與寫入一律用 activePath.id，不要用網址的 pathId。
-  const catalogPaths = asArray(pathsQuery.data);
-  const catalogPath = live
-    ? (pathId && catalogPaths.find((path) => String(path.id) === String(pathId))) || pickInProgress(catalogPaths)
-    : null;
-  const activePathId = catalogPath?.id ?? null;
-  const detailEnabled = live && activePathId != null;
-  /* 課程詳情這頁沒有用到，照原本一起抓、放進快取給週任務頁（頁首的課程名稱） */
-  useCoursePathQuery(activePathId, { enabled: detailEnabled });
-  const aiAssignmentsQuery = useAiAssignmentsQuery(activePathId, { enabled: detailEnabled });
-  const weeklyTasksQuery = useWeeklyTasksQuery(activePathId, { enabled: detailEnabled });
-  const practiceMachinesQuery = usePracticeMachinesQuery(activePathId, { enabled: detailEnabled });
-  const resourceCache = useResourceCacheUpdater();
   /* 首次載入還沒有資料才算載入中／載入失敗；背景刷新失敗沿用上一份。
      首載失敗後背景輪詢重試期間維持失敗提示，不閃回整頁載入中（見 useQueryView） */
-  const pathsView = useQueryView(pathsQuery);
+  const classesView = useQueryView(classesQuery);
   const resourcesView = useQueryView(resourcesQuery);
   const scheduleView = useQueryView(scheduleQuery);
+
+  // 網址指定的課程優先；找不到時退回課表上排最前面的那一門（見 pickCurrentCourse）。
+  // 退回要看課表，所以課表還在首次載入時先不挑，免得先抓錯一門課的任務再換。
+  // 退回時畫面顯示的是另一門課，後續導覽與寫入一律用 activeCourse.id，不要用網址的 classId。
+  const myCourses = asArray(classesQuery.data);
+  const requestedCourse = live && classId
+    ? myCourses.find((course) => String(course.id) === String(classId)) ?? null
+    : null;
+  const fallbackCourse = live && !requestedCourse && !scheduleView.loading
+    ? pickCurrentCourse(myCourses, asArray(scheduleQuery.data))
+    : null;
+  const activeCourse = requestedCourse ?? fallbackCourse;
+  const activeClassId = activeCourse?.id ?? null;
+  const detailEnabled = live && activeClassId != null;
+  /* 課程詳情這頁沒有用到，照原本一起抓、放進快取給週任務頁（頁首的課程名稱） */
+  useCourseClassQuery(activeClassId, { enabled: detailEnabled });
+  const aiAssignmentsQuery = useAiAssignmentsQuery(activeClassId, { enabled: detailEnabled });
+  const weeklyTasksQuery = useWeeklyTasksQuery(activeClassId, { enabled: detailEnabled });
+  const practiceMachinesQuery = usePracticeMachinesQuery(activeClassId, { enabled: detailEnabled });
+  const resourceCache = useResourceCacheUpdater();
   const aiAssignmentsView = useQueryView(aiAssignmentsQuery);
   const weeklyTasksView = useQueryView(weeklyTasksQuery);
   const practiceMachinesView = useQueryView(practiceMachinesQuery);
@@ -150,18 +146,18 @@ export default function StudentCoursePage() {
   if (isGuideDemo) {
     view = createGuideDemoCourse(t);
   } else {
-    const scheduleRow = asArray(scheduleQuery.data).find((row) => String(row.id) === String(activePathId));
+    const scheduleRow = asArray(scheduleQuery.data).find((row) => String(row.id) === String(activeClassId));
     view = {
-      loading: pathsView.loading || resourcesView.loading || scheduleView.loading
+      loading: classesView.loading || resourcesView.loading || scheduleView.loading
         || (detailEnabled && (
           aiAssignmentsView.loading || weeklyTasksView.loading || practiceMachinesView.loading
         )),
       // 任一來源失敗都要提示；只有課程清單失敗時若不提示，會被誤認成「目前沒有課程」
-      hasError: Boolean(pathsView.error || resourcesView.error),
+      hasError: Boolean(classesView.error || resourcesView.error),
       resources: asArray(resourcesQuery.data?.resources),
-      activePath: catalogPath && scheduleRow
-        ? { ...catalogPath, schedule: normalizeSchedule(scheduleRow).schedule }
-        : catalogPath,
+      activeCourse: activeCourse && scheduleRow
+        ? { ...activeCourse, schedule: normalizeSchedule(scheduleRow).schedule }
+        : activeCourse,
       aiAssignments: asArray(aiAssignmentsQuery.data),
       weeklyTasks: asArray(weeklyTasksQuery.data),
       practiceMachines: asArray(practiceMachinesQuery.data),
@@ -201,7 +197,7 @@ export default function StudentCoursePage() {
     }
     group.assignments.push(assignment);
   });
-  const currentSchedule = view.activePath?.schedule;
+  const currentSchedule = view.activeCourse?.schedule;
   // 本週進度：這週的打勾狀態、檢查通過幾項、老師回覆
   const currentWeek = pickCurrentWeek(view.weeklyTasks);
   const currentWeekGroup = currentWeek
@@ -273,11 +269,11 @@ export default function StudentCoursePage() {
     ));
     setReportingAssignmentId(group.id);
     setExpandedAssignmentId(group.id);
-    const coursePathId = view.activePath.id;
+    const courseClassId = view.activeCourse.id;
     try {
       const results = await Promise.allSettled(group.assignments.map((assignment) => (
         CoursesService.updateAssignmentCompletion(
-          coursePathId,
+          courseClassId,
           assignment.id,
           completed,
         )
@@ -289,7 +285,7 @@ export default function StudentCoursePage() {
         }
       });
       /* 就地改任務快取的完成狀態；先取消還在路上的重抓，免得送出前的舊快照蓋回來 */
-      const assignmentsKey = courseKeys.aiAssignments(coursePathId);
+      const assignmentsKey = courseKeys.aiAssignments(courseClassId);
       await queryClient.cancelQueries({ queryKey: assignmentsKey });
       queryClient.setQueryData(assignmentsKey, (current) => (Array.isArray(current)
         ? current.map((item) => (
@@ -320,7 +316,7 @@ export default function StudentCoursePage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={view.activePath?.title ?? t("StudentCoursePage.defaultCourseTitle")}>
+      <PageHeader title={view.activeCourse?.title ?? t("StudentCoursePage.defaultCourseTitle")}>
         <button
           type="button"
           className={styles.backBtn}
@@ -386,7 +382,7 @@ export default function StudentCoursePage() {
                         type="button"
                         className={styles.assignmentToggle}
                         onClick={() => group.week
-                          ? navigate(`/courses/${view.activePath?.id ?? pathId}/weeks/${group.week.id}`)
+                          ? navigate(`/courses/${view.activeCourse?.id ?? classId}/weeks/${group.week.id}`)
                           : toggleAssignment(group.id)}
                         aria-expanded={expanded}
                         aria-controls={`assignment-detail-${group.id}`}
@@ -529,7 +525,7 @@ export default function StudentCoursePage() {
                 <button
                   type="button"
                   className={styles.weekOpenBtn}
-                  onClick={() => navigate(`/courses/${view.activePath?.id ?? pathId}/weeks/${currentWeek.id}`)}
+                  onClick={() => navigate(`/courses/${view.activeCourse?.id ?? classId}/weeks/${currentWeek.id}`)}
                 >
                   {t("StudentCoursePage.openThisWeek")}
                   <MIcon name="arrow_forward" size={17} />

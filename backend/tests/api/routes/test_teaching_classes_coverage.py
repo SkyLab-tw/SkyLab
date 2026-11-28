@@ -97,9 +97,6 @@ def _stub_services(monkeypatch, tmp_path):
     monkeypatch.setattr(
         lifecycle, "remove_task_file_blob", recorder("remove_task_file_blob")
     )
-    monkeypatch.setattr(
-        routes.course_service, "ensure_class_path", recorder("ensure_class_path")
-    )
     provision = routes.class_provision_service
     for name in (
         "select_course",
@@ -321,7 +318,6 @@ def test_create_class(db: Session, _stub_services) -> None:
     assert data["name"] == "Net"
     assert data["code"].startswith("cls-")
     assert data["owner_id"] == TEACHER.id
-    assert "ensure_class_path" in _stub_services
     assert "generate_weeks" in _stub_services
 
 

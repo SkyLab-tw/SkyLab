@@ -57,7 +57,6 @@ const AiApiKeysPage = lazy(() => import("./pages/ai/ai-api-keys/AiApiKeysPage"))
 const AiMonitoringPage = lazy(() => import("./pages/ai/ai-monitoring/AiMonitoringPage"));
 
 // 教學
-const CourseCmsPage = lazy(() => import("./pages/teaching/course-cms/CourseCmsPage"));
 const CourseTemplateManagementPage = lazy(() => import("./pages/course-operations/course-templates/CourseTemplateManagementPage"));
 const CourseTemplateEditorPage = lazy(() => import("./pages/course-operations/course-templates/CourseTemplateEditorPage"));
 const ClassManagementPage = lazy(() => import("./pages/course-operations/class-management/ClassManagementPage"));
@@ -113,8 +112,8 @@ function LegacyAiJudgeEditorRedirect() {
 }
 
 function LegacyStudentCourseRedirect() {
-  const { pathId } = useParams();
-  return <Navigate to={`/courses/${encodeURIComponent(pathId)}`} replace />;
+  const { classId } = useParams();
+  return <Navigate to={`/courses/${encodeURIComponent(classId)}`} replace />;
 }
 
 /** 舊「系統設定」的 ?tab= 值 → 升格後的獨立頁面；沒帶 tab 就是原本的第一個分頁（PVE 連線）。 */
@@ -245,9 +244,9 @@ function App() {
           />
           {/* 單一課程總覽：課堂環境、課堂機器與截至今天的 AI 任務 */}
           <Route path="/courses" element={canViewCourses ? <StudentCoursesPage /> : <Navigate to="/dashboard" replace />} />
-          <Route path="/courses/:pathId" element={canViewCourses ? <StudentCoursePage /> : <Navigate to="/dashboard" replace />} />
-          <Route path="/courses/:pathId/weeks/:weekId" element={canViewCourses ? <StudentWeekPage /> : <Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard/course/:pathId" element={canViewCourses ? <LegacyStudentCourseRedirect /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/courses/:classId" element={canViewCourses ? <StudentCoursePage /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/courses/:classId/weeks/:weekId" element={canViewCourses ? <StudentWeekPage /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard/course/:classId" element={canViewCourses ? <LegacyStudentCourseRedirect /> : <Navigate to="/dashboard" replace />} />
           {/* 快速練習：學生、老師、管理者共用，側欄「教學」群組的入口 */}
           <Route path="/quick-create"         element={<QuickCreatePage />} />
           <Route path="/quick-template/:id"   element={<QuickTemplateFormPage />} />
@@ -282,9 +281,6 @@ function App() {
             path="/ai-management"
             element={<Navigate to={isAdmin ? "/ai-monitoring" : "/ai-api"} replace />}
           />
-
-          {/* 教學 */}
-          <Route path="/course-cms"            element={canTeach ? <CourseCmsPage /> : <Navigate to="/dashboard" replace />} />
 
           {/* 課務管理 */}
           <Route path="/course-template-management" element={canTeach ? <CourseTemplateManagementPage /> : <Navigate to="/dashboard" replace />} />

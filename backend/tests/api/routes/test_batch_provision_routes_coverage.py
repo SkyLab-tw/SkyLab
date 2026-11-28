@@ -146,42 +146,6 @@ def test_recurrence_preview_stops_when_exhausted(
 # ─── 審核 ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("decision", ["approved", "rejected"])
-def test_review_batch_job(monkeypatch: pytest.MonkeyPatch, decision: str) -> None:
-    calls: list[str] = []
-    monkeypatch.setattr(
-        bp.batch_provision_service,
-        "approve_batch_job",
-        lambda **kw: calls.append("approve"),
-    )
-    monkeypatch.setattr(
-        bp.batch_provision_service,
-        "reject_batch_job",
-        lambda **kw: calls.append("reject"),
-    )
-    job = _job()
-    _get_job(monkeypatch, job)
-    body = BatchProvisionReviewRequest(decision=decision, review_comment="ok")
-    assert bp.review_batch_job(
-        job_id=job.id, body=body, session=_FakeSession(), current_user=_user()
-    ) == ("public", job.id)
-    assert calls == ["approve" if decision == "approved" else "reject"]
-
-
-def test_review_batch_job_missing_after_review(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        bp.batch_provision_service, "approve_batch_job", lambda **kw: None
-    )
-    _get_job(monkeypatch, None)
-    with pytest.raises(NotFoundError):
-        bp.review_batch_job(
-            job_id=uuid.uuid4(),
-            body=BatchProvisionReviewRequest(decision="approved"),
-            session=_FakeSession(),
-            current_user=_user(),
-        )
-
-
 def test_review_teaching_class_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(NotFoundError):
         bp.review_teaching_class_jobs(

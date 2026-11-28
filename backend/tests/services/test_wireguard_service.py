@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ConflictError
 from app.models.wireguard_peer import WireGuardPeer
 from app.schemas import ResourcePublic
@@ -27,9 +29,10 @@ def _public_key(seed: int = 1) -> str:
 
 
 def test_validate_public_key_rejects_malformed_values() -> None:
-    with pytest.raises(BadRequestError, match="Invalid WireGuard public key"):
+    invalid_key = re.escape(t("wireguard.invalidPublicKey"))
+    with pytest.raises(BadRequestError, match=invalid_key):
         wireguard_service._validate_public_key("not-a-key")
-    with pytest.raises(BadRequestError, match="Invalid WireGuard public key"):
+    with pytest.raises(BadRequestError, match=invalid_key):
         wireguard_service._validate_public_key(base64.b64encode(bytes(32)).decode())
 
 
@@ -256,7 +259,9 @@ def test_gateway_acl_rejects_new_target_outside_configured_subnet(
         lambda _session: SimpleNamespace(cidr="192.168.60.0/24"),
     )
 
-    with pytest.raises(BadRequestError, match="Stored WireGuard ACL endpoint"):
+    with pytest.raises(
+        BadRequestError, match=re.escape(t("wireguard.storedAclEndpointInvalid"))
+    ):
         wireguard_service._sync_gateway_peer(
             session=session,
             public_key=_public_key(1),
@@ -526,7 +531,9 @@ def test_refresh_rejects_expired_peer(monkeypatch) -> None:
         lambda **_: peer,
     )
 
-    with pytest.raises(ConflictError, match="inactive or expired"):
+    with pytest.raises(
+        ConflictError, match=re.escape(t("wireguard.sessionInactiveOrExpired"))
+    ):
         wireguard_service.refresh(
             session=object(), user_id=user_id, device_id="device-1234"
         )

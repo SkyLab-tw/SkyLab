@@ -12,6 +12,7 @@ from fastapi import UploadFile
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
     CourseEnvironment,
@@ -386,8 +387,30 @@ def test_publish_rejects_invalid_draft(
     environment, _ = _environment(
         db, draft_data=_draft(configuration).model_dump(mode="json")
     )
-    with pytest.raises(BadRequestError):
+    with pytest.raises(BadRequestError) as caught:
         svc.publish(db, environment, TEACHER)
+    # 老師看到的是一句話，不是 pydantic 的英文原文加欄位路徑
+    assert "validation error" not in str(caught.value)
+    assert "[type=" not in str(caught.value)
+
+
+def test_publish_reports_which_machine_is_missing_a_role(db: Session) -> None:
+    template = _template(db)
+    node = _node(template.id).model_dump(mode="json")
+    node["role"] = ""
+    environment, version = _environment(
+        db, draft_data=_draft({"name": "Lab", "nodes": [node]}).model_dump(mode="json")
+    )
+    with pytest.raises(BadRequestError) as caught:
+        svc.publish(db, environment, TEACHER)
+    assert str(caught.value) == t(
+        "course_env.publish_machine_field_blank",
+        machine=t("course_env.publish_machine_named", name="Web"),
+        field=t("course_env.field_role"),
+    )
+    # 被擋下的草稿原封不動留著，老師回去改完還能再發布
+    assert version.status == CourseEnvironmentVersionStatus.draft
+    assert version.draft_data is not None
 
 
 def test_publish_existing_configuration_without_draft(db: Session) -> None:

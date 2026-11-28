@@ -18,6 +18,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.domain.placement.models import PlacementTuning, WorkingStoragePool
 from app.domain.placement.schemas import NodeCapacity, ResourceSnapshot
 from app.exceptions import BadRequestError
+from app.infrastructure.proxmox import operations as ops
 from app.models import SpecChangeRequest, SpecChangeRequestStatus, SpecChangeType
 from app.schemas import SpecChangeRequestReview
 from app.services.vm import pending_capacity, placement_support
@@ -127,7 +128,10 @@ def cluster(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         SimpleNamespace(
             find_resource=lambda vmid: {"node": "node-a", "type": "qemu", "vmid": vmid},
             get_current_specs=lambda *_a, **_k: {"cpu": 2, "memory": 2048, "disk": 20},
-            get_config=lambda *_a, **_k: {"scsi0": state["disk"]},
+            get_config=lambda *_a, **_k: (
+                state.get("config") or {"scsi0": state["disk"]}
+            ),
+            main_disk=ops.main_disk,
         ),
     )
     return state
@@ -423,3 +427,17 @@ def test_disk_storage_reads_the_main_disk(cluster) -> None:
     assert svc._disk_storage("node-a", 1, "qemu") == "local-lvm"
     cluster["disk"] = ""
     assert svc._disk_storage("node-a", 1, "qemu") is None
+
+
+def test_disk_storage_follows_the_boot_disk_when_it_is_not_scsi0(cluster) -> None:
+    # Windows 沒裝 VirtIO 驅動的機器：開機磁碟在 sata0，另掛驅動光碟
+    cluster["config"] = {
+        "sata0": "ceph-vm:vm-1-disk-0,size=60G",
+        "ide2": "local:iso/virtio-win.iso,media=cdrom",
+    }
+    assert svc._disk_storage("node-a", 1, "qemu") == "ceph-vm"
+
+
+def test_disk_storage_of_a_container_is_where_rootfs_lives(cluster) -> None:
+    cluster["config"] = {"rootfs": "local-zfs:subvol-1-disk-0,size=8G"}
+    assert svc._disk_storage("node-a", 1, "lxc") == "local-zfs"

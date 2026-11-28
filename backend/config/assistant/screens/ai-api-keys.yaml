@@ -1,0 +1,76 @@
+# 金鑰管理（/ai-api-keys）
+id: ai-api-keys
+path: /ai-api-keys
+title: 金鑰管理
+access: admin
+order: 430
+purpose: 查看全站所有使用者的 AI API 金鑰：持有者、申請用途、最近使用時間與狀態，並刪除不該再用的金鑰。金鑰只能經由 AI API 審核核發，這頁不提供新增。
+when_to_use: 要查看全站已核發的 AI API 金鑰、用前綴找出外流的是哪一把，或刪除外洩、濫用、長期沒在用的金鑰。
+sections:
+  - 金鑰清單
+  - 金鑰狀態
+features:
+  - 依狀態切換「啟用中」（預設）、「已停用」或「全部」，分頁上的數字會跟著搜尋與篩選條件變動；「已停用」包含已過期、已撤銷與已刪除的金鑰。
+  - 按「篩選」可以依使用者身分（學生、教師、管理者）與建立時間（7 天內、30 天內）縮小範圍，勾選後立即套用，按鈕會顯示目前套用的條件數；「清除篩選」一次清掉。
+  - 搜尋框可以用金鑰名稱、使用者姓名、Email 或金鑰前綴搜尋。條件篩到沒有任何金鑰時顯示「沒有符合條件的金鑰」，按「清除篩選」會把狀態切回「全部」並清掉搜尋與篩選；目前的分頁是空的、但別的分頁還有金鑰時也是這個畫面。全站一把金鑰都沒有時顯示「尚無金鑰紀錄」。
+  - 每把金鑰顯示名稱與持有者 Email、擁有者、申請用途、活動（最近一次呼叫時間）、狀態與建立日期，依建立時間由新到舊排列。每頁 50 筆，超過一頁時用分頁列換頁（上一頁、下一頁、點頁碼，頁數多時在「前往 N 頁」輸入頁碼），分頁列也寫出共幾筆；改了搜尋或篩選會回到第一頁。
+  - 啟用中的金鑰按「刪除」，確認後新的呼叫立即失敗、使用者也不再看到這把金鑰，無法復原；已接受的呼叫會完成，管理與用量紀錄會保留。
+elements:
+  - id: aikeys.search
+    role: text
+    label: 搜尋名稱、使用者、Email 或前綴
+    help: 可以用金鑰名稱、使用者姓名、Email 或金鑰前綴搜尋；有人回報金鑰外流時用前綴就能找出是哪一把。
+    section: 金鑰清單
+  - id: aikeys.filter
+    role: button
+    label: 篩選
+    help: 打開「篩選金鑰」，可依「使用者身分」（學生、教師、管理者，可複選）與「建立時間」（全部、7 天內、30 天內）篩選，條件立即套用；「清除篩選」清掉這兩項條件。狀態用「啟用中」「已停用」「全部」切換，不在這裡。
+    section: 金鑰清單
+  - id: aikeys.col_owner
+    role: table
+    label: 擁有者
+    help: 金鑰持有者的姓名；Email 顯示在金鑰名稱底下。
+    section: 金鑰清單
+  - id: aikeys.col_purpose
+    role: table
+    label: 申請用途
+    help: 申請這把金鑰時填的用途。
+    section: 金鑰清單
+  - id: aikeys.col_activity
+    role: table
+    label: 活動
+    help: 這把金鑰最近一次呼叫的時間；從沒用過顯示「尚未使用」。
+    section: 金鑰清單
+  - id: aikeys.status_active
+    role: readonly
+    label: 啟用中
+    help: 金鑰可以正常呼叫。
+    section: 金鑰狀態
+  - id: aikeys.status_inactive
+    role: readonly
+    label: 已停用
+    help: 金鑰已過期，或已被撤銷（金鑰輪替後舊的那把會被撤銷），不能再呼叫。
+    section: 金鑰狀態
+  - id: aikeys.status_deleted
+    role: readonly
+    label: 已刪除
+    help: 金鑰已被刪除，不能再呼叫，使用者也看不到；列在「已停用」與「全部」裡。
+    section: 金鑰狀態
+  - id: aikeys.delete
+    role: button
+    label: 刪除
+    help: 只出現在啟用中的金鑰。刪除後使用者不再看到這把金鑰，也無法發起新的呼叫，無法復原；管理與用量紀錄會保留。
+    section: 金鑰清單
+dialogs:
+  - id: revoke
+    title: 確認刪除這把金鑰？
+    opened_by: 刪除
+    purpose: 刪除後使用者不再看到這把金鑰，也無法發起新的呼叫。
+    notes:
+      - 按「確認刪除」送出，無法復原。
+      - 管理與用量紀錄會保留，已接受的呼叫會完成。
+related:
+  - path: /ai-monitoring
+    when: 要看 AI API 的用量、錯誤率，或某位使用者的用量與呼叫紀錄
+  - path: /ai-api-review
+    when: 要處理新的金鑰申請

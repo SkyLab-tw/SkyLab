@@ -113,7 +113,6 @@ const manualTeachers = {
     'class-workspace': 'Class workspace',
     'ai-judge': 'AI-assisted checking',
     'course-templates': 'Multi-machine environments',
-    'course-cms': 'Course content',
   },
   'zh-TW': {
     templates: '範本',
@@ -122,7 +121,6 @@ const manualTeachers = {
     'class-workspace': '班級工作頁',
     'ai-judge': 'AI 導師檢查',
     'course-templates': '多機教學環境',
-    'course-cms': '課程內容',
   },
 }
 
@@ -222,11 +220,11 @@ const development = {
 const design = {
   en: {
     'guides/multi-machine-environment-sop': 'Multi-machine environment SOP',
-    'guides/ai-navigation-teaching-workflows': 'AI navigation in teaching workflows',
+    'guides/ai-assistant': 'Built-in AI assistant',
   },
   'zh-TW': {
     'guides/multi-machine-environment-sop': '多機教學環境 SOP',
-    'guides/ai-navigation-teaching-workflows': '導覽 AI 與教學流程',
+    'guides/ai-assistant': '內建 AI 助手',
     'guides/ai-teacher-judge-contract': 'AI 導師檢查流程與不可破壞契約',
     'guides/user-guide-content-audit': '頁面導覽文案盤點',
   },

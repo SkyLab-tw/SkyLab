@@ -137,8 +137,7 @@ class AuditAction(str, enum.Enum):
     ai_ssh_exec = "ai_ssh_exec"
     ai_ssh_exec_blocked = "ai_ssh_exec_blocked"
 
-    # 課程 / 快速練習（免審核自動開機與作答）
-    course_answer_submit = "course_answer_submit"
+    # 快速練習（免審核自動開機）
     quick_practice_machine_create = "quick_practice_machine_create"
 
 

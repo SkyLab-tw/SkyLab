@@ -1,0 +1,155 @@
+# 資源管理（/resource-mgmt）
+id: resource-mgmt
+path: /resource-mgmt
+title: 資源管理
+access: admin
+order: 250
+purpose: 查看與管理系統中所有的虛擬機與 LXC 容器，包含已核准、機器還在建立中的申請。
+when_to_use: 管理員要查看或處理全站的機器：找某台機器、代為開關機、處理開通失敗、把機器轉成範本或刪除不要的資源。
+sections:
+  - 資源清單
+  - 電源操作
+  - 到期與節點
+  - 批次操作
+features:
+  - 清單列出所有虛擬機與容器的名稱、來源（每台都標擁有者）、環境 / 系統、狀態、IP、到期日與節點；有對外網址的機器在 IP 欄一併列出網址，可以直接點開。
+  - 視窗或表格區比較窄時，表格會依序收起「節點」「到期日」「環境 / 系統」「來源」「IP 位址」欄，收起的內容改寫在「名稱」欄（來源徽章、節點、環境）與「狀態」欄（IP、到期日）裡；勾選、名稱、狀態、操作一定會顯示。收到底還放不下（例如手機）才左右捲動，勾選與名稱欄固定不動。
+  - 同一個課程教學環境或快速練習環境的機器收成一列，點那一列展開或收合（開合狀態記在這台瀏覽器）；「整組電源」選單可以「整組開機」或「整組關機」。環境裡的機器不能單台刪除或轉成範本。
+  - 已核准、機器還在建立的申請也會列出來，狀態是「開通中」（使用時段還沒開始的是「已排程」，建立失敗的是「開通失敗」）；這種列不能勾選，也沒有電源操作。
+  - 狀態切換有「全部」「開通中」「執行中」「已關機」，各選項的台數不受搜尋影響；工具列放不下時，狀態切換會收成一顆顯示目前選項的下拉。搜尋框可輸入名稱、VMID、IP 或擁有者（姓名或信箱），空白分開的每個詞都要符合，班級或環境名稱也搜得到整組，按 Esc 清掉搜尋字。篩到沒有機器時顯示「沒有符合條件的機器」，可以按「清除搜尋」或「清除篩選」。
+  - 點一列機器（申請中的佔位列除外）進入那台機器的資源詳情頁，管理員在那裡調規格不需要送申請。
+  - 「電源控制」選單有「啟動」「關機」「重新啟動」「強制停止」「強制重置」，狀態不符的項目會停用；個人申請的機器在使用時段外不能啟動，選單會說明原因。選單裡還有「轉成範本」與「刪除」。
+  - 機器執行中時可以按「終端機」（容器）或「控制台」（虛擬機）直接連進去；開機中或未開機時按鈕會停用。
+  - 勾選多台後，工具列換成批量操作：「啟動」「關機」，「更多」裡有「重新啟動」「強制停止」「強制重置」，以及「刪除」。動作只送給狀態適用的機器，其餘略過（滑過按鈕會寫出會略過幾台）；強制停止、強制重置與刪除會先確認；失敗的機器保留勾選，可以再試一次。已經勾了至少一台時，點整列也是勾選、不會進詳情頁，按住 Shift 點可以連選一段；環境裡的機器不能勾選。
+  - 「轉成範本」會開啟「把 VM 轉為範本」視窗，來源機器已鎖定為這一台；課堂機器不能轉。
+  - 「建立資源」直接打開機器申請表單。
+elements:
+  - id: resmgmt.col_name
+    role: table
+    label: 名稱
+    help: 機器名稱，附註類型與 VMID。
+    section: 資源清單
+  - id: resmgmt.col_kind
+    role: table
+    label: 來源
+    help: 機器來源（個人申請、學生機器、快速練習、課程實驗等）與擁有者。
+    section: 資源清單
+  - id: resmgmt.col_env_os
+    role: table
+    label: 環境 / 系統
+    section: 資源清單
+  - id: resmgmt.col_status
+    role: table
+    label: 狀態
+    section: 資源清單
+  - id: resmgmt.col_ip
+    role: table
+    label: IP 位址
+    help: 機器的 IP；有發布對外網址時一併列出，可以直接點開。
+    section: 資源清單
+  - id: resmgmt.col_expiry
+    role: table
+    label: 到期日
+    help: 到期日與核准使用時段取較早的那一個；沒有期限顯示「∞ 無期限」，環境裡的機器顯示「依環境統一管理」。
+    section: 到期與節點
+  - id: resmgmt.col_node
+    role: table
+    label: 節點
+    section: 到期與節點
+  - id: resmgmt.search
+    role: text
+    label: 搜尋名稱、VMID、IP 或擁有者
+    help: 比對名稱、VMID、IP、擁有者姓名與信箱；空白分開的每個詞都要符合，搜班級或環境名稱會列出整組機器。按 Esc 清掉搜尋字。
+    section: 資源清單
+  - id: resmgmt.status_scheduled
+    role: readonly
+    label: 已排程
+    help: 已核准、使用時段還沒開始的申請，機器還沒建立。
+    section: 資源清單
+  - id: resmgmt.status_provisioning
+    role: readonly
+    label: 開通中
+    help: 已核准、機器還在建立的申請。
+    section: 資源清單
+  - id: resmgmt.status_running
+    role: readonly
+    label: 執行中
+    section: 資源清單
+  - id: resmgmt.status_stopped
+    role: readonly
+    label: 已關機
+    section: 資源清單
+  - id: resmgmt.status_failed
+    role: readonly
+    label: 開通失敗
+    help: 已核准的申請在建立機器時失敗。
+    section: 資源清單
+  - id: resmgmt.power
+    role: button
+    label: 電源控制
+    help: 開啟這台機器的電源選單：啟動、關機、重新啟動、強制停止、強制重置，另有「轉成範本」與「刪除」。狀態不符的動作會停用；強制停止與強制重置等同直接斷電，未存檔的資料可能遺失。
+    section: 電源操作
+  - id: resmgmt.terminal
+    role: button
+    label: 終端機
+    help: 容器（LXC）的終端機連線，機器執行中才能按。
+    section: 電源操作
+  - id: resmgmt.console
+    role: button
+    label: 控制台
+    help: 虛擬機的圖形控制台，機器執行中才能按；開機中要等開完機。
+    section: 電源操作
+  - id: resmgmt.convert_template
+    role: button
+    label: 轉成範本
+    help: 在「電源控制」選單裡。把這台機器轉成範本；轉換時會關機，完成後機器從清單移除、成為範本母機，無法復原。課堂機器與環境裡的機器沒有這個選項。
+    section: 電源操作
+  - id: resmgmt.delete
+    role: button
+    label: 刪除
+    help: 在「電源控制」選單裡，刪除單台機器，會先跳出「確定刪除資源？」確認。刪除後無法復原，機器上所有資料都會消失；環境裡的機器不能單台刪除。
+    section: 電源操作
+  - id: resmgmt.batch_delete
+    role: button
+    label: 刪除
+    help: 勾選機器後出現在批量操作裡，會先跳出「刪除 N 台資源？」確認，對所有勾選的虛擬機或容器送出刪除請求，此操作無法復原。
+    section: 批次操作
+  - id: resmgmt.group_row
+    role: list
+    label: 整組管理
+    help: 同一個課程教學環境或快速練習環境的機器收合成一列（顯示「N 台機器 · 整組管理」），點那一列展開後可以逐台開關機或連進機器。
+    section: 資源清單
+dialogs:
+  - id: convert-template
+    title: 把 VM 轉為範本
+    opened_by: 轉成範本
+    purpose: 把這台已裝好環境的機器轉成範本；來源機器固定是這一台。
+    fields:
+      - label: 來源機器
+        help: 從資源管理開啟時已鎖定為這一台，不能改。
+        required: true
+      - label: 範本名稱
+        help: 例如 Ubuntu 22.04 + Docker 實驗環境。
+        required: true
+      - label: 說明（選填）
+        help: 這個範本裝了什麼、適合哪些課程。
+      - label: 可見範圍
+        help: 私人或全部可見。
+      - label: 這個範本需要 GPU
+        help: 用它開機器時一定要選一張 GPU；只有 VM 範本能設定。
+      - label: 自訂預設規格
+        help: 不勾選時沿用來源機器的 CPU 與記憶體。
+      - label: 使用手冊 / 附件（選填，最多 10 個）
+        help: 範本附的手冊或檔案。
+    notes:
+      - 按「開始轉換」後還會再確認一次；轉換時來源機會被關機，之後成為範本母機、從資源列表移除，無法再當一般機器開機使用，此動作無法復原。
+      - 轉換完成會自動帶到機器範本頁。
+related:
+  - path: /request-review
+    when: 要審核建立、規格調整或延期申請
+  - path: /monitoring
+    when: 要看節點與機器的即時負載
+  - path: /jobs
+    when: 要看刪除或建立任務的進度
+  - path: /templates
+    when: 要管理已經轉好的範本

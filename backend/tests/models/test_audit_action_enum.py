@@ -34,6 +34,7 @@ RETIRED_ACTIONS = (
     "group_member_remove",
     "cloudflare_zone_activation_check",
     "course_lab_deploy",
+    "course_answer_submit",
 )
 
 _MIGRATION = (

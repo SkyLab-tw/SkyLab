@@ -616,10 +616,12 @@ def _check_quota_delta(session: Session, db_request: Any) -> None:
 def _disk_storage(node: str, vmid: int, resource_type: ResourceType) -> str | None:
     """機器主磁碟所在的儲存區名稱（``local-lvm:vm-100-disk-0,size=32G`` → local-lvm）。
 
-    resize 只會擴 scsi0／rootfs（見 ``_apply_spec_changes``），所以只看這兩個。
+    resize 只會擴主磁碟（VM 的開機磁碟／LXC 的 rootfs，見
+    ``_apply_spec_changes``），所以只看那一顆。
     """
     config = proxmox_service.get_config(node, vmid, resource_type, current=True)
-    value = str(config.get("scsi0" if resource_type == "qemu" else "rootfs") or "")
+    disk = proxmox_service.main_disk(config, resource_type)
+    value = disk[1] if disk else ""
     storage = value.split(",", 1)[0].split(":", 1)[0].strip()
     return storage or None
 
@@ -1253,7 +1255,15 @@ def _apply_spec_changes(
                         )
                     )
                 size_param = f"+{disk_increase}G"
-                disk_name = "scsi0" if resource_type == "qemu" else "rootfs"
+                # 放大的是主磁碟，和 current_disk 讀的是同一顆：VM 的開機磁碟
+                # 不一定是 scsi0（Windows 沒裝 VirtIO 驅動時常見 sata0／ide0）
+                disk_name = proxmox_service.main_disk_key(
+                    node, db_request.vmid, resource_type
+                )
+                if disk_name is None:
+                    raise ProxmoxError(
+                        t("spec_change.boot_disk_not_found", vmid=db_request.vmid)
+                    )
                 proxmox_service.resize_disk(
                     node, db_request.vmid, resource_type, disk_name, size_param
                 )

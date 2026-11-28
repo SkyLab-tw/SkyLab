@@ -9,7 +9,6 @@ Consoles and live updates use WebSocket connections registered directly on the a
 | `/ws/jobs` | Live status of the caller's task records (clone, batch provisioning, reset, deletion) for the Jobs page. | Access token in the `token` query parameter |
 | `/ws/classroom` | Signalling channel for classroom sessions: teacher broadcast, student screen fan-out and control. | Access token in the `token` query parameter |
 | `/ws/classroom/{session_id}/watch` | VNC fan-out of one student's screen to the teacher's classroom view. | Access token in the `token` query parameter |
-| `/ws/courses/paths/{path_id}/progress` | Progress updates of a course path for the teacher's dashboard. | Access token in the `token` query parameter |
 
 Notes:
 

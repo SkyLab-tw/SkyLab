@@ -108,6 +108,15 @@ function deferred() {
   return { promise, resolve };
 }
 
+async function typeSearch(text) {
+  const input = host.querySelector('input[placeholder="RequestReviewPage.searchPlaceholder"]');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+  await act(async () => {
+    setter.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   client = createTestQueryClient();
@@ -229,6 +238,95 @@ describe("RequestReviewPage", () => {
     await flush();
 
     expect(buttonByText("RequestReviewPage.approve").disabled).toBe(true);
+  });
+
+  test("when the assessment says the request does not fit, the reason is shown next to the disabled approve button", async () => {
+    mocks.vmListAll.mockImplementation(async (status) => (
+      status === "pending" ? { data: [vmRequest("A", "pending")], count: 1 } : { data: [], count: 0 }
+    ));
+    mocks.getReviewContext.mockResolvedValue({
+      feasible: false,
+      summary: "no node can host it",
+      reasons: ["checked cpu and memory", "reject or wait"],
+    });
+
+    await renderPage();
+    await flush();
+    await act(async () => { rowButtons()[0].click(); });
+    await flush();
+
+    expect(buttonByText("RequestReviewPage.approve").disabled).toBe(true);
+    /* 原因寫在審核列（按鈕旁），不是只在上方的詳情裡 */
+    const decision = host.querySelector('[data-guide="request-review-decision"]');
+    expect(decision.textContent).toContain("no node can host it");
+    expect([...decision.querySelectorAll("li")].map((li) => li.textContent))
+      .toEqual(["checked cpu and memory", "reject or wait"]);
+    /* 拒絕不受影響 */
+    expect(buttonByText("RequestReviewPage.reject").disabled).toBe(false);
+  });
+
+  test("when the assessment cannot be loaded, the review bar says that is why approve is disabled", async () => {
+    mocks.vmListAll.mockImplementation(async (status) => (
+      status === "pending" ? { data: [vmRequest("A", "pending")], count: 1 } : { data: [], count: 0 }
+    ));
+    mocks.getReviewContext.mockRejectedValue(new Error("assessment down"));
+
+    await renderPage();
+    await flush();
+    await act(async () => { rowButtons()[0].click(); });
+    await flush();
+
+    expect(buttonByText("RequestReviewPage.approve").disabled).toBe(true);
+    const decision = host.querySelector('[data-guide="request-review-decision"]');
+    expect(decision.textContent).toContain("RequestReviewPage.approveBlockedByContextError");
+    /* 錯誤訊息本身照舊顯示在詳情裡 */
+    expect(host.textContent).toContain("assessment down");
+  });
+
+  test("a request that fits shows no blocked reason", async () => {
+    mocks.vmListAll.mockImplementation(async (status) => (
+      status === "pending" ? { data: [vmRequest("A", "pending")], count: 1 } : { data: [], count: 0 }
+    ));
+
+    await renderPage();
+    await flush();
+    await act(async () => { rowButtons()[0].click(); });
+    await flush();
+
+    expect(buttonByText("RequestReviewPage.approve").disabled).toBe(false);
+    const decision = host.querySelector('[data-guide="request-review-decision"]');
+    expect(decision.querySelector('[role="status"]')).toBeNull();
+  });
+
+  test("search matches the status text shown on screen, not the backend status code", async () => {
+    mocks.vmListAll.mockImplementation(async (status, { limit }) => (
+      status === undefined && limit === 100
+        ? { data: [vmRequest("P", "pending", "2026-09-02T00:00:00Z"), vmRequest("X", "expired", "2026-09-01T00:00:00Z")], count: 2 }
+        : { data: [], count: 0 }
+    ));
+    /* 這個測試的 t 把狀態換成中文，才分得出「畫面上的字」與「後端代碼」 */
+    const labels = {
+      "RequestReviewPage.statusPending": "待審核",
+      "RequestReviewPage.statusExpired": "已過期",
+    };
+    const identity = mocks.t;
+    mocks.t = (key) => labels[key] ?? key;
+    try {
+      await renderPage();
+      await flush();
+      await act(async () => { host.querySelector('[data-tab="all"]').click(); });
+      await flush();
+      expect(rowButtons()).toHaveLength(2);
+
+      await typeSearch("已過期");
+      expect(rowButtons().map((b) => b.textContent)).toEqual([expect.stringContaining("host-X")]);
+
+      /* 後端的英文代碼不是畫面上的字，搜不到 */
+      await typeSearch("expired");
+      expect(rowButtons()).toHaveLength(0);
+    } finally {
+      mocks.t = identity;
+    }
   });
 
   test("approving refreshes the lists in place: no loading screen and buttons stay locked until the refresh lands", async () => {

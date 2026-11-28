@@ -1,0 +1,63 @@
+# 啟動快速練習（/quick-template/:id）
+id: quick-template-form
+path: /quick-template/:id
+title: 啟動快速練習
+access: all
+order: 100
+purpose: 用固定配置一次建立整組練習機器，免人工審核，送出後直接開始建立。
+when_to_use: 已經選好一組快速練習環境，要確認內容後啟動。
+sections:
+  - 本次會建立的機器
+  - 使用規則
+  - 啟動
+features:
+  - 環境摘要列出環境名稱、說明、機器台數、可用時數與版本，並註明「整組自動核准；學生不能修改 CPU、記憶體、磁碟或機器數量。」
+  - 「本次會建立的機器」逐台列出名稱、角色、VM 或 LXC 與規格（CPU、記憶體 GB、磁碟 GB），「環境合計」是整組加起來的 CPU、記憶體與磁碟。
+  - 「使用規則」列出三項：不用等待審核、固定配置、N 小時限制（所有快速練習環境用同一個時數）。
+  - 按「啟動 N 台機器」整組送出建立，成功後自動轉到「我的資源」；按「取消」或「返回」回到進來前的頁面（快速練習或首頁；直接開這個網址時回首頁），不會建立任何機器。
+  - 快速練習的機器不計入個人配額。啟動被拒時會顯示原因，例如：已經有一組進行中的快速練習（同時只能一組）、24 小時內最多建立 3 次、這個環境同時組數已滿、叢集容量不足，或環境需要的對外網址、對外 port 還沒設定好。
+elements:
+  - id: quick.rule_fixed_config
+    role: readonly
+    label: 固定配置
+    help: 套用老師發布的完整環境，不提供規格選擇；學生不能修改 CPU、記憶體、磁碟或機器數量。
+    section: 使用規則
+  - id: quick.rule_no_review
+    role: readonly
+    label: 不用等待審核
+    help: 整組自動核准，送出後立即排入建立流程。
+    section: 使用規則
+  - id: quick.rule_duration
+    role: readonly
+    label: 時數限制
+    help: 畫面上寫成「N 小時限制」，時數由平台的快速練習設定決定；時間到系統會先關機，30 分鐘後整組機器回收刪除。
+    section: 使用規則
+  - id: quick.machines
+    role: list
+    label: 本次會建立的機器
+    help: 這組環境包含的每一台機器：名稱、角色、VM 或 LXC，以及 CPU、記憶體與磁碟。
+    section: 本次會建立的機器
+  - id: quick.environment_total
+    role: readonly
+    label: 環境合計
+    help: 整組機器加起來會用掉的 CPU、記憶體與磁碟。
+    section: 本次會建立的機器
+  - id: quick.launch
+    role: button
+    label: 啟動
+    help: 按鈕寫著「啟動 N 台機器」，送出後一次建立整組機器，建立中顯示「整組建立中…」；成功後轉到「我的資源」。
+    section: 啟動
+  - id: quick.cancel
+    role: button
+    label: 取消
+    help: 不建立，回到進來前的頁面（快速練習或首頁；直接開這個網址時回首頁）；「返回」也一樣。
+    section: 啟動
+  - id: quick.not_found
+    role: readonly
+    label: 找不到快速練習環境
+    help: 這個環境不存在、尚未發布，或沒有開放快速練習時顯示；按「返回」回到進來前的頁面（直接開網址時回首頁）。
+related:
+  - path: /my-resources
+    when: 啟動後要連進機器
+  - path: /quick-create
+    when: 想換一組練習環境

@@ -1,6 +1,6 @@
 # Courses
 
-The student side of a class: the list of courses you are enrolled in, one course's weekly tasks, progress and class machines, and the page for a single week with check feedback, machines and materials. Sidebar: Teaching → Courses. Path: `/courses`, `/courses/<pathId>` and `/courses/<pathId>/weeks/<weekId>`.
+The student side of a class: the list of courses you are enrolled in, one course's weekly tasks, progress and class machines, and the page for a single week with check feedback, machines and materials. Sidebar: Teaching → Courses. Path: `/courses`, `/courses/<classId>` and `/courses/<classId>/weeks/<weekId>`.
 
 ## Who can use it
 
@@ -11,7 +11,7 @@ The student side of a class: the list of courses you are enrolled in, one course
 ## Before you start
 
 - There is no sign-up button. You join a course when a teacher adds your account (your email) to the class roster.
-- A course appears in your list only once its learning path is published. This happens automatically the first time the class becomes ready for class; a teacher can also publish or unpublish it in [Course Management](/manual/course-cms).
+- A course is the class itself. It appears in your list once the class has become ready for class for the first time, and stays there afterwards.
 - Class machines appear only after the administrator has approved the class and the machines have been built.
 
 ## Step by step
@@ -23,10 +23,10 @@ The student side of a class: the list of courses you are enrolled in, one course
    - A status label: **In class now**, **Later today**, **Open for practice**, **Done for today** or **Ready to start** (no session scheduled).
    - The course title and the teacher.
    - **Date**, **Time** and **Room** of the next session, when the teacher has set them.
-   - On the stub, a barcode and a count such as `4 / 8` with **questions done** (or **All done**). If the teacher has not published any practice questions you see **No practice questions yet**.
+   - On the stub, a barcode. It is only decoration and does not show progress.
 3. Click a ticket to open the course.
 
-If you see **No courses yet**, your teacher has not published a course for a class you belong to.
+If you see **No courses yet**, none of your classes has become ready for class yet, or your teacher has not added you to a class roster.
 
 ![Find your course (numbers match the steps above)](/manual-shots/en/courses/s01.webp)
 
@@ -34,7 +34,7 @@ If you see **No courses yet**, your teacher has not published a course for a cla
 
 The course page has two columns.
 
-1. **All Tasks Due Today** (left) lists every week of the course and every task published up to today, oldest first. Each row shows the week number, title, date, the number of check items and, when present, a **Teacher replied** badge.
+1. **Tasks your teacher has published** (left) lists every week of the course your teacher has published and every task published up to today, oldest first. Each row shows the week number, title, date, the number of check items and, when present, a **Teacher replied** badge.
 2. **This week** (right) shows the current week (the last week whose session date is today or earlier; before the term starts, the first week):
    - The class time, teacher and location.
    - **N / M checks passed**, or **No checks this week**.
@@ -47,7 +47,7 @@ The course page has two columns.
 
 ### Mark a week as done
 
-1. In **All Tasks Due Today**, tick the checkbox at the right end of the week row (**Mark week done**).
+1. In **Tasks your teacher has published**, tick the checkbox at the right end of the week row (**Mark week done**).
 2. A message confirms **Weekly task marked complete**. Tick it again to undo it.
 
 Ticking only tells your teacher you have finished; it does not start an AI check and does not change the **checks passed** count. The checkbox appears only on weeks that have tasks to complete.
@@ -79,7 +79,7 @@ Some tasks are not attached to a week. Their rows expand in place instead of ope
 
 ### Open a week
 
-1. Click a week row in **All Tasks Due Today**, or **Open this week** in **This week**.
+1. Click a week row in **Tasks your teacher has published**, or **Open this week** in **This week**.
 2. The header shows the course name, the week title, the week number and the date. **Back to course** returns to the course page.
 
 ![Open a week (numbers match the steps above)](/manual-shots/en/courses/s06.webp)
@@ -103,7 +103,7 @@ Opening the page only shows results; it does not run a check again.
    - **Open website** opens a service the teacher published at a URL.
    - A `host:port` entry is an external port forwarded into the machine (hover it to see the inner port). If only the port is known you see **External port N (ask your teacher for the entry host)**.
    - **URL not published** means the machine has no public URL or port.
-   - **Machine and console** opens the machine's page in My Resources.
+   - **Machine and console** opens My Resources, where you can power the machine on or off and open its console.
 2. **Week materials** lists the files for the week. Click a file to open it in a new tab.
 
 ![Use the machines and materials of a week (numbers match the steps above)](/manual-shots/en/courses/s08.webp)
@@ -113,7 +113,7 @@ Opening the page only shows results; it does not run a check again.
 | Field | Meaning | Notes |
 | --- | --- | --- |
 | Ticket status | Where the course is today | **In class now**, **Later today**, **Open for practice**, **Done for today**, **Ready to start** |
-| Questions done | Practice questions you completed out of the total | Shown on the ticket stub |
+| Ticket barcode | Decoration on the ticket stub | Does not show progress |
 | Check items | Number of items in the week's tasks | Shown on each week row |
 | Checks passed | Checkpoints of the current week that passed | Moves only after a check runs |
 | Machine label | What clicking the machine will do | **Enter Machine**, **Start and Enter**, **Starting…**, **Environment being configured** |

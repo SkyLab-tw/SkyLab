@@ -21,7 +21,7 @@ import { withQueryClient } from "../../../queries/testing";
 
 const mocks = vi.hoisted(() => ({
   listAll: vi.fn(),
-  review: vi.fn(),
+  reviewClass: vi.fn(),
   getRecurrencePreview: vi.fn(),
   confirm: vi.fn(),
   t: (key) => key,
@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../services/batchProvision", () => ({
   BatchProvisionService: {
     listAll: mocks.listAll,
-    review: mocks.review,
+    reviewClass: mocks.reviewClass,
     getRecurrencePreview: mocks.getRecurrencePreview,
   },
 }));

@@ -1,9 +1,12 @@
 """Proxmox 連線（多入口）模型
 
 每筆代表一組獨立的 PVE 入口：可能是單台主機，也可能是一個叢集的
-入口節點。連線層帳密、SSL 與叢集自身的資源設定（pool、storage、
-gateway、預設節點）各自獨立；跨叢集共用的排程與放置策略
+入口節點。連線層帳密、SSL 與叢集自身的資源設定（pool、ISO／備份
+storage、gateway、預設節點）各自獨立；跨叢集共用的排程與放置策略
 （placement、scheduler）仍在 proxmox_config singleton。
+
+機器磁碟放哪個 storage 由「儲存管理」（proxmox_storage）決定、機器的網段由
+「IP 管理」（SubnetConfig）決定，所以連線上沒有 data storage 與內網網段欄位。
 """
 
 from datetime import datetime
@@ -32,12 +35,11 @@ class ProxmoxConnection(SQLModel, table=True):
     # ── 該叢集自身的資源設定（各連線獨立） ──
     pool_name: str = Field(default="SkyLab", max_length=255)
     iso_storage: str = Field(default="local", max_length=255)
-    data_storage: str = Field(default="local-lvm", max_length=255)
     # 機器備份（vzdump）要放的 storage；None＝這個叢集不開放備份功能
     backup_storage: str | None = Field(default=None, max_length=255)
     task_check_interval: int = Field(default=2, ge=1, le=60)
+    # 這個叢集的閘道位址；只用來擋對外發布（publish_target_policy 的黑名單）
     gateway_ip: str | None = Field(default=None, max_length=255)
-    local_subnet: str | None = Field(default=None, max_length=50)
     default_node: str | None = Field(default=None, max_length=255)
     enabled: bool = Field(default=True)             # 停用後不參與彙總與放置
     is_default: bool = Field(default=False)         # 未指定連線時的預設入口

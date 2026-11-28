@@ -1,0 +1,105 @@
+# IP 管理（/ip-management）
+id: ip-management
+path: /ip-management
+title: IP 管理
+access: admin
+order: 380
+purpose: 管理機器用的子網設定與所有 IP 位址的分配狀況。
+when_to_use: 第一次設定機器用的網段，或要查哪個 IP 分給了哪台機器。
+sections:
+  - 子網設定
+  - IP 分配
+features:
+  - 建立子網設定：還沒設定時按「建立子網設定」，填網段、閘道、Bridge、Gateway VM IP 與對外 port 配號池，按「建立設定」。
+  - 編輯子網設定：已設定時按「編輯子網設定」修改，按「更新設定」儲存；已有 VM / LXC 使用這個網段，或還有班級／快速練習預留的 IP 時，子網 CIDR 不能改。
+  - 存檔後「預設封鎖網段 / IP」會逐台套用到機器的防火牆；有機器套用失敗時會列出 VMID，這些機器目前未被封鎖。
+  - 刪除子網設定：在「編輯子網設定」視窗按「刪除子網設定」並確認；刪除後全站 VM / LXC 建立功能會被停用，而且要沒有 VM / LXC 佔用 IP、也沒有班級或快速練習的預留才能刪除。
+  - 統計卡顯示子網總 IP、可用與已分配。
+  - IP 分配清單：欄位有 IP 位址、用途、VMID、分配時間、備註；用途有 VM、LXC、Gateway VM、閘道、主系統、保留、班級預留、快速練習預留。可以搜尋 IP、VMID 或備註，每頁 50 筆；備註太長被截斷時滑過可看全文。
+  - 畫面較窄時依序收起備註、分配時間、VMID 欄：VMID 與備註改顯示在「IP 位址」欄，分配時間改顯示在「用途」欄而且只寫日期；IP 位址與用途一直都在。
+  - 超過 50 筆時用分頁列換頁：顯示「共 N 筆」，按上一頁、下一頁或頁碼切換；頁數超過 7 頁（或畫面很窄）時可以在「前往 __ 頁」輸入頁碼，按 Enter 或離開欄位就跳過去。改搜尋會回到第一頁。
+elements:
+  - id: ipmgmt.create_subnet
+    role: button
+    label: 建立子網設定
+    help: 還沒設定子網時出現，開啟建立視窗。
+    section: 子網設定
+  - id: ipmgmt.edit_subnet
+    role: button
+    label: 編輯子網設定
+    help: 已設定子網時出現，開啟編輯視窗；刪除子網設定也在這個視窗裡。
+    section: 子網設定
+  - id: ipmgmt.subnet
+    role: readonly
+    label: 子網
+    help: 目前設定的子網 CIDR，後面接 Bridge 名稱，有設定 VLAN 時也會顯示 VLAN。
+    section: 子網設定
+  - id: ipmgmt.delete_subnet
+    role: button
+    label: 刪除子網設定
+    help: 在「編輯子網設定」視窗裡。刪除後全站 VM / LXC 建立功能將被停用，且需無任何 VM / LXC 仍佔用 IP、也沒有班級或快速練習的預留才能刪除。
+    section: 子網設定
+  - id: ipmgmt.stat_total
+    role: readonly
+    label: 子網總 IP
+    section: IP 分配
+  - id: ipmgmt.stat_available
+    role: readonly
+    label: 可用
+    section: IP 分配
+  - id: ipmgmt.stat_allocated
+    role: readonly
+    label: 已分配
+    section: IP 分配
+  - id: ipmgmt.search
+    role: text
+    label: 搜尋 IP、VMID 或備註
+    help: 依 IP、VMID 或備註篩選 IP 分配清單。
+    section: IP 分配
+  - id: ipmgmt.allocations
+    role: table
+    label: IP 位址
+    help: IP 分配清單，欄位有 IP 位址、用途、VMID、分配時間、備註，每頁 50 筆；畫面較窄時備註、分配時間、VMID 會收進「IP 位址」與「用途」欄顯示。
+    section: IP 分配
+dialogs:
+  - id: subnet
+    title: 建立子網設定
+    opened_by: 建立子網設定
+    purpose: 設定新機器會用的網段與對外入口，或（從「編輯子網設定」開啟時）修改既有設定。
+    fields:
+      - label: 子網 CIDR
+        help: 例：10.10.0.0/24，IPv4、範圍 /8 到 /31。已有 VM / LXC 使用此網段，或還有班級／快速練習預留的 IP 時不能改，需先刪除這些機器、等班級建機完成或退回班級後才能變更。
+        required: true
+      - label: 閘道 IP
+        help: 例：10.10.0.1；必須在子網內，且不能和 Gateway VM IP 相同。
+        required: true
+      - label: Bridge 名稱
+        help: 例：vmbr1。
+        required: true
+      - label: VLAN ID
+        help: 選填，1–4094；留空表示不使用 VLAN。只套用到之後建立的 VM / LXC，既有機器的網卡不會跟著改。
+      - label: Gateway VM IP
+        help: 例：10.10.0.2；必須在子網內。
+        required: true
+      - label: 主系統 IP
+        help: 選填，例：10.10.0.3；必須在子網內、不能和閘道或 Gateway VM 相同，填了就不會配給 VM / LXC。
+      - label: DNS Servers
+        help: 選填，多組以逗號分隔，例：8.8.8.8,1.1.1.1。
+      - label: 對外 port 配號池：起始
+        help: 1024 到 65535，預設 30000；不能大於結束。
+        required: true
+      - label: 對外 port 配號池：結束
+        help: 1024 到 65535，預設 39999。
+        required: true
+      - label: 對外入口主機
+        help: 選填，例：gw.school.edu 或 140.xxx.xxx.xxx，學生用它加對外 port 連進來。
+      - label: 預設封鎖網段 / IP
+        help: 選填，每行一個網段或 IP，例：192.168.100.0/24、10.0.0.5；存檔後逐台套用到機器的防火牆。不能和子網 CIDR 重疊。
+    notes:
+      - 從「編輯子網設定」開啟時，視窗標題是「編輯子網設定」，儲存按鈕是「更新設定」，另有「刪除子網設定」。
+      - 閘道 IP、Gateway VM IP 與主系統 IP 不能是已經配給機器或被預留的位址。
+related:
+  - path: /gateway
+    when: 要設定對外流量經過的 Gateway VM
+  - path: /domain
+    when: 要讓機器用網址對外

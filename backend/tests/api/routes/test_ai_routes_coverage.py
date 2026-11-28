@@ -1,4 +1,4 @@
-"""AI 路由（ai_template_recommendation、ai_proxy、ai_pve_log、ai_api、ai_contextual_help、ai_navigation）的直接呼叫測試。"""
+"""AI 路由（ai_template_recommendation、ai_proxy、ai_pve_log、ai_api、ai_assistant）的直接呼叫測試。"""
 
 from __future__ import annotations
 
@@ -19,8 +19,7 @@ from app.ai.pve_log.history import PveHistoryValidationError
 from app.ai.template_recommendation import options_service
 from app.ai.template_recommendation.schemas import ChatMessage, ChatRequest, DeviceNode
 from app.api.routes import ai_api as ai_api_route
-from app.api.routes import ai_contextual_help as help_route
-from app.api.routes import ai_navigation as nav_route
+from app.api.routes import ai_assistant as assistant_route
 from app.api.routes import ai_proxy as proxy_route
 from app.api.routes import ai_pve_log as pve_log_route
 from app.api.routes import ai_template_recommendation as template_route
@@ -402,22 +401,123 @@ def test_ai_api_admin_and_owner_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-# ─── ai_contextual_help / ai_navigation ──────────────────────────────────────
+# ─── ai_assistant ────────────────────────────────────────────────────────────
 
 
-async def test_contextual_help_explain_and_surfaces(
+async def test_assistant_chat_streams_events_and_ends_with_the_final_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    explain = AsyncMock(return_value="explained")
-    monkeypatch.setattr(help_route, "explain", explain)
+    from app.ai.assistant.schemas import AssistantChatResponse
+
+    final = AssistantChatResponse(request_id="r1", reply="到防火牆頁設定。")
+    seen: list[tuple[Any, ...]] = []
+
+    async def chat_stream(request: Any, user: Any, *, session: Any) -> Any:
+        seen.append((request, user, session))
+        yield {"type": "status", "tool": "read_help"}
+        yield {"type": "delta", "text": "到防火牆"}
+        yield {"type": "reset"}
+        yield {"type": "final", "response": final}
+
+    monkeypatch.setattr(assistant_route, "chat_stream", chat_stream)
+    session = MagicMock()
+
+    events = [
+        event
+        async for event in assistant_route.assistant_chat(
+            request="req", session=session, current_user=_USER
+        )
+    ]
+    assert seen == [("req", _USER, session)]
+    assert [(event.event, event.data) for event in events] == [
+        ("status", {"tool": "read_help"}),
+        ("delta", {"text": "到防火牆"}),
+        ("reset", {}),
+        ("final", final),
+    ]
+
+
+async def test_assistant_chat_reports_a_mid_stream_failure_as_an_error_event(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """標頭送出之後改不了狀態碼：前端靠 error 事件知道這一輪不會有回應。"""
+
+    async def chat_stream(request: Any, user: Any, *, session: Any) -> Any:
+        yield {"type": "delta", "text": "寫到一半"}
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(assistant_route, "chat_stream", chat_stream)
+    with caplog.at_level("ERROR"):
+        events = [
+            event
+            async for event in assistant_route.assistant_chat(
+                request="req", session=MagicMock(), current_user=_USER
+            )
+        ]
+    assert [(event.event, event.data) for event in events] == [
+        ("delta", {"text": "寫到一半"}),
+        ("error", {}),
+    ]
+    assert "Assistant chat stream failed" in caplog.text
+
+
+def test_assistant_chat_is_served_as_server_sent_events() -> None:
+    """走完整個 HTTP 堆疊：事件格式、不緩衝的標頭、最後一則是完整回應。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.ai.assistant.schemas import AssistantChatResponse
+    from app.api.deps import get_current_user
+    from app.api.deps.database import get_db
+
+    final = AssistantChatResponse(request_id="r1", reply="到「防火牆」頁設定。")
+
+    async def chat_stream(request: Any, user: Any, *, session: Any) -> Any:
+        yield {"type": "delta", "text": "到「防火牆」"}
+        yield {"type": "final", "response": final}
+
+    app = FastAPI()
+    app.include_router(assistant_route.router)
+    app.dependency_overrides[get_current_user] = lambda: _USER
+    app.dependency_overrides[get_db] = lambda: MagicMock()
+    for route in app.routes:
+        if getattr(route, "path", "") == "/ai/assistant/chat":
+            for dependency in route.dependencies:
+                app.dependency_overrides[dependency.dependency] = lambda: None
+
+    original = assistant_route.chat_stream
+    assistant_route.chat_stream = chat_stream
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/ai/assistant/chat",
+                json={"messages": [{"role": "user", "content": "怎麼開 port"}]},
+            )
+    finally:
+        assistant_route.chat_stream = original
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["x-accel-buffering"] == "no"
+    assert response.headers["cache-control"] == "no-cache"
+    blocks = [block for block in response.text.split("\n\n") if block]
+    assert [block.split("\n")[0] for block in blocks] == [
+        "event: delta",
+        "event: final",
+    ]
+    assert json.loads(blocks[0].split("data: ", 1)[1]) == {"text": "到「防火牆」"}
+    assert json.loads(blocks[1].split("data: ", 1)[1]) == final.model_dump(mode="json")
+
+
+def test_assistant_surfaces(monkeypatch: pytest.MonkeyPatch) -> None:
     surfaces = [
         SimpleNamespace(
             id="resources",
-            path="/resources",
-            title="資源",
+            path="/my-resources",
+            title="我的資源",
             purpose="管理機器",
-            when_to_use="開機",
-            elements=["field"],
+            when_to_use="要操作機器時",
+            elements=[object()],
         ),
         SimpleNamespace(
             id="home",
@@ -428,59 +528,45 @@ async def test_contextual_help_explain_and_surfaces(
             elements=[],
         ),
     ]
-    monkeypatch.setattr(help_route, "get_surfaces_for_user", lambda user: surfaces)
-    session = MagicMock()
+    monkeypatch.setattr(assistant_route, "get_surfaces_for_user", lambda user: surfaces)
 
-    assert (
-        await help_route.explain_screen(
-            request="req", session=session, current_user=_USER
-        )
-        == "explained"
-    )
-    explain.assert_awaited_once_with("req", _USER, session=session)
-
-    listed = help_route.list_surfaces(current_user=_USER)
-    assert [(item.id, item.has_fields) for item in listed] == [
-        ("resources", True),
-        ("home", False),
+    listed = assistant_route.list_surfaces(current_user=_USER)
+    assert [(item.id, item.path, item.has_fields) for item in listed] == [
+        ("resources", "/my-resources", True),
+        ("home", "/", False),
     ]
+    assert listed[0].when_to_use == "要操作機器時"
+    # 欄位定義只在回答時進 prompt，不整包送到瀏覽器
+    assert set(type(listed[0]).model_fields) == {
+        "id",
+        "path",
+        "title",
+        "purpose",
+        "when_to_use",
+        "has_fields",
+    }
 
 
-async def test_navigation_resolve_and_intake(monkeypatch: pytest.MonkeyPatch) -> None:
-    resolve = AsyncMock(return_value="resolved")
-    monkeypatch.setattr(nav_route, "resolve_navigation", resolve)
-    intake = MagicMock(return_value="intake-state")
-    monkeypatch.setattr(nav_route, "read_intake", intake)
-    session = MagicMock()
-    request = SimpleNamespace(
-        query="我要開機",
-        history=[],
-        current_path="/",
-        surface_id=None,
-        screen_state=None,
-        active_flow_id=None,
-        pending_flow_ids=[],
-    )
+def test_assistant_chat_is_rate_limited_and_surfaces_is_not() -> None:
+    """每一句話會打模型好幾次，沒有節流一個帳號就能把推論排隊塞滿。"""
+    routes = {route.path: route for route in assistant_route.router.routes}
+    assert set(routes) == {"/ai/assistant/chat", "/ai/assistant/surfaces"}
+    assert routes["/ai/assistant/chat"].methods == {"POST"}
+    assert len(routes["/ai/assistant/chat"].dependencies) == 1
+    assert routes["/ai/assistant/surfaces"].methods == {"GET"}
+    assert routes["/ai/assistant/surfaces"].dependencies == []
 
-    assert (
-        await nav_route.resolve_navigation_route(
-            request=request, session=session, current_user=_USER
-        )
-        == "resolved"
-    )
-    assert resolve.await_args.args == ("我要開機", _USER)
 
-    earlier = nav_route.NavigationMessage(role="assistant", content="需要什麼？")
-    result = nav_route.navigation_intake(
-        request=SimpleNamespace(
-            goal="架網站", history=[earlier], facts={}, pending_key="os"
-        ),
-        _current_user=_USER,
-    )
-    assert result == "intake-state"
-    history = intake.call_args.args[0]
-    assert [(item.role, item.content) for item in history] == [
-        ("user", "架網站"),
-        ("assistant", "需要什麼？"),
-    ]
-    assert intake.call_args.kwargs == {"facts": {}, "pending_key": "os"}
+def test_assistant_routes_are_mounted_and_the_old_ones_are_gone() -> None:
+    from app.main import app
+
+    paths = app.openapi()["paths"]
+    assert "/api/v1/ai/assistant/chat" in paths
+    assert "/api/v1/ai/assistant/surfaces" in paths
+    for removed in (
+        "/api/v1/ai/navigation/resolve",
+        "/api/v1/ai/navigation/intake",
+        "/api/v1/ai/contextual-help/explain",
+        "/api/v1/ai/contextual-help/surfaces",
+    ):
+        assert removed not in paths

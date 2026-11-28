@@ -128,7 +128,7 @@ Teachers and administrators. A teacher can only use their own machines as the so
 - The template status is `ready`.
 - The test machine can be created and booted within the allowed time.
 - It contains no test account passwords, API keys, student data or other sensitive information.
-- A template cannot be deleted while a teaching environment (including drafts and retired versions), an unprovisioned request, an unfinished batch job or a clone still uses it. To take it out of the request form, set it to "Private".
+- A template cannot be deleted while a teaching environment (including drafts), an unprovisioned request, an unfinished batch job or a clone still uses it. To take it out of the request form, set it to "Private".
 
 ### 6.5 Opening the template to student requests (optional)
 
@@ -192,7 +192,7 @@ The backend rejects:
 
 - Deletion (`DELETE /course-environments/{id}`) is allowed only when no class or practice session, including ended ones, has ever used the environment.
 - To stop offering a used environment for quick practice, change its usage to **Formal courses only**; class setup then lists it only for its owner and administrators. There is no unpublish or archive state.
-- Before a template is deleted, the system lists the teaching environments that use it (including drafts and retired versions) and refuses the deletion if there are any.
+- Before a template is deleted, the system lists the teaching environments that use it (including drafts) and refuses the deletion if there are any.
 
 ### 7.6 Drafts
 

@@ -2,6 +2,9 @@
 # Thinking is model-wide and overrides legacy enable_thinking/reasoning_effort inputs.
 # Sampling, token budgets, timeouts and checker policy remain in the existing backend.
 # Restart the backend after editing this file; no automatic model-family fallback.
+# A feature may request a different thinking level per call (the assistant uses
+# its own level from system-ai.json); models with only an on/off switch treat
+# low/medium/high as "on".
 schema_version: 1
 
 models:
@@ -35,16 +38,22 @@ models:
     native_tool_calls: true
     tool_choice_modes: ["auto", "none", "required", "named"]
 
-  # BIRC-LLM serves Qwen3.8-Flash-Next. The official card lists reasoning_effort
-  # xhigh/medium/low and enable_thinking via chat_template_kwargs, but this
-  # deployment keeps thinking on under json_schema (the adherence check then
-  # truncates at 128 tokens and fails closed) regardless of enable_thinking=false
-  # or effort=low. A top-level reasoning_effort="none" turns it off (verified live).
+  # BIRC-LLM is an OpenAI-compatible gateway alias (LiteLLM) serving
+  # Qwen3.8-Flash-Next; left alone, the served default is high effort. The official
+  # card lists reasoning_effort xhigh/medium/low and enable_thinking via
+  # chat_template_kwargs, but this deployment keeps thinking on under json_schema
+  # (the adherence check then truncates at 128 tokens and fails closed) regardless
+  # of enable_thinking=false or effort=low. The top-level reasoning_effort is the
+  # field that works: "none" turns thinking off and low/medium/high grade it
+  # (verified live). Model-wide thinking is off; the assistant asks for its own
+  # level per call, and checks state "none" explicitly so they stay off even if
+  # the model-wide level is raised later.
   # vLLM recipe: --reasoning-parser qwen3 --enable-auto-tool-choice
   # --tool-call-parser qwen3_coder, so native tool calls are available.
   "BIRC-LLM":
     thinking: "none"
     thinking_parameter: reasoning_effort
+    check_thinking: "none"
     response_formats: ["json_object", "json_schema"]
     native_tool_calls: true
     tool_choice_modes: ["auto", "none", "required", "named"]

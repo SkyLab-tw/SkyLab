@@ -214,11 +214,14 @@ def test_rebuild_keeps_provisioned_node_and_raises_on_infeasible(
 
     monkeypatch.setattr(placement_service, "select_reserved_target_node", _fake_select)
 
-    with pytest.raises(ValueError, match="No feasible reservation exists"):
+    with pytest.raises(ValueError, match="No feasible reservation exists") as raised:
         placement_service.rebuild_reserved_assignments(
             session=None, requests=[blocked, provisioned]
         )
 
+    # 審核頁靠 request_id 分辨排不進去的是哪一張申請
+    assert isinstance(raised.value, placement_service.NoFeasibleReservationError)
+    assert raised.value.request_id == blocked.id
     assert provisioned.assigned_node == "pve-live"
     assert provisioned.desired_node == "pve-live"
 

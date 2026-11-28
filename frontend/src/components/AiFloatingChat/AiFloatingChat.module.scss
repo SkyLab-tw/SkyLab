@@ -309,30 +309,61 @@
   flex-direction: column;
   gap: $spacing-8;
   margin-top: 12px;
+}
 
-  button {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--color-border);
-    border-radius: $radius-12;
-    background: var(--color-surface);
-    color: var(--color-text-primary);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background $transition-base;
+/* 一列：前往這一頁的卡片，旁邊（有聚光燈導覽的頁面才有）一顆「帶我看」 */
+.actionItem {
+  display: flex;
+  align-items: stretch;
+  gap: $spacing-8;
+}
 
-    &:hover { background: var(--color-hover); }
-    &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.actionMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-12;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background $transition-base;
 
-    span { display: flex; flex-direction: column; gap: 2px; }
-    strong { font-size: $font-size-14; }
-    small { color: var(--color-text-muted); font-size: $font-size-12; }
-  }
+  &:hover { background: var(--color-hover); }
+  &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+  span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  strong { font-size: $font-size-14; }
+  small { color: var(--color-text-muted); font-size: $font-size-12; }
+}
+
+/* 「帶我看」：換過去之後開始那一頁的聚光燈導覽。次要動作，淡底文字鈕 */
+.actionTour {
+  @include btn-ghost;
+  flex: none;
+  height: auto;
+}
+
+/* 「在畫面上指給我看」：把助手說的那個地方用聚光燈亮出來 */
+.pointBtn {
+  @include btn-secondary;
+  margin-top: 12px;
+}
+
+/* 模型不可用、回覆是伺服器的固定說明時的小字提示 */
+.degradedNote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: $spacing-8;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
 }
 
 /* 開場的能力說明：三種能力共用一個對話框，這裡是唯一會講出來的地方 */
@@ -446,14 +477,37 @@
   color: var(--color-text-secondary);
 }
 
-/* 流程導覽：目前這一步高亮，已經過的那幾步壓低對比。
-   順序靠由上而下排列表達，不再加外面的 1. 2. 3.：卡片裡的狀態圖示（已完成／目前／還沒做）已經標出進度，兩套記號重複 */
+/* 流程卡：標題＋依序的步驟。不標「做到哪一步」——換到某一頁不代表那一步做完了；
+   每一步前面是序號，步驟就在目前這一頁時序號換主色 */
+.flowCard {
+  margin-top: 14px;
+}
+
+.flowTitle {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: $font-size-14;
+}
+
+.stepIndex {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-hover);
+  color: var(--color-text-secondary);
+  font-size: $font-size-12;
+  font-weight: $font-weight-700;
+  line-height: 20px;
+  text-align: center;
+}
+
 .stepList {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   padding: 0;
 
   button {
@@ -475,34 +529,39 @@
     &:hover { background: var(--color-hover); }
     &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
-    span { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    &:disabled { cursor: default; opacity: 0.6; }
+
+    /* 文字欄（標題＋說明）；序號那個 span 有自己的 class，不吃這組排版 */
+    > span:not(.stepIndex) { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
     strong { font-size: $font-size-14; line-height: 1.45; }
     small {
       color: var(--color-text-muted);
       font-size: $font-size-12;
       line-height: 1.7;
     }
+
+    /* 這一步就在目前這一頁：序號換主色，不改框也不加色條 */
+    &[aria-current="location"] .stepIndex {
+      background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+      color: var(--color-primary-on-surface);
+    }
   }
-}
-
-/* 目前這一步：只換主色框（跟選中的選項同一套），不加左側色條 */
-.step_current button {
-  border-color: var(--color-primary);
-}
-
-.step_done button {
-  opacity: 0.55;
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-
-.step_todo button {
-  opacity: 0.9;
 }
 
 /* 回覆中的章魚（跟浮動按鈕同尺寸 60×48）：上方留空間給飄出來的 0 和 1 */
 .typing {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
   padding-top: 24px;
+}
+
+/* 助手做到哪了（查完說明、正在整理回答）：排在敲筆電的章魚旁邊 */
+.typingStatus {
+  padding-bottom: 6px;
+  color: var(--color-text-secondary);
+  font-size: $font-size-12;
+  line-height: 1.4;
 }
 
 /* 透明底讓面板的玻璃質感延伸到底部；輸入框自己是實色卡，可讀性不受影響 */
@@ -688,24 +747,4 @@
 @keyframes fabIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
-}
-
-/* 進行中的流程：次要鈕；目前選中的那個換主色框與淡底（hover 也維持，權重要壓過基底的 hover） */
-.workflowBar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $spacing-8;
-  padding: $spacing-8 $spacing-16 0;
-
-  button {
-    @include btn-secondary;
-    padding-inline: 12px;
-
-    &[aria-pressed="true"],
-    &[aria-pressed="true"]:hover:not(:disabled) {
-      border-color: var(--color-primary);
-      background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
-      color: var(--color-primary-on-surface);
-    }
-  }
 }

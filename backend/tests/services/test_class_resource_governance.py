@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api.deps.proxmox import check_resource_ownership
-from app.api.routes import course_admin, teaching_classes
+from app.api.routes import teaching_classes
 from app.exceptions import BadRequestError, PermissionDeniedError
 from app.models import (
     BatchProvisionJob,
@@ -278,19 +278,6 @@ def test_generic_ttl_query_excludes_teaching_class_resources():
         session=session
     ) == []
     assert "resources.allocation_scope" in str(session.statement)
-
-
-def test_teacher_cannot_manage_another_teachers_course_path(monkeypatch):
-    owner_id = uuid.uuid4()
-    teacher = _user(UserRole.teacher)
-    monkeypatch.setattr(
-        course_admin.course_service,
-        "get_path_or_404",
-        lambda *_args, **_kwargs: SimpleNamespace(created_by=owner_id),
-    )
-
-    with pytest.raises(PermissionDeniedError):
-        course_admin._require_path(object(), teacher, uuid.uuid4())
 
 
 def test_active_or_next_window_recovers_current_occurrence():

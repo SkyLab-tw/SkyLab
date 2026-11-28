@@ -1,0 +1,224 @@
+# 資源排程（/scheduler）
+# 原「系統設定」的分頁，2026-09 升格為系統管理底下的獨立頁面。
+# label 一律沿用畫面上的文字，help 取自各欄既有的 hint / placeholder / 確認訊息。
+id: scheduler
+path: /scheduler
+title: 資源排程
+access: admin
+order: 340
+purpose: 跨叢集共用的放置、超配、排程開機與練習時段參數。
+when_to_use: 機器放置不平均、資源超賣太多或太少，或排程開機、練習時段與到期提醒的行為需要調整。
+sections:
+  - 放置與超配
+  - 資源評估閾值
+  - 排程開機與時段
+  - 練習時段與到期提醒
+features:
+  - 「放置與超配」：CPU、Disk、RAM 超配比決定一個節點能放多少機器，「換節點成本」影響機器換節點的傾向；這張卡片標示「立即生效」。
+  - 「資源評估閾值」：15 個閾值分成五組、一組一列，畫面上只寫組名和短欄名：「CPU 峰值」與「RAM 峰值」各有「餘裕」「警戒占比」「高位占比」；「LoadAvg（每核）」有「警戒」「上限」「懲罰權重」（以實體核計，不乘 CPU 超配倍率）；「磁碟爭用」有「警戒占比」「上限占比」「懲罰權重」；「資源權重」有「CPU」「RAM」「Disk」。這些值決定放置時繁忙節點扣多少分；這張卡片標示「立即生效」。
+  - 「排程開機與時段」：使用時段開始前提前開機、分批開機的批次大小與間隔、時段結束後的寬限；這張卡片標示「下個排程週期生效」。
+  - 「練習時段與到期提醒」：學生在使用時段外自己開機時可用多久、結束前多久提醒，以及學生畫面多早顯示快到期提醒；這張卡片標示「立即生效」。
+  - 儲存：四張卡片共用「儲存排程設定」一次送出整頁，有修改時才能按；有修改時會出現「還原」，按下回到上次儲存的值；有未儲存的修改時離開頁面會先跳確認。
+  - 「LoadAvg（每核）」的「上限」必須大於「警戒」、「磁碟爭用」的「上限占比」必須大於「警戒占比」，否則儲存會被拒絕。
+elements:
+  - id: scheduler.cpu_overcommit
+    role: number
+    label: CPU 超配比
+    help: 已分配 vCPU 最多可達實體核心的幾倍。
+    constraints:
+      - 1 到 8
+    section: 放置與超配
+  - id: scheduler.disk_overcommit
+    role: number
+    label: Disk 超配比
+    help: 1 表示磁碟不超配。
+    constraints:
+      - 1 到 5
+    section: 放置與超配
+  - id: scheduler.memory_overcommit
+    role: number
+    label: RAM 超配比
+    help: 1～2 倍，1 表示不超配；放寬的是分配給機器的記憶體總量，實際用量仍不能超過實體記憶體。
+    constraints:
+      - 1 到 2
+    section: 放置與超配
+  - id: scheduler.reassignment_cost
+    role: number
+    label: 換節點成本
+    help: 越高越傾向把機器留在原本的節點。
+    constraints:
+      - 0 到 5
+    section: 放置與超配
+  # 閾值卡分組顯示：畫面上是「組名＋短欄名」（例如「CPU 峰值」那組的「餘裕」），
+  # 完整名稱留在輸入框的無障礙名稱，label 用完整名稱，help 寫出畫面上的組名與短欄名。
+  - id: scheduler.peak_cpu_margin
+    role: number
+    label: CPU 峰值餘裕
+    help: 畫面上在「CPU 峰值」那一組，欄名是「餘裕」。
+    constraints:
+      - 1 到 2
+    section: 資源評估閾值
+  - id: scheduler.peak_memory_margin
+    role: number
+    label: RAM 峰值餘裕
+    help: 畫面上在「RAM 峰值」那一組，欄名是「餘裕」。
+    constraints:
+      - 1 到 2
+    section: 資源評估閾值
+  - id: scheduler.loadavg_warn_per_core
+    role: number
+    label: LoadAvg 警戒 / 核
+    help: 畫面上在「LoadAvg（每核）」那一組，欄名是「警戒」。以實體核計，不乘 CPU 超配倍率。
+    constraints:
+      - 0 到 4
+    section: 資源評估閾值
+  - id: scheduler.loadavg_max_per_core
+    role: number
+    label: LoadAvg 上限 / 核
+    help: 畫面上在「LoadAvg（每核）」那一組，欄名是「上限」。以實體核計，不乘 CPU 超配倍率。
+    constraints:
+      - 0.1 到 8
+      - 必須大於同一組的「警戒」（LoadAvg 警戒 / 核）
+    section: 資源評估閾值
+  - id: scheduler.loadavg_penalty_weight
+    role: number
+    label: LoadAvg 懲罰權重
+    help: 畫面上在「LoadAvg（每核）」那一組，欄名是「懲罰權重」。
+    constraints:
+      - 0 到 5
+    section: 資源評估閾值
+  - id: scheduler.disk_contention_warn_share
+    role: number
+    label: 磁碟爭用警戒占比
+    help: 畫面上在「磁碟爭用」那一組，欄名是「警戒占比」。
+    constraints:
+      - 0 到 1.5
+    section: 資源評估閾值
+  - id: scheduler.disk_contention_high_share
+    role: number
+    label: 磁碟爭用上限占比
+    help: 畫面上在「磁碟爭用」那一組，欄名是「上限占比」。
+    constraints:
+      - 0.1 到 2
+      - 必須大於同一組的「警戒占比」（磁碟爭用警戒占比）
+    section: 資源評估閾值
+  - id: scheduler.disk_penalty_weight
+    role: number
+    label: 磁碟懲罰權重
+    help: 畫面上在「磁碟爭用」那一組，欄名是「懲罰權重」。
+    constraints:
+      - 0 到 5
+    section: 資源評估閾值
+  - id: scheduler.cpu_peak_warn_share
+    role: number
+    label: CPU 峰值警戒占比
+    help: 畫面上在「CPU 峰值」那一組，欄名是「警戒占比」。
+    constraints:
+      - 0 到 2
+    section: 資源評估閾值
+  - id: scheduler.cpu_peak_high_share
+    role: number
+    label: CPU 峰值高位占比
+    help: 畫面上在「CPU 峰值」那一組，欄名是「高位占比」。
+    constraints:
+      - 0.1 到 3
+    section: 資源評估閾值
+  - id: scheduler.memory_peak_warn_share
+    role: number
+    label: RAM 峰值警戒占比
+    help: 畫面上在「RAM 峰值」那一組，欄名是「警戒占比」。
+    constraints:
+      - 0 到 2
+    section: 資源評估閾值
+  - id: scheduler.memory_peak_high_share
+    role: number
+    label: RAM 峰值高位占比
+    help: 畫面上在「RAM 峰值」那一組，欄名是「高位占比」。
+    constraints:
+      - 0.1 到 3
+    section: 資源評估閾值
+  - id: scheduler.resource_weight_cpu
+    role: number
+    label: 資源權重 CPU
+    help: 畫面上在「資源權重」那一組，欄名是「CPU」。
+    constraints:
+      - 0 到 10
+    section: 資源評估閾值
+  - id: scheduler.resource_weight_memory
+    role: number
+    label: 資源權重 RAM
+    help: 畫面上在「資源權重」那一組，欄名是「RAM」。
+    constraints:
+      - 0 到 10
+    section: 資源評估閾值
+  - id: scheduler.resource_weight_disk
+    role: number
+    label: 資源權重 Disk
+    help: 畫面上在「資源權重」那一組，欄名是「Disk」。
+    constraints:
+      - 0 到 10
+    section: 資源評估閾值
+  - id: scheduler.scheduled_boot_batch_size
+    role: number
+    label: 開機批次大小
+    help: 排程開機時每一批開幾台。
+    constraints:
+      - 1 到 100 的整數
+    section: 排程開機與時段
+  - id: scheduler.scheduled_boot_batch_interval
+    role: number
+    label: 批次間隔（秒）
+    help: 排程開機時兩批之間隔幾秒。
+    constraints:
+      - 0 到 600 的整數
+    section: 排程開機與時段
+  - id: scheduler.scheduled_boot_lead_time
+    role: number
+    label: 提前開機（分）
+    help: 使用時段開始前幾分鐘開始開機。
+    constraints:
+      - 0 到 120 的整數
+    section: 排程開機與時段
+  - id: scheduler.window_grace_period
+    role: number
+    label: 時段寬限（分）
+    help: 排程開機的機器在時段結束後再等幾分鐘才關機。
+    constraints:
+      - 0 到 240 的整數
+    section: 排程開機與時段
+  - id: scheduler.practice_session_hours
+    role: number
+    label: 練習時段（小時）
+    help: 學生在使用時段以外自己開機時，機器可運作幾小時後自動關機；快速練習環境的使用時數也是這個值。老師與管理員自己的機器不受限。
+    constraints:
+      - 1 到 24 的整數
+    section: 練習時段與到期提醒
+  - id: scheduler.practice_warning_minutes
+    role: number
+    label: 練習提醒（分）
+    help: 練習時段結束前幾分鐘提醒。
+    constraints:
+      - 1 到 120 的整數
+    section: 練習時段與到期提醒
+  - id: scheduler.expiry_warning_hours
+    role: number
+    label: 到期提醒（小時）
+    help: 學生介面提前幾小時顯示「快到期」；到期後的通知、關機與刪除由「資源政策」頁的 TTL 生命週期負責。
+    constraints:
+      - 1 到 720 的整數
+    section: 練習時段與到期提醒
+  - id: scheduler.restore
+    role: button
+    label: 還原
+    help: 有修改時才出現，把表單改回上次儲存的值。
+  - id: scheduler.save
+    role: button
+    label: 儲存排程設定
+    help: 一次送出這一頁的全部欄位；沒有修改時不能按。
+related:
+  - path: /pve-connections
+    when: 要停用某個節點或改節點優先度
+  - path: /storage
+    when: 要設定各 Storage 的速度等級與優先度
+  - path: /governance
+    when: 要設定配額、到期後的通知與回收，或其他治理政策

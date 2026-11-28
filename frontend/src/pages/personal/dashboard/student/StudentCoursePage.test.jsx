@@ -5,9 +5,9 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const courses = {
-  listPaths: vi.fn(),
+  listClasses: vi.fn(),
   listSchedule: vi.fn(),
-  getPath: vi.fn(),
+  getClass: vi.fn(),
   getAiAssignments: vi.fn(),
   getWeeklyTasks: vi.fn(),
   getPracticeMachines: vi.fn(),
@@ -46,8 +46,8 @@ async function render(path) {
   await act(async () => root.render(withQueryClient(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/courses/:pathId" element={<StudentCoursePage />} />
-        <Route path="/courses/:pathId/weeks/:weekId" element={<StudentWeekPage />} />
+        <Route path="/courses/:classId" element={<StudentCoursePage />} />
+        <Route path="/courses/:classId/weeks/:weekId" element={<StudentWeekPage />} />
         <Route path="*" element={null} />
       </Routes>
       <Location />
@@ -63,7 +63,7 @@ beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
   courses.listSchedule.mockResolvedValue([]);
-  courses.getPath.mockResolvedValue({ rooms: [] });
+  courses.getClass.mockResolvedValue({ id: "class-1", title: "Linux course" });
   courses.getAiAssignments.mockResolvedValue([]);
   courses.getWeeklyTasks.mockResolvedValue([]);
   courses.getPracticeMachines.mockResolvedValue([]);
@@ -75,13 +75,13 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 it("shows the load-failure notice when only the course list fails", async () => {
-  courses.listPaths.mockRejectedValue(new Error("500"));
+  courses.listClasses.mockRejectedValue(new Error("500"));
   await render("/courses/1");
   expect(host.textContent).toContain("StudentCoursePage.noticeTitle");
 });
 
 it("opens weeks of the course actually shown after falling back from an unknown course id", async () => {
-  courses.listPaths.mockResolvedValue([{ id: 2, title: "Course B", progress_percent: 0 }]);
+  courses.listClasses.mockResolvedValue([{ id: 2, title: "Course B" }]);
   courses.getWeeklyTasks.mockResolvedValue([{ id: 9, week_number: 1, title: "Week one", session_date: "2026-09-09", checkpoints: [], files: [] }]);
   await render("/courses/1");
   expect(host.textContent).toContain("Course B");
@@ -92,10 +92,22 @@ it("opens weeks of the course actually shown after falling back from an unknown 
   expect(host.querySelector("output").textContent).toBe("/courses/2/weeks/9");
 });
 
+it("falls back to the course in session, and never loads another course's tasks first", async () => {
+  courses.listClasses.mockResolvedValue([{ id: 2, title: "Course B" }, { id: 3, title: "Course C" }]);
+  courses.listSchedule.mockResolvedValue([
+    { id: 2, title: "Course B", state: "later", start_at: "2026-09-09T06:00:00Z", end_at: "2026-09-09T08:00:00Z" },
+    { id: 3, title: "Course C", state: "now", start_at: "2026-09-09T03:00:00Z", end_at: "2026-09-09T05:00:00Z" },
+  ]);
+  await render("/courses/1");
+  expect(host.textContent).toContain("Course C");
+  expect(courses.getWeeklyTasks).toHaveBeenCalledWith(3);
+  expect(courses.getWeeklyTasks).not.toHaveBeenCalledWith(2);
+});
+
 
 it("opens the current week's approved task content from the course overview", async () => {
   const items = [{ id: "backup", title: "Configure daily backups", description: "Run pg_dump at 02:00", detectable: "auto" }];
-  courses.listPaths.mockResolvedValue([{ id: "path-1", title: "Linux course" }]);
+  courses.listClasses.mockResolvedValue([{ id: "class-1", title: "Linux course" }]);
   courses.getAiAssignments.mockResolvedValue([{
     id: "assignment-1", teaching_class_week_id: "week-1", items,
     completion: { completed: false },
@@ -104,12 +116,12 @@ it("opens the current week's approved task content from the course overview", as
     id: "week-1", week_number: 1, title: "Backup week", session_date: "2026-09-09",
     checkpoints: items, files: [],
   }]);
-  await render("/courses/path-1");
+  await render("/courses/class-1");
   expect(host.querySelector('[data-guide="home-tasks"] input[type="checkbox"]')).toBeTruthy();
   const openWeek = [...host.querySelectorAll("button")]
     .find((button) => button.textContent.includes("StudentCoursePage.openThisWeek"));
   await act(async () => openWeek.click());
-  expect(host.querySelector("output").textContent).toBe("/courses/path-1/weeks/week-1");
+  expect(host.querySelector("output").textContent).toBe("/courses/class-1/weeks/week-1");
   /* 週任務頁與課程頁共用快取：點進來當下就有內容，不再整頁載入 */
   expect(host.textContent).not.toContain("StudentWeekPage.loading");
   const feedback = host.querySelector('[data-guide="course-week-feedback"]');
@@ -119,7 +131,7 @@ it("opens the current week's approved task content from the course overview", as
 });
 
 it("checks a week off in place without reloading the course", async () => {
-  courses.listPaths.mockResolvedValue([{ id: "path-1", title: "Linux course" }]);
+  courses.listClasses.mockResolvedValue([{ id: "class-1", title: "Linux course" }]);
   courses.getAiAssignments.mockResolvedValue([{
     id: "assignment-1", teaching_class_week_id: "week-1", items: [],
     completion: { completed: false },
@@ -128,21 +140,21 @@ it("checks a week off in place without reloading the course", async () => {
     id: "week-1", week_number: 1, title: "Backup week", session_date: "2026-09-09", checkpoints: [], files: [],
   }]);
   courses.updateAssignmentCompletion.mockResolvedValue({ completed: true });
-  await render("/courses/path-1");
+  await render("/courses/class-1");
 
   const checkbox = host.querySelector('[data-guide="home-tasks"] input[type="checkbox"]');
   expect(checkbox.checked).toBe(false);
   await act(async () => checkbox.click());
   await flush();
 
-  expect(courses.updateAssignmentCompletion).toHaveBeenCalledWith("path-1", "assignment-1", true);
+  expect(courses.updateAssignmentCompletion).toHaveBeenCalledWith("class-1", "assignment-1", true);
   expect(courses.getAiAssignments).toHaveBeenCalledTimes(1);
-  expect(client.getQueryData(courseKeys.aiAssignments("path-1"))[0].completion).toEqual({ completed: true });
+  expect(client.getQueryData(courseKeys.aiAssignments("class-1"))[0].completion).toEqual({ completed: true });
   expect(host.querySelector('[data-guide="home-tasks"] input[type="checkbox"]').checked).toBe(true);
 });
 
 it("marks only the items that wait for the teacher, not every AI-checkable item", async () => {
-  courses.listPaths.mockResolvedValue([{ id: "path-1", title: "Linux course" }]);
+  courses.listClasses.mockResolvedValue([{ id: "class-1", title: "Linux course" }]);
   courses.getAiAssignments.mockResolvedValue([{
     id: "assignment-1", title: "Server setup", teaching_class_week_id: null,
     items: [
@@ -153,7 +165,7 @@ it("marks only the items that wait for the teacher, not every AI-checkable item"
     completion: { completed: false },
   }]);
   courses.getWeeklyTasks.mockResolvedValue([]);
-  await render("/courses/path-1");
+  await render("/courses/class-1");
 
   const toggle = [...host.querySelectorAll("button")].find((button) => button.getAttribute("aria-expanded") === "false");
   await act(async () => toggle.click());
@@ -167,7 +179,7 @@ it("marks only the items that wait for the teacher, not every AI-checkable item"
 
 it("shows the guide demo course without calling the course APIs", async () => {
   await render("/courses/demo");
-  expect(courses.listPaths).not.toHaveBeenCalled();
+  expect(courses.listClasses).not.toHaveBeenCalled();
   expect(courses.getWeeklyTasks).not.toHaveBeenCalled();
   expect(host.textContent).toContain("StudentCoursePage.guideDemoCourseTitle");
 });

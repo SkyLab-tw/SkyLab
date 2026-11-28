@@ -1,0 +1,314 @@
+# 資源政策（/governance）
+# 原「系統設定」的分頁，2026-09 升格為系統管理底下的獨立頁面。
+# label 一律沿用畫面上的文字，help 取自各欄既有的 hint / placeholder / 確認訊息。
+# 2026-10「配額」併入這一頁、改名「資源政策」（舊網址 /quotas 導過去）。
+id: governance
+path: /governance
+title: 資源政策
+access: admin
+order: 350
+purpose: 資源警告、TTL 回收、閒置與挖礦偵測、快照與克隆併發的治理政策，以及全域預設的資源上限與個別使用者的配額覆寫。
+when_to_use: 要設定全站的資源規範：警告閾值、到期回收、閒置與挖礦偵測、快照與備份上限、克隆併發，或調整使用者能用多少資源。
+sections:
+  - 資源警告
+  - TTL 生命週期
+  - 閒置偵測
+  - VM / LXC 自動判斷
+  - 反挖礦偵測
+  - 快照治理
+  - 克隆併發
+  - 全域預設配額
+  - 個別使用者覆寫
+features:
+  - 「治理」區塊：資源警告、TTL 生命週期、閒置偵測、VM / LXC 自動判斷、反挖礦偵測、快照治理、克隆併發各自一張卡片，開關與數值都在同一頁。
+  - 儲存治理設定：改完按「儲存治理設定」一次送出整個「治理」區塊，有修改時才能按；有修改時會出現「還原」，按下回到上次儲存的值；有未儲存的修改時離開頁面會先跳確認。
+  - 「閒置通知（小時）」必須小於「關機寬限期（小時）」，否則儲存會被拒絕。
+  - 「配額」區塊的「全域預設配額」是沒有個人覆寫的使用者共用的上限，改完按卡片裡的「儲存」單獨送出；調整只影響之後的新增與擴容，不會回頭處理既有資源。
+  - 「個別使用者覆寫」：按「新增配額」替某位使用者設專屬上限；每列的「編輯配額」修改、「刪除配額」刪除，刪除後改回套用全域預設。
+  - 每個上限都可以勾選「無限制」，代表該項不設上限。管理員不受配額限制，也不能替管理員設個人配額。
+elements:
+  - id: governance.alerts_enabled
+    role: toggle
+    label: 啟用警告
+    help: 定期檢查叢集、節點、VM 的資源使用率並建立警告；也是平台健康警告的總開關。
+    section: 資源警告
+  - id: governance.alert_email_enabled
+    role: toggle
+    label: Email 通知
+    help: 警告建立時寄送 Email 給所有啟用中的管理員。
+    section: 資源警告
+  - id: governance.alert_cpu_threshold
+    role: number
+    label: CPU 閾值（%）
+    constraints:
+      - 50 到 100
+      - 必填
+    section: 資源警告
+  - id: governance.alert_memory_threshold
+    role: number
+    label: 記憶體閾值（%）
+    constraints:
+      - 50 到 100
+      - 必填
+    section: 資源警告
+  - id: governance.alert_disk_threshold
+    role: number
+    label: 磁碟閾值（%）
+    constraints:
+      - 50 到 100
+      - 必填
+    section: 資源警告
+  - id: governance.alert_cooldown_minutes
+    role: number
+    label: 冷卻期（分鐘）
+    help: 同一目標同一指標在冷卻期內不重發警告。
+    constraints:
+      - 1 到 1440
+      - 必填
+    section: 資源警告
+  - id: governance.alert_check_interval_seconds
+    role: number
+    label: 檢查間隔（秒）
+    help: 多久檢查一次資源使用率；平台健康警告也照這個間隔檢查。
+    constraints:
+      - 15 到 3600
+      - 必填
+    section: 資源警告
+  - id: governance.ttl_enabled
+    role: toggle
+    label: 啟用 TTL 回收
+    help: 依資源到期日自動處理：到期前通知 → 到期關機 → 寬限期滿刪除。
+    section: TTL 生命週期
+  - id: governance.expiry_warn_days
+    role: number
+    label: 到期前通知（天）
+    help: 到期前幾天寄信通知擁有者。只管寄信，學生畫面的快到期提醒不在這裡設定。
+    constraints:
+      - 1 到 30
+      - 必填
+    section: TTL 生命週期
+  - id: governance.expiry_grace_delete_days
+    role: number
+    label: 刪除寬限期（天）
+    help: 從到期關機起算，保留幾天才排入刪除佇列。
+    constraints:
+      - 0 到 90
+      - 必填
+    section: TTL 生命週期
+  - id: governance.idle_detection_enabled
+    role: toggle
+    label: 啟用閒置偵測
+    help: 低 CPU 的運行中資源先通知擁有者，寬限期滿自動關機（不刪除）。
+    section: 閒置偵測
+  - id: governance.idle_cpu_threshold_percent
+    role: number
+    label: 閒置 CPU 閾值（%）
+    help: 觀察視窗內平均 CPU 低於這個值算閒置。
+    constraints:
+      - 0.1 到 20
+      - 必填
+    section: 閒置偵測
+  - id: governance.idle_window_hours
+    role: number
+    label: 觀察視窗（小時）
+    help: 連續開機且平均 CPU 低於閾值達此時數才算閒置；重開機重新計算。
+    constraints:
+      - 1 到 720
+      - 必填
+    section: 閒置偵測
+  - id: governance.idle_notify_after_hours
+    role: number
+    label: 閒置通知（小時）
+    help: 從偵測到閒置起算，持續達此時數才通知擁有者。
+    constraints:
+      - 1 到 720
+      - 必填
+      - 須小於「關機寬限期（小時）」
+    section: 閒置偵測
+  - id: governance.idle_grace_hours
+    role: number
+    label: 關機寬限期（小時）
+    help: 從偵測到閒置起算，持續達此時數仍閒置才自動關機。
+    constraints:
+      - 1 到 720
+      - 必填
+      - 須大於「閒置通知（小時）」
+    section: 閒置偵測
+  - id: governance.idle_scan_batch_size
+    role: number
+    label: 每輪掃描台數
+    help: 閒置偵測每輪排程最多檢查幾台機器。
+    constraints:
+      - 1 到 200
+      - 必填
+    section: 閒置偵測
+  - id: governance.workload_advisor_enabled
+    role: toggle
+    label: 啟用自動判斷
+    help: 停用後申請時只能手動選擇資源類型（VM 或 LXC）。
+    section: VM / LXC 自動判斷
+  - id: governance.mining_detection_enabled
+    role: toggle
+    label: 啟用挖礦偵測
+    help: 定期掃描運行中資源，CPU 長期滿載時建立疑似挖礦事件；帳號停權要由管理員在資源監控頁的挖礦事件確認。
+    section: 反挖礦偵測
+  - id: governance.mining_auto_suspend
+    role: toggle
+    label: 自動存證並暫停
+    help: 開啟時建立事件會自動拍存證快照並暫停機器（課程機與 GPU 機只存證不暫停）；關閉後只建立事件並發警告與通知，不存證也不暫停，處置由管理員手動執行。
+    section: 反挖礦偵測
+  - id: governance.mining_cpu_threshold_percent
+    role: number
+    label: CPU 閾值（%）
+    help: 反挖礦偵測用：觀察視窗內平均 CPU 達到這個值算疑似挖礦。
+    constraints:
+      - 50 到 100
+      - 必填
+    section: 反挖礦偵測
+  - id: governance.mining_window_hours
+    role: number
+    label: 觀察視窗（小時）
+    help: 反挖礦偵測用：計算平均 CPU 的時間長度。
+    constraints:
+      - 1 到 72
+      - 必填
+    section: 反挖礦偵測
+  - id: governance.mining_scan_batch_size
+    role: number
+    label: 每輪掃描台數
+    help: 反挖礦偵測每輪排程最多檢查幾台機器。
+    constraints:
+      - 1 到 200
+      - 必填
+    section: 反挖礦偵測
+  - id: governance.snapshot_cleanup_enabled
+    role: toggle
+    label: 啟用快照自動清理
+    help: 超過保留天數的快照會被排程刪除；skylab-init 初始快照不會清理，挖礦存證快照要等事件結案滿 30 天才清。
+    section: 快照治理
+  - id: governance.snapshot_retention_days
+    role: number
+    label: 保留天數
+    constraints:
+      - 1 到 90
+      - 必填
+    section: 快照治理
+  - id: governance.student_snapshot_max_count
+    role: number
+    label: 學生快照上限
+    help: 每台機器可保留的快照數，管理員以外（含老師）都受限；skylab-init 初始快照與挖礦存證快照不計入。達上限要先刪舊快照才能再建。
+    constraints:
+      - 1 到 10
+      - 必填
+    section: 快照治理
+  - id: governance.student_backup_max_count
+    role: number
+    label: 學生備份上限
+    help: 每台機器可保留的備份數，管理員不受限；不能用快照的機器以備份當還原點。
+    constraints:
+      - 1 到 10
+      - 必填
+    section: 快照治理
+  - id: governance.provision_max_concurrency
+    role: number
+    label: 併發上限
+    help: 同時執行的 VM / LXC 克隆數上限。克隆很吃磁碟 I/O，設太高會拖垮儲存；於下個排程週期生效。
+    constraints:
+      - 1 到 16
+      - 必填
+    section: 克隆併發
+  - id: governance.restore
+    role: button
+    label: 還原
+    help: 有修改時才出現，把表單改回上次儲存的值。
+  - id: governance.save
+    role: button
+    label: 儲存治理設定
+    help: 一次送出「治理」區塊的全部欄位；沒有修改時不能按。配額不經過這個按鈕。
+  - id: quotas.global
+    role: list
+    label: 全域預設配額
+    help: 沒有個人覆寫的使用者一律套用這組上限，欄位是 CPU 核心數、記憶體 (MB)、磁碟 (GB)、實例數，各自可勾「無限制」；改完按卡片裡的「儲存」。調整只影響之後的新增與擴容，不會回頭處理既有資源。
+    section: 全域預設配額
+  - id: quotas.cpu_cores
+    role: number
+    label: CPU 核心數
+    constraints:
+      - 1 到 256，或勾選「無限制」
+    section: 全域預設配額
+  - id: quotas.memory_mb
+    role: number
+    label: 記憶體 (MB)
+    constraints:
+      - 256 到 1048576，或勾選「無限制」
+    section: 全域預設配額
+  - id: quotas.disk_gb
+    role: number
+    label: 磁碟 (GB)
+    constraints:
+      - 1 到 65536，或勾選「無限制」
+    section: 全域預設配額
+  - id: quotas.instances
+    role: number
+    label: 實例數
+    help: 覆寫清單的欄名是「台數」。
+    constraints:
+      - 1 到 100，或勾選「無限制」
+    section: 全域預設配額
+  - id: quotas.unlimited
+    role: toggle
+    label: 無限制
+    help: 每個上限旁都有，勾選代表該項不設上限。
+    section: 全域預設配額
+  - id: quotas.overrides
+    role: table
+    label: 個別使用者覆寫
+    help: 欄位有對象、CPU、記憶體 (MB)、磁碟 (GB)、台數、操作；設成無限制的項目顯示「無限制」。
+    section: 個別使用者覆寫
+  - id: quotas.user
+    role: select
+    label: 使用者
+    help: 在「新增配額」視窗輸入姓名或 email 搜尋要設定覆寫的對象；已經有覆寫的使用者與管理員不會出現在清單裡。
+    section: 個別使用者覆寫
+  - id: quotas.create
+    role: button
+    label: 新增配額
+    help: 欄位會帶入目前的全域預設值，改成這位使用者專屬的上限即可。勾選「無限制」代表該項目不設上限。
+    section: 個別使用者覆寫
+  - id: quotas.edit
+    role: button
+    label: 編輯配額
+    help: 修改這位使用者的專屬上限，對象不能改。
+    section: 個別使用者覆寫
+  - id: quotas.delete
+    role: button
+    label: 刪除配額
+    help: 刪除後這位使用者改回套用全域預設值。
+    section: 個別使用者覆寫
+dialogs:
+  - id: quota
+    title: 新增配額
+    opened_by: 新增配額
+    purpose: 替某位使用者設定專屬的資源上限，或（從「編輯配額」開啟時）修改既有的覆寫。
+    fields:
+      - label: 使用者
+        help: 輸入姓名或 email 搜尋；已經有覆寫的使用者與管理員不會出現。編輯時只顯示對象，不能改。
+        required: true
+      - label: CPU 核心數
+        help: 1 到 256。
+      - label: 記憶體 (MB)
+        help: 256 到 1048576。
+      - label: 磁碟 (GB)
+        help: 1 到 65536。
+      - label: 實例數
+        help: 1 到 100。
+      - label: 無限制
+        help: 每一項都可以勾選，代表該項不設上限。
+    notes:
+      - 新增時欄位會帶入目前的全域預設值，改成這位使用者專屬的上限即可；沒選使用者前不能按「建立」。
+      - 從「編輯配額」開啟時視窗標題是「編輯配額」，按「儲存」送出。
+related:
+  - path: /scheduler
+    when: 要調整放置與超配，或學生畫面多早顯示快到期提醒、練習時段長度
+  - path: /monitoring
+    when: 要看警告與挖礦事件，或決定是否停權

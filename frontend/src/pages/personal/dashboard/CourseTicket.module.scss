@@ -181,36 +181,11 @@
   > span { flex-basis: 0; }
 }
 
-.bar,
-.barDone {
+/* 條碼只是票根的花紋，不代表進度，所以每一條同色 */
+.bar {
   border-radius: 1px;
+  background: color-mix(in srgb, var(--color-primary) 20%, var(--color-surface));
 }
 
-.bar { background: color-mix(in srgb, var(--color-primary) 20%, var(--color-surface)); }
-.barDone { background: var(--color-text-primary); }
-
-/* 深色底上 20% 太淡，未完成的條會跟紙面糊在一起 */
+/* 深色底上 20% 太淡，條碼會跟紙面糊在一起 */
 :global(body.dark) .bar { background: color-mix(in srgb, var(--color-primary) 34%, var(--color-surface)); }
-
-.count {
-  display: grid;
-  justify-items: end;
-  line-height: 1.25;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-
-  strong {
-    font-size: $font-size-16;
-    font-weight: $font-weight-700;
-  }
-
-  small {
-    font-size: $font-size-12;
-    color: var(--color-text-muted);
-  }
-}
-
-.empty {
-  font-size: $font-size-12;
-  color: var(--color-text-muted);
-}

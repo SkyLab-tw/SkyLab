@@ -85,6 +85,10 @@ class VMTemplatePublic(BaseModel):
     default_disk: int | None = None
     # False：範本沒有 cloud-init，平台設不了密碼，克隆機沿用範本內的帳密
     password_settable: bool = True
+    # Windows 範本的自訂密碼要符合 Windows 的複雜度，克隆視窗靠這一項在送出前就提示。
+    # ostype 要打 PVE 才讀得到，所以只有查單一範本（GET /templates/{id}）時會填；
+    # 清單裡是 None，代表沒查，不代表不是 Windows。
+    is_windows: bool | None = None
     requires_gpu: bool = False
     attachment_count: int = 0
     source_vmid: int | None = None
@@ -157,6 +161,8 @@ class TaskRecordPublic(BaseModel):
             started_at=record.started_at,
             finished_at=record.finished_at,
         )
+
+
 class VMTemplateTaskResponse(BaseModel):
     """回傳範本本體 + 觸發的背景任務（前端拿 task.id 輪詢進度）"""
 

@@ -53,7 +53,7 @@ Every document of the SkyLab repository lives on this site, under `website/` in 
 | Page | What it covers |
 | --- | --- |
 | [Multi-machine environment SOP](/guides/multi-machine-environment-sop) | Formal SOP for building, publishing and using multi-machine teaching environments |
-| [AI navigation in teaching workflows](/guides/ai-navigation-teaching-workflows) | Design notes for the AI navigation assistant in the class-creation and environment-editing wizards |
+| [Built-in AI assistant](/guides/ai-assistant) | How the assistant answers: one chat endpoint with tools, the per-screen knowledge files, model settings and the answer guard |
 | [AI Teacher Judge workflow and contracts](/zh-TW/guides/ai-teacher-judge-contract) (繁體中文 only) | Canonical workflow for proposals, AI edits, full-table review, persistence and script compilation |
 | [Page guide content audit](/zh-TW/guides/user-guide-content-audit) (繁體中文 only) | Proposed rewrites of the in-app page guide texts (not applied yet) |
 

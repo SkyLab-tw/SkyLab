@@ -31,7 +31,6 @@ def _create(session: Session, name: str, **overrides):
         "api_timeout": 30,
         "pool_name": "SkyLab",
         "iso_storage": "local",
-        "data_storage": "local-lvm",
         "task_check_interval": 2,
     }
     payload.update(overrides)

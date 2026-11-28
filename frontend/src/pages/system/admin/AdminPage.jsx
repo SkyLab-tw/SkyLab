@@ -44,6 +44,27 @@ const ROLE_ICONS = {
   admin: "admin_panel_settings",
 };
 
+const ROLE_LABEL_KEYS = {
+  student: "AdminPage.roleStudent",
+  teacher: "AdminPage.roleTeacher",
+  admin: "AdminPage.roleAdmin",
+};
+
+/* 不認得的角色，徽章與搜尋都當成學生 */
+function roleKey(role) {
+  return role in ROLE_LABEL_KEYS ? role : "student";
+}
+
+/**
+ * 搜尋比對的是畫面上看得到的字：姓名、Email 與角色徽章上的名稱（目前語言的文字），
+ * 不是 API 的英文角色代碼。keyword 要先轉小寫。
+ */
+export function userMatchesKeyword(user, keyword, roleLabel) {
+  return [user.email, user.full_name, roleLabel]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(keyword));
+}
+
 const PAGE_SIZE = 50;
 /* 批量確認框裡最多列出幾位的名字，其餘寫「等 N 位」 */
 const BATCH_NAME_PREVIEW = 5;
@@ -276,12 +297,8 @@ function UserModal({ mode, user, isSelf = false, loading, closing = false, onClo
 
 function UserRow({ user, currentUserId, selected = false, selecting = false, onToggleSelect, onRowClick, onEdit, onDelete }) {
   const { t } = useTranslation("system");
-  const ROLE_META = {
-    student: { label: t("AdminPage.roleStudent"), icon: ROLE_ICONS.student },
-    teacher: { label: t("AdminPage.roleTeacher"), icon: ROLE_ICONS.teacher },
-    admin: { label: t("AdminPage.roleAdmin"), icon: ROLE_ICONS.admin },
-  };
-  const role = ROLE_META[user.role] ?? ROLE_META.student;
+  const shownRole = roleKey(user.role);
+  const role = { label: t(ROLE_LABEL_KEYS[shownRole]), icon: ROLE_ICONS[shownRole] };
   const isSelf = user.id === currentUserId;
 
   return (
@@ -389,8 +406,8 @@ export default function AdminPage() {
   const users = usersQuery.data ?? EMPTY;
   const registrationPolicy = policyQuery.data ?? null;
   const pendingRegistrations = pendingQuery.data?.data ?? EMPTY;
-  /* 待審核註冊卡的開合記在本機（預設展開），重整或下次回來維持上次的選擇 */
-  /* 待審核註冊平常不必看：預設收起，標題上的人數就夠提醒；使用者展開過才記住 */
+  /* 待審核註冊平常不必看：預設收起，標題上的人數就夠提醒。開合記在本機，
+     使用者展開過之後，重整或下次回來維持上次的選擇 */
   const [pendingOpen, togglePendingOpen] = usePersistedGroupExpansion("admin", "pending-registrations", { defaultExpanded: false });
   /* 載入失敗只在手上沒資料時提示（背景刷新失敗維持靜默、沿用舊資料）。首載失敗看 useQueryView／useLoadError：
      沒資料時 v5 每次重抓都把 status 改回 pending、清掉 error，直接看 isError 會在每次背景重試時閃回整頁載入中、
@@ -477,11 +494,9 @@ export default function AdminPage() {
     if (!keyword && !memberIds) return users;
     return users.filter((item) =>
       (!memberIds || memberIds.has(item.id))
-      && (!keyword || [item.email, item.full_name, item.role]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(keyword))),
+      && (!keyword || userMatchesKeyword(item, keyword, t(ROLE_LABEL_KEYS[roleKey(item.role)]))),
     );
-  }, [query, users, activeGroupId, memberData]);
+  }, [query, users, activeGroupId, memberData, t]);
 
   /* 前端分頁：搜尋過濾後再切頁；條件一改就回到第一頁 */
   const [page, setPage] = useState(0);

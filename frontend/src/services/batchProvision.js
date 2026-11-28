@@ -14,12 +14,7 @@ export const BatchProvisionService = {
     return apiGet(`/api/v1/batch-provision/?${query.toString()}`);
   },
 
-  /** Admin: 核准 / 駁回 */
-  review(jobId, body) {
-    return apiPost(`/api/v1/batch-provision/${jobId}/review`, body);
-  },
-
-  /** Admin: 對同一班級目前的所有節點做一次一致審核 */
+  /** Admin: 核准 / 駁回；批次一定屬於某個班級，對同一班級目前的所有節點做一次一致審核 */
   reviewClass(classId, body) {
     return apiPost(`/api/v1/batch-provision/class/${classId}/review`, body);
   },

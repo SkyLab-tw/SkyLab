@@ -100,10 +100,8 @@ export default {
       await s.click(verify.locator("input"));
       const ca = field(d, s.t("CA Certificate PEM", "CA 憑證 PEM"));
       await s.fill(ca, CA_PEM);
-      await s.fill(field(d, "Data Storage"), "ceph-vm");
       await s.fill(field(d, "Backup Storage"), "pbs-backup");
       await s.fill(field(d, "Gateway IP"), "10.30.0.1");
-      await s.fill(field(d, s.t("Local Subnet", "內網網段")), "10.30.0.0/16");
       await s.fill(field(d, s.t("Default Node", "預設節點")), "pve-04");
       const enable = d.locator("label", { hasText: s.t("Enable this connection", "啟用此連線") });
       const def = d.locator("label", { hasText: s.t("Set as default connection", "設為預設連線") });
@@ -111,7 +109,7 @@ export default {
       const o = { scroll: false };
       await s.shot(2, [field(d, s.t("Name *", "名稱 *")), field(d, "Host *"), field(d, "Port"), field(d, s.t("API User", "API 使用者")), field(d, s.t("Password", "密碼")), field(d, "API Timeout")], o);
       await s.shot(3, [verify, ca], o);
-      await s.shot(4, [field(d, s.t("Pool Name", "Pool 名稱")), field(d, "ISO Storage"), field(d, "Data Storage"), field(d, "Backup Storage")], o);
+      await s.shot(4, [field(d, s.t("Pool Name", "Pool 名稱")), field(d, "ISO Storage"), field(d, "Backup Storage")], o);
       await s.shot(5, [enable, def], o);
       await s.shot(6, save, o);
       await s.click(save, { wait: 900 });

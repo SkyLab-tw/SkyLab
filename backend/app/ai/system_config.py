@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -55,12 +56,30 @@ class TeacherJudgeConfig(BaseModel):
     vllm: SystemAIVLLMConfig = Field(default_factory=SystemAIVLLMConfig)
 
 
+class AssistantConfig(BaseModel):
+    """內建助手（右下角的對話面板）。
+
+    ``thinking`` 是這個功能每次呼叫模型要求的推理強度，覆寫模型設定檔的全模型
+    預設；只有開／關的模型把 low／medium／high 都當成「開」。
+    """
+
+    thinking: Literal["none", "low", "medium", "high"] = "medium"
+    # 一次回答最多呼叫幾次模型（含讀說明的那幾輪）
+    max_rounds: int = Field(default=4, ge=2, le=6)
+    timeout: int = Field(default=60, ge=1, le=300)
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.95, gt=0.0, le=1.0)
+    # 推理的 token 也算在這個上限裡，設太小回答會被截斷
+    max_tokens: int = Field(default=4096, ge=256, le=8192)
+
+
 class SystemAIConfig(BaseModel):
     template_recommendation: TemplateRecommendationConfig = Field(
         default_factory=TemplateRecommendationConfig
     )
     pve_log: PVELogConfig = Field(default_factory=PVELogConfig)
     teacher_judge: TeacherJudgeConfig = Field(default_factory=TeacherJudgeConfig)
+    assistant: AssistantConfig = Field(default_factory=AssistantConfig)
 
 
 def load_system_ai_config() -> SystemAIConfig:

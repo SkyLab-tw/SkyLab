@@ -29,8 +29,8 @@ async function flush() {
 async function render(extra) {
   vi.spyOn(CoursesService, "getWeeklyTasks").mockResolvedValue([week(extra)]);
   await act(async () => {
-    root.render(withQueryClient(<MemoryRouter initialEntries={["/courses/path-1/weeks/week-1"]}>
-      <Routes><Route path="/courses/:pathId/weeks/:weekId" element={<StudentWeekPage />} /></Routes>
+    root.render(withQueryClient(<MemoryRouter initialEntries={["/courses/class-1/weeks/week-1"]}>
+      <Routes><Route path="/courses/:classId/weeks/:weekId" element={<StudentWeekPage />} /></Routes>
     </MemoryRouter>));
   });
   await flush();
@@ -38,7 +38,7 @@ async function render(extra) {
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  vi.spyOn(CoursesService, "getPath").mockResolvedValue({ title: "Course" });
+  vi.spyOn(CoursesService, "getClass").mockResolvedValue({ id: "class-1", title: "Course" });
   vi.spyOn(CoursesService, "getPracticeMachines").mockResolvedValue([]);
   preview = { location: "", close: vi.fn() };
   vi.spyOn(window, "open").mockReturnValue(preview);
@@ -62,7 +62,7 @@ test("AI 任務上傳的 PDF 出現在教材，透過作業端點開啟", async 
   const materials = host.querySelector('[data-guide="course-week-materials"]');
   expect(materials.textContent).toContain("task.pdf");
   await act(async () => materials.querySelector("button").click());
-  expect(source).toHaveBeenCalledExactlyOnceWith("path-1", "assignment-1");
+  expect(source).toHaveBeenCalledExactlyOnceWith("class-1", "assignment-1");
   expect(weekly).not.toHaveBeenCalled();
   expect(preview.location).toBe("blob:task-pdf");
 });
@@ -76,21 +76,43 @@ test("每週教材與 AI 任務 PDF 同時顯示，各自走正確的預覽端�
   const buttons = host.querySelectorAll('[data-guide="course-week-materials"] button');
   expect(buttons).toHaveLength(2);
   await act(async () => buttons[0].click());
-  expect(weekly).toHaveBeenCalledExactlyOnceWith("path-1", "week-1", "file-1");
+  expect(weekly).toHaveBeenCalledExactlyOnceWith("class-1", "week-1", "file-1");
   expect(source).not.toHaveBeenCalled();
 });
 
 test("每週任務載不到時顯示錯誤狀態，不當成找不到這週", async () => {
   vi.spyOn(CoursesService, "getWeeklyTasks").mockRejectedValue(new Error("500"));
   await act(async () => {
-    root.render(withQueryClient(<MemoryRouter initialEntries={["/courses/path-1/weeks/week-1"]}>
-      <Routes><Route path="/courses/:pathId/weeks/:weekId" element={<StudentWeekPage />} /></Routes>
+    root.render(withQueryClient(<MemoryRouter initialEntries={["/courses/class-1/weeks/week-1"]}>
+      <Routes><Route path="/courses/:classId/weeks/:weekId" element={<StudentWeekPage />} /></Routes>
     </MemoryRouter>));
   });
   await flush();
   expect(host.textContent).not.toContain("StudentWeekPage.loading");
   expect(host.textContent).not.toContain("StudentWeekPage.notFoundTitle");
   expect(host.textContent).toContain("StudentWeekPage.back");
+});
+
+test("「機器與主控台」帶到我的資源清單，不是沒有主控台的資源詳情頁", async () => {
+  CoursesService.getPracticeMachines.mockResolvedValue([
+    { machine_node_id: "node-1", node_key: "main", name: "web", role: "server", resource_type: "lxc", vmid: 321, public_url: null },
+  ]);
+  vi.spyOn(CoursesService, "getWeeklyTasks").mockResolvedValue([week()]);
+  await act(async () => {
+    root.render(withQueryClient(<MemoryRouter initialEntries={["/courses/class-1/weeks/week-1"]}>
+      <Routes>
+        <Route path="/courses/:classId/weeks/:weekId" element={<StudentWeekPage />} />
+        <Route path="/my-resources" element={<p>resources-list</p>} />
+        <Route path="/my-resources/:vmid" element={<p>resource-detail</p>} />
+      </Routes>
+    </MemoryRouter>));
+  });
+  await flush();
+  const button = [...host.querySelectorAll('[data-guide="course-week-machine"] button')]
+    .find((item) => item.textContent.includes("StudentWeekPage.openMachine"));
+  await act(async () => button.click());
+  expect(host.textContent).toContain("resources-list");
+  expect(host.textContent).not.toContain("resource-detail");
 });
 
 test("PDF 無法開啟時關閉空白預覽並恢復按鈕", async () => {

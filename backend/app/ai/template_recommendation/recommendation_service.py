@@ -597,17 +597,43 @@ def _is_windows_label(label: Any) -> bool:
     return "windows" in str(label or "").casefold()
 
 
+# 與申請表單（RequestFormPage 的 GPU_MARKER_RE）同一條規則：名稱結尾 -GPU 代表這個
+# 來源需要 GPU。表單只在來源需要 GPU 時才顯示 GPU 欄位，其餘情況會清掉已選的 GPU。
+_GPU_SOURCE_MARKER = re.compile(r"-gpu$", re.IGNORECASE)
+
+
+def _vm_source_takes_gpu(item: dict[str, Any], gpu_template_ids: set[int]) -> bool:
+    """這個 VM 來源選下去之後，申請表單上能不能選 GPU。"""
+    if int(item.get("template_id") or 0) in gpu_template_ids:
+        return True
+    return bool(_GPU_SOURCE_MARKER.search(str(item.get("label") or "").strip()))
+
+
 def _default_vm_candidate(
-    candidates: list[dict[str, Any]], *, wants_windows: bool
+    candidates: list[dict[str, Any]],
+    *,
+    wants_windows: bool,
+    gpu_template_ids: set[int] | None = None,
 ) -> dict[str, Any]:
-    """沒有指定 VM 來源時，挑一個符合 Windows／Linux 需求的，不要盲選第一個。"""
+    """沒有指定 VM 來源時，挑一個符合需求的，不要盲選第一個。
+
+    ``gpu_template_ids`` 不是 None 代表這次需要 GPU：先在掛得上 GPU 的來源裡挑；
+    一個都沒有才退回全部候選。
+    """
+    pool = candidates
+    if gpu_template_ids is not None:
+        pool = [
+            item
+            for item in candidates
+            if _vm_source_takes_gpu(item, gpu_template_ids)
+        ] or candidates
     return next(
         (
             item
-            for item in candidates
+            for item in pool
             if _is_windows_label(item.get("label")) == wants_windows
         ),
-        candidates[0],
+        pool[0],
     )
 
 
@@ -799,12 +825,24 @@ def normalize_ai_result(
         not in {int(row.get("template_id") or 0) for row in vm_operating_systems}
     ]
 
+    # 需要 GPU 而且真的有空的卡時，來源優先挑「選了之後表單上能選 GPU」的那種，
+    # 否則規劃出來的 GPU 填進表單時會被擋下（表單會提示作業系統不是 GPU 版）。
+    # 一個這種來源都沒有時維持原本的挑法，由表單照實提示。
+    gpu_template_ids = {
+        int(item.get("template_id") or 0)
+        for item in application_templates
+        if item.get("requires_gpu")
+    }
+    needs_gpu_source = request.requires_gpu and gpu_available
+
     selected_vm_template_id = 0
     selected_vm_os = ""
     if resource_type == "vm" and vm_candidates:
-        requested_vm_template_id = safe_int(
-            raw_prefill.get("vm_template_id")
-            or (form_context.vm_template_id if form_context else 0),
+        model_vm_template_id = safe_int(
+            raw_prefill.get("vm_template_id"), 0, minimum=0, extract_digits=True
+        )
+        requested_vm_template_id = model_vm_template_id or safe_int(
+            form_context.vm_template_id if form_context else 0,
             0,
             minimum=0,
             extract_digits=True,
@@ -816,7 +854,21 @@ def normalize_ai_result(
                 if int(item.get("template_id") or 0) == requested_vm_template_id
             ),
             None,
-        ) or _default_vm_candidate(vm_candidates, wants_windows=request.needs_windows)
+        )
+        if (
+            selected_vm is not None
+            and needs_gpu_source
+            and model_vm_template_id
+            and not _vm_source_takes_gpu(selected_vm, gpu_template_ids)
+        ):
+            # 模型挑的來源掛不上 GPU：改用預設挑法。使用者自己在表單上選的來源不動。
+            selected_vm = None
+        if selected_vm is None:
+            selected_vm = _default_vm_candidate(
+                vm_candidates,
+                wants_windows=request.needs_windows,
+                gpu_template_ids=gpu_template_ids if needs_gpu_source else None,
+            )
         selected_vm_template_id = int(selected_vm.get("template_id") or 0)
         selected_vm_os = str(selected_vm.get("label") or "").strip()
 

@@ -113,7 +113,7 @@ export default function ClassManagementPage() {
   const [status, setStatus] = useState("all");
   const [showArchived, setShowArchived] = useState(false);
 
-  /* 班級清單走 TanStack Query（老師首頁、課程 CMS 共用同一份快取）：
+  /* 班級清單走 TanStack Query（與老師首頁共用同一份快取）：
      首次載不到才提示，背景刷新失敗沿用上一份 */
   const classesQuery = useTeachingClassesQuery({ select: selectClasses });
   const classCache = useTeachingClassCacheUpdater();

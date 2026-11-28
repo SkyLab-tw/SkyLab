@@ -294,3 +294,86 @@ def test_disallowed_tool_mode_is_rejected(monkeypatch, tmp_path):
     )
     with pytest.raises(adapter.ModelAdapterError, match="tool_choice"):
         adapter.adapt_chat_request(payload)
+
+
+# ── 單次請求指定的 thinking 等級 ─────────────────────────────────────────
+
+GATEWAY = "BIRC-LLM"
+
+
+@pytest.mark.parametrize("level", ["low", "medium", "high"])
+def test_explicit_thinking_level_overrides_the_model_default(level: str) -> None:
+    # 頂層 reasoning_effort 的模型：全模型預設是關的閘道模型也一樣照要求的強度送
+    for model in (GPT, GATEWAY):
+        wire = adapter.adapt_chat_request(_payload(model), thinking=level)
+        assert wire["reasoning_effort"] == level
+        assert wire["chat_template_kwargs"] == {"custom": "keep"}
+
+    qwen = adapter.adapt_chat_request(_payload(QWEN), thinking=level)
+    assert "reasoning_effort" not in qwen
+    assert qwen["chat_template_kwargs"] == {
+        "custom": "keep",
+        "enable_thinking": True,
+        "reasoning_effort": level,
+    }
+
+    # 只有開／關的模型沒有強度可調，任何強度都等於「開」。
+    gemma = adapter.adapt_chat_request(_payload(GEMMA), thinking=level)
+    assert "reasoning_effort" not in gemma
+    assert gemma["chat_template_kwargs"] == {"custom": "keep", "enable_thinking": True}
+
+
+def test_explicit_none_turns_thinking_off_where_the_model_has_a_switch() -> None:
+    gemma = adapter.adapt_chat_request(_payload(GEMMA), thinking="none")
+    assert gemma["chat_template_kwargs"] == {"custom": "keep", "enable_thinking": False}
+
+    qwen = adapter.adapt_chat_request(_payload(QWEN), thinking="none")
+    assert qwen["chat_template_kwargs"] == {"custom": "keep", "enable_thinking": False}
+
+
+def test_effort_only_models_refuse_to_disable_reasoning() -> None:
+    """要求關閉卻默默改成最低強度就是 silent fallback；直接拒絕。"""
+    with pytest.raises(adapter.ModelAdapterError, match="cannot disable reasoning"):
+        adapter.adapt_chat_request(_payload(GPT), thinking="none")
+
+
+def test_top_level_effort_none_is_sent_where_the_profile_says_the_model_takes_it() -> None:
+    """設定檔寫了 "none" 的頂層 reasoning_effort 模型收得下關閉，照送不改寫。"""
+    wire = adapter.adapt_chat_request(_payload(GATEWAY), thinking="none")
+    assert wire["reasoning_effort"] == "none"
+    assert wire["chat_template_kwargs"] == {"custom": "keep"}
+
+
+def test_explicit_level_still_ignores_legacy_payload_fields() -> None:
+    payload = _payload(GPT)
+    payload["reasoning_effort"] = "high"
+    wire = adapter.adapt_chat_request(payload, thinking="medium")
+    assert wire["reasoning_effort"] == "medium"
+
+
+def test_unknown_thinking_level_is_rejected() -> None:
+    with pytest.raises(adapter.ModelAdapterError, match="Invalid thinking level"):
+        adapter.adapt_chat_request(_payload(GPT), thinking="xhigh")  # type: ignore[arg-type]
+
+
+def test_check_thinking_is_declared_per_model() -> None:
+    # 只有設定檔明講的模型才覆寫遵循檢查的 thinking；其餘沿用全模型預設
+    assert adapter.check_thinking_override(GATEWAY) == "none"
+    for model in (GPT, GEMMA, QWEN, "not-registered"):
+        assert adapter.check_thinking_override(model) is None
+
+
+def test_declaring_check_thinking_none_lets_a_top_level_effort_model_switch_off(
+    monkeypatch, tmp_path
+):
+    """能不能送 "none" 由設定檔宣告：沒宣告的拒絕，宣告了就照送。"""
+    config = _config()
+    _config_file(monkeypatch, tmp_path, config)
+    with pytest.raises(adapter.ModelAdapterError, match="cannot disable reasoning"):
+        adapter.adapt_chat_request(_payload(GPT), thinking="none")
+
+    config["models"][GPT]["check_thinking"] = "none"
+    _config_file(monkeypatch, tmp_path, config)
+    assert adapter.check_thinking_override(GPT) == "none"
+    wire = adapter.adapt_chat_request(_payload(GPT), thinking="none")
+    assert wire["reasoning_effort"] == "none"

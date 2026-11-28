@@ -1,28 +1,31 @@
 // Manual page: manual/courses.md (student view of My Courses, a course, a week)
 import { D, H, NOW, iso } from "../lib/mock.mjs";
 
-const PATH = "p-linux";
+// A student's course is the class itself: every id below is a teaching class id.
+const CLASS = "cls-linux";
 
-// Monday 2026-10-12 in Taipei; times below are UTC.
-function paths(m) {
+// GET /courses/classes: only id and title.
+function classes(m) {
   return [
-    { id: PATH, title: m.L("Linux System Administration (IM 2A)", "Linux 系統管理（資管二甲）"), description: m.L("Ubuntu server administration lab", "Ubuntu 伺服器管理實作"), room_count: 5, total_questions: 8, completed_questions: 4, progress_percent: 50 },
-    { id: "p-cloud", title: m.L("Cloud Computing Practice (IM 3A)", "雲端運算實務（資管三甲）"), description: "", room_count: 6, total_questions: 6, completed_questions: 6, progress_percent: 100 },
-    { id: "p-web", title: m.L("Web Programming (IM 2B)", "網頁程式設計（資管二乙）"), description: "", room_count: 6, total_questions: 10, completed_questions: 2, progress_percent: 20 },
-    { id: "p-db", title: m.L("Database Systems (IM 2A)", "資料庫系統（資管二甲）"), description: "", room_count: 6, total_questions: 12, completed_questions: 5, progress_percent: 42 },
-    { id: "p-ai", title: m.L("Introduction to AI (General Ed.)", "人工智慧導論（通識）"), description: "", room_count: 0, total_questions: 0, completed_questions: 0, progress_percent: 0 },
+    { id: CLASS, title: m.L("Linux System Administration (IM 2A)", "Linux 系統管理（資管二甲）") },
+    { id: "cls-cloud", title: m.L("Cloud Computing Practice (IM 3A)", "雲端運算實務（資管三甲）") },
+    { id: "cls-web", title: m.L("Web Programming (IM 2B)", "網頁程式設計（資管二乙）") },
+    { id: "cls-db", title: m.L("Database Systems (IM 2A)", "資料庫系統（資管二甲）") },
+    // No session scheduled: the ticket shows "Ready to start".
+    { id: "cls-ai", title: m.L("Introduction to AI (General Ed.)", "人工智慧導論（通識）") },
   ];
 }
 
+// Monday 2026-10-12 in Taipei; times below are UTC.
 function schedule(m) {
   const lin = m.L("Prof. Lin", "林志明");
   const chen = m.L("Prof. Chen", "陳美玲");
   return [
-    { id: PATH, state: "now", session_date: "2026-10-12", start_at: "2026-10-12T01:10:00Z", end_at: "2026-10-12T04:00:00Z", location: m.L("Info Bldg B201", "資訊大樓 B201"), teacher: lin },
-    { id: "p-cloud", state: "later", session_date: "2026-10-12", start_at: "2026-10-12T06:10:00Z", end_at: "2026-10-12T09:00:00Z", location: m.L("Info Bldg B302", "資訊大樓 B302"), teacher: chen },
-    { id: "p-web", state: "available", session_date: "2026-10-14", start_at: "2026-10-14T05:10:00Z", end_at: "2026-10-14T08:00:00Z", location: m.L("Info Bldg B105", "資訊大樓 B105"), teacher: chen },
-    { id: "p-db", state: "ended", session_date: "2026-10-12", start_at: "2026-10-12T00:10:00Z", end_at: "2026-10-12T01:50:00Z", location: m.L("Info Bldg B201", "資訊大樓 B201"), teacher: lin },
-  ].map((r) => ({ ...r, title: paths(m).find((p) => p.id === r.id).title, label: "" }));
+    { id: CLASS, state: "now", session_date: "2026-10-12", start_at: "2026-10-12T01:10:00Z", end_at: "2026-10-12T04:00:00Z", location: m.L("Info Bldg B201", "資訊大樓 B201"), teacher: lin },
+    { id: "cls-cloud", state: "later", session_date: "2026-10-12", start_at: "2026-10-12T06:10:00Z", end_at: "2026-10-12T09:00:00Z", location: m.L("Info Bldg B302", "資訊大樓 B302"), teacher: chen },
+    { id: "cls-web", state: "available", session_date: "2026-10-14", start_at: "2026-10-14T05:10:00Z", end_at: "2026-10-14T08:00:00Z", location: m.L("Info Bldg B105", "資訊大樓 B105"), teacher: chen },
+    { id: "cls-db", state: "ended", session_date: "2026-10-12", start_at: "2026-10-12T00:10:00Z", end_at: "2026-10-12T01:50:00Z", location: m.L("Info Bldg B201", "資訊大樓 B201"), teacher: lin },
+  ].map((r) => ({ ...r, title: classes(m).find((c) => c.id === r.id).title, label: "" }));
 }
 
 const WEEK_DATES = ["2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05", "2026-10-12"];
@@ -63,7 +66,7 @@ function weeks(m) {
     5: m.L("Your Nginx setup is almost there. Enable UFW before Wednesday and I will re-check it.", "Nginx 的設定差不多了，週三前把 UFW 啟用，我會再檢查一次。"),
   };
   return WEEK_DATES.map((date, i) => ({
-    id: `wk-${i + 1}`, teaching_class_id: "cls-linux", teaching_class_name: paths(m)[0].title, week_number: i + 1, session_date: date, title: titles[i],
+    id: `wk-${i + 1}`, teaching_class_id: CLASS, teaching_class_name: classes(m)[0].title, week_number: i + 1, session_date: date, title: titles[i],
     files: i === 4
       ? [{ id: "f-51", filename: "week05-nginx-ufw.pdf", media_type: "application/pdf" }, { id: "f-52", filename: "nginx-lab-handout.pdf", media_type: "application/pdf" }]
       : [{ id: `f-${i + 1}1`, filename: `week0${i + 1}-slides.pdf`, media_type: "application/pdf" }],
@@ -86,13 +89,13 @@ function weekItems(m) {
 function assignments(m, done) {
   const titles = weekTitles(m);
   const rows = WEEK_DATES.map((date, i) => ({
-    id: `as-${i + 1}`, teaching_class_id: "cls-linux", teaching_class_week_id: `wk-${i + 1}`, title: titles[i], summary: "",
+    id: `as-${i + 1}`, teaching_class_id: CLASS, teaching_class_week_id: `wk-${i + 1}`, title: titles[i], summary: "",
     approved_at: `${date}T00:30:00Z`, check_available: true,
     items: weekItems(m)[i].map(([title, detectable], k) => ({ id: `as-${i + 1}-i${k}`, title, description: "", detectable, order: k })),
     completion: { completed: done.has(`as-${i + 1}`), completed_item_ids: [], ready_at: null },
   }));
   rows.push({
-    id: "as-mid", teaching_class_id: "cls-linux", teaching_class_week_id: null,
+    id: "as-mid", teaching_class_id: CLASS, teaching_class_week_id: null,
     title: m.L("Midterm project: deploy a LAMP stack", "期中專題：部署 LAMP 環境"),
     summary: m.L("Build a working LAMP server on your practice host: Apache serves a PHP page that reads from MariaDB, and the database is not reachable from outside.",
       "在你的實作主機上架好可運作的 LAMP：Apache 提供能讀取 MariaDB 的 PHP 頁面，且資料庫不可從外部連線。"),
@@ -122,7 +125,7 @@ function resource(m, vmid, status) {
   const pm = practiceMachines(m).find((x) => x.vmid === vmid);
   return {
     vmid, name: pm.name, type: pm.resource_type === "lxc" ? "lxc" : "qemu", status, node: "pve-02", machine_kind: "teaching_class", class_relation: "student",
-    teaching_class_id: "cls-linux", teaching_class_name: paths(m)[0].title, owner_name: m.L("Alex Wang", "王小明"), owner_email: "11156001@ntub.edu.tw",
+    teaching_class_id: CLASS, teaching_class_name: classes(m)[0].title, owner_name: m.L("Alex Wang", "王小明"), owner_email: "11156001@ntub.edu.tw",
     os_info: pm.resource_type === "lxc" ? "Ubuntu 24.04 (LXC)" : "Ubuntu 24.04 LTS", ip_address: `10.20.8.${vmid - 30100}`,
     uptime: status === "running" ? 3 * H : 0, cpu: status === "running" ? 0.04 : 0, mem: status === "running" ? 0.6 * 1024 ** 3 : 0, maxmem: 4 * 1024 ** 3,
     expiry_date: iso(NOW + 80 * D), can_control: true, can_manage: false, can_delete: false, public_urls: [], allocation_scope: "class", is_placeholder: false,
@@ -156,13 +159,13 @@ export default {
     m.state.done = new Set(["as-1", "as-2", "as-3"]);
     m.state.status = { 30121: "running", 30122: "stopped", 30123: "starting" };
     m.use([
-      ["GET", /^\/api\/v1\/courses\/paths$/, () => paths(m)],
+      ["GET", /^\/api\/v1\/courses\/classes$/, () => classes(m)],
       ["GET", /^\/api\/v1\/courses\/schedule$/, () => schedule(m)],
-      ["GET", /^\/api\/v1\/courses\/paths\/p-linux$/, () => ({ id: PATH, title: paths(m)[0].title, description: paths(m)[0].description, rooms: [] })],
-      ["GET", /^\/api\/v1\/courses\/paths\/p-linux\/ai-assignments$/, () => assignments(m, m.state.done)],
-      ["GET", /^\/api\/v1\/courses\/paths\/p-linux\/weekly-tasks$/, () => weeks(m)],
-      ["GET", /^\/api\/v1\/courses\/paths\/p-linux\/practice-machines$/, () => practiceMachines(m)],
-      ["PUT", /^\/api\/v1\/courses\/paths\/p-linux\/ai-assignments\/([^/]+)\/completion$/, ({ mt, body }) => {
+      ["GET", /^\/api\/v1\/courses\/classes\/cls-linux$/, () => classes(m)[0]],
+      ["GET", /^\/api\/v1\/courses\/classes\/cls-linux\/ai-assignments$/, () => assignments(m, m.state.done)],
+      ["GET", /^\/api\/v1\/courses\/classes\/cls-linux\/weekly-tasks$/, () => weeks(m)],
+      ["GET", /^\/api\/v1\/courses\/classes\/cls-linux\/practice-machines$/, () => practiceMachines(m)],
+      ["PUT", /^\/api\/v1\/courses\/classes\/cls-linux\/ai-assignments\/([^/]+)\/completion$/, ({ mt, body }) => {
         if (body?.completed) m.state.done.add(mt[1]); else m.state.done.delete(mt[1]);
         return { __delay: 200, __body: { completed: Boolean(body?.completed), completed_item_ids: [], ready_at: body?.completed ? iso(NOW) : null } };
       }],
@@ -183,12 +186,12 @@ export default {
       await s.shot(1, [nav, s.page.locator("h1").first()], { crop });
       const ticket = s.page.locator('[data-guide="course-card"]').first();
       const parts = ["status", "title", "fields", "stub"].map((c) => ticket.locator(`[class*="_${c}_"]`).first());
-      await s.shot(2, [...parts, s.page.locator('[data-guide="course-card"]').last().locator('[class*="_stub_"]')], { crop });
+      await s.shot(2, parts, { crop });
       await s.shot(3, s.page.locator('[data-guide="course-card"]').nth(1), { crop });
     },
     // s02 Read the course page
     async (s) => {
-      await s.go(`/courses/${PATH}`, { wait: 800 });
+      await s.go(`/courses/${CLASS}`, { wait: 800 });
       await s.shot(1, s.page.locator('[data-guide="home-tasks"]'));
       await s.shot(2, s.page.locator('[data-guide="home-current-course"]'));
       await s.shot(3, s.page.locator('[data-guide="home-start"]'));
@@ -196,7 +199,7 @@ export default {
     },
     // s03 Mark a week as done
     async (s) => {
-      await s.go(`/courses/${PATH}`, { wait: 800 });
+      await s.go(`/courses/${CLASS}`, { wait: 800 });
       const box = s.page.locator("#weekly-task-week-wk-4").locator('label[class*="weekCompletion"]');
       await s.click(box.locator("input"), { wait: 300 });
       const toast = s.page.locator("[data-sonner-toast]").first();
@@ -209,7 +212,7 @@ export default {
     },
     // s04 Read an AI task's requirements
     async (s) => {
-      await s.go(`/courses/${PATH}`, { wait: 800 });
+      await s.go(`/courses/${CLASS}`, { wait: 800 });
       const row = s.page.locator("#weekly-task-assignment-as-mid");
       const toggle = row.locator("button[aria-controls]");
       await s.click(toggle, { wait: 500 });
@@ -222,7 +225,7 @@ export default {
     },
     // s05 Enter a class machine
     async (s) => {
-      await s.go(`/courses/${PATH}`, { wait: 800 });
+      await s.go(`/courses/${CLASS}`, { wait: 800 });
       const panel = s.page.locator('[data-guide="home-start"]');
       await s.shot(1, await panel.locator('[class*="machineState"]').all(), { crop: panel });
       // Step 2: the stopped LXC is started, then its terminal opens.
@@ -259,7 +262,7 @@ export default {
     },
     // s06 Open a week
     async (s) => {
-      await s.go(`/courses/${PATH}`, { wait: 800 });
+      await s.go(`/courses/${CLASS}`, { wait: 800 });
       const row = s.page.locator("#weekly-task-week-wk-5").locator("button[aria-controls]");
       const open = s.page.getByRole("button", { name: s.t("Open this week", "查看本週") });
       await s.shot(1, [row, open], { scroll: false });
@@ -268,7 +271,7 @@ export default {
     },
     // s07 Read check feedback
     async (s) => {
-      await s.go(`/courses/${PATH}/weeks/wk-5`, { wait: 800 });
+      await s.go(`/courses/${CLASS}/weeks/wk-5`, { wait: 800 });
       const cards = s.page.locator('[data-guide="course-week-feedback"] article[class*="feedbackCard"]');
       // Let the machine panel and feedback finish loading (the layout shifts until then), then go to the top.
       await cards.first().waitFor();
@@ -289,7 +292,7 @@ export default {
     },
     // s08 Use the machines and materials of a week
     async (s) => {
-      await s.go(`/courses/${PATH}/weeks/wk-5`, { wait: 800 });
+      await s.go(`/courses/${CLASS}/weeks/wk-5`, { wait: 800 });
       const mp = s.page.locator('[data-guide="course-week-machine"]');
       await mp.evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 12));
       await s.settle(300);

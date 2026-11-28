@@ -136,11 +136,9 @@ def _proxmox_data():
         api_timeout=30,
         pool_name=None,
         iso_storage=None,
-        data_storage=None,
         backup_storage=None,
         task_check_interval=2,
         gateway_ip=None,
-        local_subnet=None,
         default_node=None,
         enabled=True,
     )

@@ -72,7 +72,8 @@ function useSchedulerGroups(t) {
       guideProps: { "data-guide": "scheduler-thresholds" },
       /* 15 個閾值照資源分成 5 組、一組一列：列首放組名，三格只寫短名（餘裕／警戒…）。
          完整名稱（「CPU 峰值餘裕」）留在輸入框的 aria-label，報讀時不會只聽到「餘裕」；
-         AI 助手 surfaces.py 也是用完整名稱對照，語系檔的這些鍵不能刪 */
+         AI 助手的畫面說明（backend/config/assistant/screens/scheduler.yaml）也是用完整名稱
+         對照，語系檔的這些鍵不能刪 */
       rows: [
         {
           key: "cpuPeak",

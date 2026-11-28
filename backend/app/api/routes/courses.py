@@ -1,16 +1,16 @@
-"""課程學習 API（學生端）。"""
+"""課程學習 API（學生端）。
+
+學生的「課程」就是他修的班級：路徑裡的 ``class_id`` 是班級 id。班級不存在、
+還沒開放給學生或學生不在名單上，一律回 404。
+"""
 
 import uuid
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from sqlmodel import select
-from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
-from app.core.i18n import t
-from app.infrastructure.redis import check_rate_limit_by_key, get_redis
 from app.models.teaching_class import (
     TeachingClass,
     TeachingClassMachineNode,
@@ -22,64 +22,21 @@ from app.schemas.course import (
     CourseAICheckStudent,
     CourseAICompletionStudent,
     CourseAICompletionUpdate,
-    CourseAnswerResult,
-    CourseAnswerSubmit,
-    CoursePathDetail,
-    CoursePathSummary,
+    CourseClassStudent,
     CoursePracticeMachineStudent,
     CourseReminderStudent,
-    CourseRoomStudentDetail,
     CourseScheduleStudent,
     CourseWeeklyTaskStudent,
 )
 from app.services.course import (
     ai_assignment_service,
     course_service,
-    progress_service,
     reminder_service,
     weekly_task_service,
 )
-from app.services.course.progress_hub import course_progress_hub
 from app.services.teaching import course_publication_service
 
 router = APIRouter(prefix="/courses", tags=["courses"])
-
-# 答案提交節流：同一題每分鐘 10 次，擋低熵 flag 的暴力猜測；同一人跨題每分鐘
-# 30 次，擋輪流換題灌 audit log。scope 刻意不放進 FAIL_CLOSED_SCOPES，Redis
-# 停用的部署照樣能交答案。
-_SUBMIT_PER_QUESTION_LIMIT = 10
-_SUBMIT_PER_USER_LIMIT = 30
-_SUBMIT_WINDOW_SECONDS = 60
-
-
-async def _enforce_submit_rate_limit(
-    user_id: uuid.UUID, question_id: uuid.UUID
-) -> None:
-    redis = await get_redis()
-    for key, limit in (
-        (f"user:course_submit:{user_id}", _SUBMIT_PER_USER_LIMIT),
-        (f"course_submit:{user_id}:{question_id}", _SUBMIT_PER_QUESTION_LIMIT),
-    ):
-        allowed, info = await check_rate_limit_by_key(
-            redis,
-            key=key,
-            limit=limit,
-            window_seconds=_SUBMIT_WINDOW_SECONDS,
-            scope="course-submit",
-        )
-        if allowed:
-            continue
-        reset_at = info.get("reset_at")
-        if isinstance(reset_at, datetime):
-            remaining = (reset_at - datetime.now(timezone.utc)).total_seconds()
-            retry_after = max(1, int(remaining + 0.999))
-        else:
-            retry_after = _SUBMIT_WINDOW_SECONDS
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=t("rate_limit.user_too_many_requests", retry_after=retry_after),
-            headers={"Retry-After": str(retry_after)},
-        )
 
 
 @router.get("/schedule", response_model=list[CourseScheduleStudent])
@@ -87,7 +44,7 @@ def list_schedule(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> list[CourseScheduleStudent]:
-    """Return active-term classes linked to this student's course paths."""
+    """Return this student's active-term classes with today's session state."""
 
     return course_service.list_student_schedule(
         session,
@@ -108,65 +65,65 @@ def list_reminders(
     )
 
 
-@router.get("/paths", response_model=list[CoursePathSummary])
-def list_paths(
+@router.get("/classes", response_model=list[CourseClassStudent])
+def list_classes(
     session: SessionDep, current_user: CurrentUser
-) -> list[CoursePathSummary]:
-    return course_service.list_published_paths(session, user_id=current_user.id)
+) -> list[CourseClassStudent]:
+    return course_service.list_student_classes(session, user_id=current_user.id)
 
 
-@router.get("/paths/{path_id}", response_model=CoursePathDetail)
-def get_path(
-    session: SessionDep, current_user: CurrentUser, path_id: uuid.UUID
-) -> CoursePathDetail:
-    return course_service.get_path_detail(
-        session, user_id=current_user.id, path_id=path_id
+@router.get("/classes/{class_id}", response_model=CourseClassStudent)
+def get_class(
+    session: SessionDep, current_user: CurrentUser, class_id: uuid.UUID
+) -> CourseClassStudent:
+    return course_service.get_student_class_detail(
+        session, user_id=current_user.id, class_id=class_id
     )
 
 
 @router.get(
-    "/paths/{path_id}/ai-assignments",
+    "/classes/{class_id}/ai-assignments",
     response_model=list[CourseAIAssignmentStudent],
 )
 def list_ai_assignments(
-    session: SessionDep, current_user: CurrentUser, path_id: uuid.UUID
+    session: SessionDep, current_user: CurrentUser, class_id: uuid.UUID
 ) -> list[CourseAIAssignmentStudent]:
     return ai_assignment_service.list_student_ai_assignments(
         session,
         user_id=current_user.id,
-        path_id=path_id,
+        class_id=class_id,
     )
 
 
 @router.get(
-    "/paths/{path_id}/weekly-tasks",
+    "/classes/{class_id}/weekly-tasks",
     response_model=list[CourseWeeklyTaskStudent],
 )
 def list_weekly_tasks(
-    session: SessionDep, current_user: CurrentUser, path_id: uuid.UUID
+    session: SessionDep, current_user: CurrentUser, class_id: uuid.UUID
 ) -> list[CourseWeeklyTaskStudent]:
     return weekly_task_service.list_student_weekly_tasks(
         session,
         user_id=current_user.id,
-        path_id=path_id,
+        class_id=class_id,
     )
 
 
 @router.get(
-    "/paths/{path_id}/weekly-tasks/{week_id}/files/{file_id}",
+    "/classes/{class_id}/weekly-tasks/{week_id}/files/{file_id}",
     response_class=FileResponse,
 )
 def get_weekly_task_pdf(
     session: SessionDep,
     current_user: CurrentUser,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     week_id: uuid.UUID,
     file_id: uuid.UUID,
 ) -> FileResponse:
     path, filename = weekly_task_service.get_student_weekly_task_pdf(
         session,
         user_id=current_user.id,
-        path_id=path_id,
+        class_id=class_id,
         week_id=week_id,
         file_id=file_id,
     )
@@ -179,23 +136,21 @@ def get_weekly_task_pdf(
 
 
 @router.get(
-    "/paths/{path_id}/practice-machines",
+    "/classes/{class_id}/practice-machines",
     response_model=list[CoursePracticeMachineStudent],
 )
 def list_practice_machines(
     session: SessionDep,
     current_user: CurrentUser,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
 ) -> list[CoursePracticeMachineStudent]:
-    """List machines assigned in the exact class linked to this path."""
+    """List the machines assigned to this student in one of their classes."""
 
-    teaching_class = course_service.get_student_class_for_path(
+    teaching_class = course_service.get_student_class_or_404(
         session,
         user_id=current_user.id,
-        path_id=path_id,
+        class_id=class_id,
     )
-    if teaching_class is None:
-        return []
     rows = session.exec(
         select(
             TeachingClass,
@@ -247,13 +202,13 @@ def list_practice_machines(
 
 
 @router.get(
-    "/paths/{path_id}/ai-assignments/{assignment_id}/source-document",
+    "/classes/{class_id}/ai-assignments/{assignment_id}/source-document",
     response_class=FileResponse,
 )
 def get_ai_assignment_source_document(
     session: SessionDep,
     current_user: CurrentUser,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     assignment_id: uuid.UUID,
 ) -> FileResponse:
     """Preview the uploaded PDF tied to an approved assignment."""
@@ -261,7 +216,7 @@ def get_ai_assignment_source_document(
     path, filename = ai_assignment_service.get_student_ai_assignment_source_document(
         session,
         user_id=current_user.id,
-        path_id=path_id,
+        class_id=class_id,
         assignment_id=assignment_id,
     )
     return FileResponse(
@@ -273,13 +228,13 @@ def get_ai_assignment_source_document(
 
 
 @router.put(
-    "/paths/{path_id}/ai-assignments/{assignment_id}/completion",
+    "/classes/{class_id}/ai-assignments/{assignment_id}/completion",
     response_model=CourseAICompletionStudent,
 )
 def update_ai_assignment_completion(
     session: SessionDep,
     current_user: CurrentUser,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     assignment_id: uuid.UUID,
     body: CourseAICompletionUpdate,
 ) -> CourseAICompletionStudent:
@@ -288,7 +243,7 @@ def update_ai_assignment_completion(
     return ai_assignment_service.update_student_completion(
         session,
         user_id=current_user.id,
-        path_id=path_id,
+        class_id=class_id,
         assignment_id=assignment_id,
         item_id=body.item_id,
         completed=body.completed,
@@ -296,52 +251,20 @@ def update_ai_assignment_completion(
 
 
 @router.get(
-    "/paths/{path_id}/ai-assignments/{assignment_id}/checks/{run_id}",
+    "/classes/{class_id}/ai-assignments/{assignment_id}/checks/{run_id}",
     response_model=CourseAICheckStudent,
 )
 def get_ai_check(
     session: SessionDep,
     current_user: CurrentUser,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     assignment_id: uuid.UUID,
     run_id: uuid.UUID,
 ) -> CourseAICheckStudent:
     return ai_assignment_service.get_student_ai_check(
         session,
         user_id=current_user.id,
-        path_id=path_id,
+        class_id=class_id,
         assignment_id=assignment_id,
         run_id=run_id,
     )
-
-
-@router.get("/rooms/{room_id}", response_model=CourseRoomStudentDetail)
-def get_room(
-    session: SessionDep, current_user: CurrentUser, room_id: uuid.UUID
-) -> CourseRoomStudentDetail:
-    return course_service.get_room_student_detail(
-        session, user_id=current_user.id, room_id=room_id
-    )
-
-
-@router.post(
-    "/questions/{question_id}/submit", response_model=CourseAnswerResult
-)
-async def submit_answer(
-    session: SessionDep,
-    current_user: CurrentUser,
-    question_id: uuid.UUID,
-    data: CourseAnswerSubmit,
-) -> CourseAnswerResult:
-    await _enforce_submit_rate_limit(current_user.id, question_id)
-    # submit_answer 是同步的多次 DB 往返，丟到 threadpool 免得卡住事件迴圈
-    result, path_id, event = await run_in_threadpool(
-        progress_service.submit_answer,
-        session,
-        user=current_user,
-        question_id=question_id,
-        answer=data.answer,
-    )
-    if event is not None and path_id is not None:
-        await course_progress_hub.broadcast(path_id, event)
-    return result

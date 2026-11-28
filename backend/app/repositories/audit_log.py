@@ -76,8 +76,11 @@ def _build_filters(
     if ip_address:
         filters.append(AuditLog.ip_address.ilike(f"%{ip_address}%"))
     if search:
+        # 搜尋框的提示寫「搜尋操作內容、IP」，所以兩欄都比對
         like = f"%{search}%"
-        filters.append(AuditLog.details.ilike(like))
+        filters.append(
+            or_(AuditLog.details.ilike(like), AuditLog.ip_address.ilike(like))
+        )
     return filters
 
 

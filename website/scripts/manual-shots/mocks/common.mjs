@@ -81,7 +81,7 @@ export function registerCommon(m) {
     ["GET", /^\/api\/v1\/classroom\/live$/, () => ({ session: null, taken_over_vmids: [] })],
     ["GET", /^\/api\/v1\/jobs\/$/, () => ({ items: [], total: 0 })],
     ["GET", /^\/api\/v1\/courses\/reminders$/, () => []],
-    ["GET", /^\/api\/v1\/ai\/contextual-help\/surfaces$/, () => []],
+    ["GET", /^\/api\/v1\/ai\/assistant\/surfaces$/, () => []],
     ["GET", /^\/api\/v1\/push\/vapid-public-key$/, () => ({ enabled: false })],
     ["GET", /^\/api\/v1\/notifications.*$/, () => ({ data: [], count: 0 })],
   ]);

@@ -9,10 +9,9 @@ import translations from "../../locales/zh-TW/components.json";
 
 vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "overlay-teacher" } }) }));
 vi.mock("react-i18next", async (importOriginal) => ({ ...await importOriginal(), useTranslation: () => ({ t: (key) => translations[key] ?? key }) }));
-vi.mock("../../services/aiNavigation", () => ({ AiNavigationService: { resolve: vi.fn(), intake: vi.fn() } }));
-vi.mock("../../services/aiTemplateRecommendation", () => ({ AiTemplateRecommendationApi: { chat: vi.fn(), recommend: vi.fn() } }));
-vi.mock("../../services/aiContextualHelp", () => ({
-  AiContextualHelpService: { surfaces: vi.fn().mockResolvedValue([]), explain: vi.fn() }, matchSurface: () => null,
+vi.mock("../../services/aiTemplateRecommendation", () => ({ AiTemplateRecommendationApi: { recommend: vi.fn() } }));
+vi.mock("../../services/aiAssistant", () => ({
+  AiAssistantService: { surfaces: vi.fn().mockResolvedValue([]), chat: vi.fn() }, matchSurface: () => null,
 }));
 vi.mock("../OctoPet/OctoPet", () => ({ default: () => <span /> }));
 
@@ -22,6 +21,7 @@ let root;
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
+  sessionStorage.clear();
   /* 寬螢幕（≥1440）：平常是並排停靠，不是覆蓋層 */
   window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   host = document.createElement("div");

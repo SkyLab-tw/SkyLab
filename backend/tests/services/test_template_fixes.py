@@ -74,9 +74,7 @@ def pve_ops(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
     monkeypatch.setattr(
         template_service, "_ensure_stopped", lambda *a: calls.append(("stop", *a))
     )
-    monkeypatch.setattr(
-        template_service, "_reset_cloud_init_state", lambda *a: False
-    )
+    monkeypatch.setattr(template_service, "_reset_cloud_init_state", lambda *a: False)
     monkeypatch.setattr(
         template_service,
         "_strip_hostpci_for_convert",
@@ -331,9 +329,7 @@ def test_convert_task_refuses_reused_vmid(
 # 以下讓名稱符合 tpl-<vmid>-edit，只留 Resource 不符，單獨驗證平台紀錄的檢查
 # （例如學生把新機器取名成 tpl-105-edit）。
 _MISMATCHED_TEMP_RESOURCE = [
-    pytest.param(
-        False, template_service.UPDATE_TEMP_ENVIRONMENT_TYPE, id="other-user"
-    ),
+    pytest.param(False, template_service.UPDATE_TEMP_ENVIRONMENT_TYPE, id="other-user"),
     pytest.param(True, "Custom", id="owner-but-not-update-temp"),
     pytest.param(False, "Custom", id="other-user-custom-vm"),
 ]
@@ -525,9 +521,7 @@ def test_convert_task_repoints_open_requests_to_new_template(
         ("pve1", OLD_VMID, "qemu")
     ]
     db.expire_all()
-    template_ids = {
-        row.id: row.template_id for row in db.exec(select(VMRequest)).all()
-    }
+    template_ids = {row.id: row.template_id for row in db.exec(select(VMRequest)).all()}
     assert template_ids[approved_id] == TEMP_VMID
     assert template_ids[pending_id] == TEMP_VMID
     # 已開出機器與已結案的申請單不動
@@ -639,9 +633,7 @@ async def test_retry_shortcut_marks_ready_when_already_converted(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "field", ["name", "visibility", "requires_gpu"]
-)
+@pytest.mark.parametrize("field", ["name", "visibility", "requires_gpu"])
 def test_update_template_rejects_null_for_required_fields(
     db: Session, field: str
 ) -> None:
@@ -759,7 +751,9 @@ def test_reconcile_keeps_updating_when_update_task_failed(
     db: Session, task_type: str
 ) -> None:
     template = _template(
-        db, owner_id=uuid.uuid4(), status=VMTemplateStatus.updating,
+        db,
+        owner_id=uuid.uuid4(),
+        status=VMTemplateStatus.updating,
         source_vmid=TEMP_VMID,
     )
     # worker 中斷：任務被標失敗，但範本沒有寫入錯誤訊息
@@ -777,7 +771,9 @@ def test_reconcile_keeps_updating_when_update_task_failed(
 
 def test_reconcile_keeps_existing_update_error_message(db: Session) -> None:
     template = _template(
-        db, owner_id=uuid.uuid4(), status=VMTemplateStatus.updating,
+        db,
+        owner_id=uuid.uuid4(),
+        status=VMTemplateStatus.updating,
         source_vmid=TEMP_VMID,
     )
     template.error_message = "convert failed: disk busy"
@@ -795,7 +791,9 @@ def test_reconcile_keeps_existing_update_error_message(db: Session) -> None:
 
 def test_reconcile_still_marks_failed_create_as_failed(db: Session) -> None:
     template = _template(
-        db, owner_id=uuid.uuid4(), status=VMTemplateStatus.creating,
+        db,
+        owner_id=uuid.uuid4(),
+        status=VMTemplateStatus.creating,
         source_vmid=OLD_VMID,
     )
     _failed_task(db, template, template_service.TASK_CONVERT, "convert boom")
@@ -808,12 +806,79 @@ def test_reconcile_still_marks_failed_create_as_failed(db: Session) -> None:
     assert refreshed.error_message == "convert boom"
 
 
+# --- 單一範本查詢：是不是 Windows ---
+
+
+def test_single_template_lookup_reports_whether_it_is_windows(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """克隆視窗靠它在送出前對照 Windows 的密碼規則。
+
+    ostype 要打 PVE 才讀得到：只有查單一範本時查，清單不逐筆查（留 None）。
+    """
+    from app.services.proxmox import provisioning_service
+
+    teacher = _user()
+    windows = _template(
+        db, owner_id=teacher.id, status=VMTemplateStatus.ready, source_vmid=None
+    )
+    linux = _template(
+        db,
+        owner_id=teacher.id,
+        status=VMTemplateStatus.ready,
+        source_vmid=None,
+        pve_vmid=OLD_VMID + 1,
+    )
+    container = VMTemplate(
+        pve_vmid=OLD_VMID + 2,
+        name="alpine",
+        owner_id=teacher.id,
+        node="pve1",
+        resource_type="lxc",
+        status=VMTemplateStatus.ready,
+        visibility=VMTemplateVisibility.private,
+    )
+    db.add(container)
+    db.commit()
+    db.refresh(container)
+
+    asked: list[int] = []
+
+    def is_windows_template(vmid: int) -> bool:
+        asked.append(vmid)
+        return vmid == windows.pve_vmid
+
+    monkeypatch.setattr(template_service, "_pve_template_raw", lambda *_: None)
+    monkeypatch.setattr(
+        provisioning_service, "is_windows_template", is_windows_template
+    )
+
+    def lookup(template: VMTemplate) -> bool | None:
+        return template_service.get_template_for_user(
+            session=db, user=teacher, template_id=template.id
+        ).is_windows
+
+    assert lookup(windows) is True
+    assert lookup(linux) is False
+    # 容器沒有 ostype，不必問 PVE
+    assert lookup(container) is False
+    assert asked == [windows.pve_vmid, linux.pve_vmid]
+
+    # 清單不查：每個範本都要打一次 PVE，範本頁又會定期重抓
+    listed = template_service.list_templates(session=db, user=teacher)
+    assert len(listed) == 3
+    assert {item.is_windows for item in listed} == {None}
+    assert asked == [windows.pve_vmid, linux.pve_vmid]
+
+
 async def test_failed_finish_can_be_retried_after_listing(
     db: Session, enqueued: list, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     teacher = _user()
     template = _template(
-        db, owner_id=teacher.id, status=VMTemplateStatus.updating,
+        db,
+        owner_id=teacher.id,
+        status=VMTemplateStatus.updating,
         source_vmid=TEMP_VMID,
     )
     _resource(db, vmid=TEMP_VMID, user_id=teacher.id)
@@ -864,7 +929,9 @@ def test_failed_cancel_keeps_updating_and_can_be_retried(
 ) -> None:
     teacher_id = uuid.uuid4()
     template = _template(
-        db, owner_id=teacher_id, status=VMTemplateStatus.updating,
+        db,
+        owner_id=teacher_id,
+        status=VMTemplateStatus.updating,
         source_vmid=TEMP_VMID,
     )
     _resource(db, vmid=TEMP_VMID, user_id=teacher_id)
@@ -873,13 +940,9 @@ def test_failed_cancel_keeps_updating_and_can_be_retried(
     def delete_fails(*_a: Any) -> None:
         raise RuntimeError("delete failed: locked")
 
-    monkeypatch.setattr(
-        template_service.proxmox_ops, "delete_resource", delete_fails
-    )
+    monkeypatch.setattr(template_service.proxmox_ops, "delete_resource", delete_fails)
     with pytest.raises(RuntimeError):
-        template_service.run_update_cancel_task(
-            uuid.uuid4(), _cancel_payload(template)
-        )
+        template_service.run_update_cancel_task(uuid.uuid4(), _cancel_payload(template))
     _failed_task(
         db, template, template_service.TASK_UPDATE_CANCEL, "delete failed: locked"
     )

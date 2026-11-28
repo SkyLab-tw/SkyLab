@@ -8,7 +8,11 @@ import MIcon from "../MIcon";
 import { AccountService } from "../../services/account";
 import { ROUTE_DETAILED_GUIDES } from "./pageGuides";
 import { getRouteGuide, USER_GUIDE_START_EVENT } from "./routeGuides";
+import { clearArrivalCommand, peekArrivalCommand, registerGuideApi } from "./guideCommands";
 import styles from "./UserGuide.module.scss";
+
+/* AI 助手一次最多拿到幾個「指得到的步驟」；再多模型也挑不準，只是佔 prompt */
+const MAX_LISTED_STEPS = 20;
 
 const STUDENT_HOME_GUIDE = {
   id: "student-home",
@@ -542,6 +546,9 @@ export default function UserGuide() {
   const [gestureLine, setGestureLine] = useState(null);
   const [slot, setSlot] = useState(null);
   const [hasEmptyState, setHasEmptyState] = useState(false);
+  /* 單步打光（AI 助手的「指給我看」）：{ step }。跟完整導覽分開的狀態——
+     不算看過導覽（不寫 localStorage、不回報帳號），也不通知頁面進入示範模式 */
+  const [spot, setSpot] = useState(null);
   const originalAiTab = useRef(null);
   // 這次導覽有沒有替使用者點 enterSelector（例如打開申請表單）；有才在跳過時用 exitSelector 退回去
   const enteredByGuide = useRef(false);
@@ -612,6 +619,24 @@ export default function UserGuide() {
     setGestureLine(null);
   }, [guide?.id]);
 
+  /* 換了頁，原本指著的東西就不在了。要寫在「換頁後打光」那個 effect 之前：
+     同一次換頁先清掉舊的、再設新的 */
+  useEffect(() => {
+    setSpot(null);
+  }, [location.pathname]);
+
+  /* AI 助手下的「換頁後打光」命令：到了目標頁就取走。目標可能還沒 render 出來，
+     定位那段會等它（最多 4 秒），等不到就自己收掉 */
+  useEffect(() => {
+    const command = peekArrivalCommand(location.pathname);
+    if (command?.type !== "spot") return;
+    clearArrivalCommand(command);
+    const item = command.selector
+      ? { selector: command.selector, title: command.title, text: command.text }
+      : guide?.steps?.[Number(command.stepId)];
+    if (item) setSpot({ step: item });
+  }, [location.pathname, guide]);
+
   useEffect(() => {
     if (!open || !guide?.generic) {
       setHasEmptyState(false);
@@ -645,6 +670,10 @@ export default function UserGuide() {
     } catch {
       // The guide remains available manually if session storage is unavailable.
     }
+    /* AI 助手的「帶我看」：換到這一頁後開始完整導覽。跟接續導覽一樣是使用者明確要求的，
+       不看「看過了沒」 */
+    const arrivalCommand = peekArrivalCommand(location.pathname);
+    if (arrivalCommand?.type === "tour") chained = true;
     if ((!guide.autoStart || !isStudent) && !chained) return undefined;
 
     if (!chained && seenOnAccount) return undefined;
@@ -673,6 +702,7 @@ export default function UserGuide() {
         }
       }
       if (entered && guide.steps.some((item) => document.querySelector(item.selector))) {
+        if (arrivalCommand?.type === "tour") clearArrivalCommand(arrivalCommand);
         setPageTitle(document.querySelector("h1")?.textContent?.trim() ?? "");
         setStep(0);
         setOpen(true);
@@ -686,21 +716,28 @@ export default function UserGuide() {
     timer = window.setTimeout(tryOpen, 500);
 
     return () => window.clearTimeout(timer);
-  }, [guide?.autoStart, guide?.enterSelector, guide?.enterTargetSelector, guide?.id, guide?.steps, isStudent, storageKey, seenOnAccount]);
+  }, [guide?.autoStart, guide?.enterSelector, guide?.enterTargetSelector, guide?.id, guide?.steps, isStudent, storageKey, seenOnAccount, location.pathname]);
+
+  /* 現在要打光的那一步：單步打光優先，其次才是進行中的完整導覽 */
+  const spotStep = spot?.step ?? null;
+  const activeStep = spotStep ?? (open ? current : null) ?? null;
 
   useLayoutEffect(() => {
-    if (!open || !current) {
+    if (!activeStep) {
       setTargetRect(null);
       setGestureLine(null);
       return undefined;
     }
+    const current = activeStep;
 
-    // 離開上一步時，若該步有 deactivateSelector（例如關閉導覽開啟的彈窗），先點擊關閉
-    const prevStep = prevStepRef.current;
-    if (prevStep && prevStep !== current && prevStep.deactivateSelector) {
-      document.querySelector(prevStep.deactivateSelector)?.click();
+    if (!spotStep) {
+      // 離開上一步時，若該步有 deactivateSelector（例如關閉導覽開啟的彈窗），先點擊關閉
+      const prevStep = prevStepRef.current;
+      if (prevStep && prevStep !== current && prevStep.deactivateSelector) {
+        document.querySelector(prevStep.deactivateSelector)?.click();
+      }
+      prevStepRef.current = current;
     }
-    prevStepRef.current = current;
 
     setTargetRect(null);
     setGestureLine(null);
@@ -730,7 +767,12 @@ export default function UserGuide() {
       : null;
     /* 分頁是共用 Tabs（aria-selected），也可能是共用 SegmentedControl（aria-pressed），已選中就不再點 */
     const alreadyActive = activate?.getAttribute("aria-selected") === "true" || activate?.getAttribute("aria-pressed") === "true";
-    if (activate && !alreadyActive) activate.click();
+    if (activate && !alreadyActive) {
+      /* 觸發鈕可能被橫向捲動的表格切在外面（AI 助手並排時版面變窄更常見）：先捲到看得見，
+         它彈出的選單才不會定位到畫面外、被旁邊的面板蓋住 */
+      activate.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      activate.click();
+    }
 
     const attachTarget = () => {
       target = document.querySelector(current.selector);
@@ -741,6 +783,11 @@ export default function UserGuide() {
       }
       target ??= activate;
       if (!target) {
+        /* 單步打光指的東西不在畫面上（資料變了、頁面還沒載完）：安靜地收掉，不留一層看不見的遮罩 */
+        if (spotStep) {
+          setSpot(null);
+          return;
+        }
         /* 目標始終沒出現（例如容器沒有「開機選項」卡片）：沒有 targetRect 面板就不會顯示，
            導覽會卡在看不見的一步，直接跳到下一步 */
         if (step + 1 < availableSteps.length) setStep(step + 1);
@@ -767,11 +814,70 @@ export default function UserGuide() {
       observer?.disconnect();
       setGestureLine(null);
     };
-  }, [current, open]);
+  }, [activeStep]);
 
-  // AI 助手等外部入口用事件啟動，和頁首 ? 按鈕走同一個 start
+  const start = () => {
+    if (!guide) return;
+    setSpot(null);
+    if (guide.id === "ai-api") {
+      /* 分頁是共用 Tabs（role="tab"＋aria-selected） */
+      originalAiTab.current = document.querySelector('[role="tab"][data-guide-tab][aria-selected="true"]')?.dataset.guideTab ?? null;
+    }
+    // 先關再開：availableSteps 以 open 為 memo 依賴，重開才會用當下 DOM 重算，
+    // 也讓 auto-start 搶跑失敗後（open 已為 true）的點擊仍能生效
+    setOpen(false);
+    setStep(0);
+    const trigger = guide.enterSelector ? document.querySelector(guide.enterSelector) : null;
+    if (trigger) {
+      trigger.click();
+      enteredByGuide.current = true;
+    }
+    window.setTimeout(() => {
+      setPageTitle(document.querySelector("h1")?.textContent?.trim() ?? "");
+      setOpen(true);
+    }, trigger ? 260 : 80);
+  };
+
+  /* 對外命令（guideCommands.js）。註冊一次，每次 render 後換成拿得到最新狀態的實作 */
+  const commandRef = useRef(null);
+  useEffect(() => {
+    commandRef.current = guide ? {
+      tour: start,
+      /* 現在指得到的步驟：目標（或切到它的分頁鈕）在 DOM 裡才列。會換頁的步驟與手勢示範不列——
+         那是完整導覽才有意義的東西；通用導覽的步驟（頁首、主要區塊）太籠統，也不列 */
+      listSteps: () => (guide.generic ? [] : guide.steps
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => !item.performSelector && !item.demo
+          && (!item.conditionSelector || document.querySelector(item.conditionSelector))
+          && (document.querySelector(item.selector)
+            || (item.activateSelector && document.querySelector(item.activateSelector))))
+        .slice(0, MAX_LISTED_STEPS)
+        .map(({ item, index }) => ({ id: String(index), title: t(item.titleKey) }))),
+      spotStep: (stepId) => {
+        const item = guide.generic ? null : guide.steps[Number(stepId)];
+        if (!item) return false;
+        setOpen(false);
+        setSpot({ step: item });
+        return true;
+      },
+      spotSelector: ({ selector, title, text }) => {
+        if (!selector) return false;
+        setOpen(false);
+        setSpot({ step: { selector, title, text } });
+        return true;
+      },
+    } : null;
+  });
+  useEffect(() => registerGuideApi({
+    listSteps: () => commandRef.current?.listSteps() ?? [],
+    tour: () => commandRef.current?.tour(),
+    spotStep: (stepId) => commandRef.current?.spotStep(stepId) ?? false,
+    spotSelector: (payload) => commandRef.current?.spotSelector(payload) ?? false,
+  }), []);
+
+  // 頁首 ? 以外的入口用事件啟動，和頁首 ? 按鈕走同一個 start（start 在沒有導覽的頁面會直接返回）
   const startRef = useRef(null);
-  startRef.current = null;
+  startRef.current = start;
   useEffect(() => {
     const handleStart = () => startRef.current?.();
     window.addEventListener(USER_GUIDE_START_EVENT, handleStart);
@@ -805,26 +911,7 @@ export default function UserGuide() {
     }
   };
 
-  const start = () => {
-    if (guide.id === "ai-api") {
-      /* 分頁是共用 Tabs（role="tab"＋aria-selected） */
-      originalAiTab.current = document.querySelector('[role="tab"][data-guide-tab][aria-selected="true"]')?.dataset.guideTab ?? null;
-    }
-    // 先關再開：availableSteps 以 open 為 memo 依賴，重開才會用當下 DOM 重算，
-    // 也讓 auto-start 搶跑失敗後（open 已為 true）的點擊仍能生效
-    setOpen(false);
-    setStep(0);
-    const trigger = guide.enterSelector ? document.querySelector(guide.enterSelector) : null;
-    if (trigger) {
-      trigger.click();
-      enteredByGuide.current = true;
-    }
-    window.setTimeout(() => {
-      setPageTitle(document.querySelector("h1")?.textContent?.trim() ?? "");
-      setOpen(true);
-    }, trigger ? 260 : 80);
-  };
-  startRef.current = start;
+  const closeSpot = () => setSpot(null);
 
   const next = () => {
     if (current.performSelector) {
@@ -864,7 +951,69 @@ export default function UserGuide() {
         slot
       )}
 
-      {open && current && targetRect && panelPosition && (
+      {/* 單步打光：同一套遮罩與聚光框，面板只有標題、說明與一顆「知道了」。
+          點被指著的東西也是收掉——讓出畫面，使用者接著自己操作 */}
+      {spotStep && targetRect && panelPosition && (
+        <div className={styles.layer}>
+          <div className={styles.guideBackdrop} aria-hidden="true" />
+          <div
+            className={styles.spotlight}
+            style={{
+              top: targetRect.top,
+              left: targetRect.left,
+              width: targetRect.width,
+              height: targetRect.height,
+            }}
+          />
+          <button
+            type="button"
+            className={styles.targetShield}
+            style={{
+              top: targetRect.top,
+              left: targetRect.left,
+              width: targetRect.width,
+              height: targetRect.height,
+            }}
+            onClick={closeSpot}
+            aria-label={t("UserGuide.spotDismissButton")}
+          />
+          <section
+            className={styles.panel}
+            data-side={panelPosition.side}
+            style={{ left: panelPosition.left, top: panelPosition.top, width: panelPosition.width }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="global-guide-spot-title"
+          >
+            <div className={styles.header}>
+              <span className={styles.icon}><MIcon name="ads_click" size={22} /></span>
+              <div>
+                <small>{t("UserGuide.spotSubtitle")}</small>
+              </div>
+              <button type="button" onClick={closeSpot} aria-label={t("UserGuide.closeGuideAriaLabel")}>
+                <MIcon name="close" size={19} />
+              </button>
+            </div>
+
+            <div className={styles.content}>
+              <h2 id="global-guide-spot-title">{spotStep.title ?? t(spotStep.titleKey)}</h2>
+              {(spotStep.text || spotStep.textKey) && <p>{spotStep.text ?? t(spotStep.textKey)}</p>}
+            </div>
+
+            <div className={styles.actions}>
+              <span />
+              <div>
+                <button type="button" className={styles.next} onClick={closeSpot}>
+                  {t("UserGuide.spotDismissButton")}
+                  <MIcon name="check" size={17} />
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {!spotStep && open && current && targetRect && panelPosition && (
         <div className={styles.layer}>
           <div className={styles.guideBackdrop} aria-hidden="true" />
           <div

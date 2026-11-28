@@ -1,10 +1,11 @@
-/* 課程票券的條碼就是練習進度：一段代表一題（題目多時一段代表數題），做完的排在前面。
-   條寬與間距由課程 id 決定，同一門課每次都畫出同一組條碼，不同課程一眼分得出來。 */
+/* 票券的條碼：total 個項目各佔一段（項目多時一段代表數個），完成的排在前面。
+   班級票券用它畫進度；課程票券只拿它當票根的花紋（completed 一律 0）。
+   條寬與間距由 id 決定，同一張票每次都畫出同一組條碼，不同的票一眼分得出來。 */
 
 export const MAX_BARS = 40;
 
-/* 題目少時（例如 3 題）一題一條只剩幾塊粗色塊、不像條碼：
-   改成每題畫一小叢細條、叢與叢之間留較寬的空隙，整張條碼至少這麼多條，仍看得出分成幾題 */
+/* 項目少時（例如 3 個）一個一條只剩幾塊粗色塊、不像條碼：
+   改成每個畫一小叢細條、叢與叢之間留較寬的空隙，整張條碼至少這麼多條，仍看得出分成幾段 */
 export const MIN_BARS = 24;
 
 const WIDTHS = [1, 1, 2, 3];
@@ -23,17 +24,17 @@ function seeded(text) {
 }
 
 /**
- * @returns {{ width: number, gap: number, done: boolean }[]} 相對寬度（flex-grow）與是否已完成；沒有題目時回空陣列
+ * @returns {{ width: number, gap: number, done: boolean }[]} 相對寬度（flex-grow）與是否已完成；total 為 0 時回空陣列
  */
 export function ticketBarcode(id, total, completed) {
-  const questions = Math.max(0, Math.floor(Number(total) || 0));
-  const segments = Math.min(questions, MAX_BARS);
+  const items = Math.max(0, Math.floor(Number(total) || 0));
+  const segments = Math.min(items, MAX_BARS);
   if (segments === 0) return [];
 
-  const finished = Math.min(Math.max(0, Number(completed) || 0), questions);
-  let done = Math.round((finished / questions) * segments);
-  if (finished > 0) done = Math.max(1, done); // 做了一題就看得到
-  if (finished < questions) done = Math.min(segments - 1, done); // 沒做完就不會看起來全滿
+  const finished = Math.min(Math.max(0, Number(completed) || 0), items);
+  let done = Math.round((finished / items) * segments);
+  if (finished > 0) done = Math.max(1, done); // 完成一個就看得到
+  if (finished < items) done = Math.min(segments - 1, done); // 沒做完就不會看起來全滿
 
   const perSegment = Math.ceil(MIN_BARS / segments);
   const random = seeded(String(id ?? ""));

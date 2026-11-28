@@ -57,14 +57,14 @@ Authentication can be local password, Google, or LDAP / Active Directory. Two-st
 | --- | --- |
 | **Resource** | A VM or LXC container managed by SkyLab. Identified by its PVE `vmid`; carries an owner, an expiry date, a login user and a source badge (personal, shared, teaching class, quick practice or course). |
 | **Platform template** | A VM or container marked as a template in SkyLab's database. It is not converted on the PVE side (thick-provisioned LVM cannot hold PVE templates); SkyLab protects the source machine and full-clones it. Whether the login password can be set depends on cloud-init being present in the image. |
-| **PVE connection** | One Proxmox API endpoint: a standalone node or a cluster. Pool, storages, default node, gateway IP and local subnet are configured per connection; the PVE bridge belongs to the IP subnet. Clones never cross connections. |
+| **PVE connection** | One Proxmox API endpoint: a standalone node or a cluster. Pool, ISO and backup storage, default node and gateway IP are configured per connection; the PVE bridge belongs to the IP subnet. Clones never cross connections. |
 | **IP subnet** | The range from which static addresses are allocated. CIDR, gateway and DNS always come from the IP management service; there is no silent fallback to DHCP. |
 | **VM request** | A student's application for a machine with a time window. Approval reserves capacity; the scheduler provisions at the start of the window. Extending the expiry also extends the approved window. |
 | **Spec change request** | A request to resize or extend an existing machine. Pending increments count against the quota. |
 | **Teaching class** | A roster of students with a timetable. A teacher can provision one machine per student in a batch and watch or broadcast to the class from the classroom view. |
 | **Multi-machine teaching environment** | A reusable topology of several machines with their network, built by a teacher and published either as a quick practice environment for self-service or as the environment of a formal class. See the [SOP](/guides/multi-machine-environment-sop). |
 | **Quick practice** | A published environment that any student can launch for a limited session without a request. |
-| **Course** | A learning path with weekly content, progress tracking and optional lab machines; teachers can run AI-assisted checks on student work. |
+| **Course** | The student's view of a teaching class. Once the class has first become ready for class, every student on its roster sees it as a course with the class's weekly content, tasks and class machines. There is no separate course object; teachers can run AI-assisted checks on student work. |
 | **Gateway VM** | The campus egress host managed by SkyLab over SSH. Provides WireGuard access, port forwarding, domain reverse proxy and the platform entry. |
 | **Platform entry** | SkyLab itself exposed on a domain through the gateway's nginx with an administrator-supplied certificate; optionally proxied through Cloudflare. |
 | **Firewall topology** | The per-machine and per-class rules SkyLab applies on PVE, visualised as a graph. Teachers see their students' machines; students see their own. |

@@ -134,69 +134,6 @@ def submit_batch_job_for_users(
     return job.id
 
 
-def approve_batch_job(
-    *,
-    session: Session,
-    job_id: uuid.UUID,
-    reviewer_id: uuid.UUID,
-    review_comment: str | None = None,
-) -> None:
-    """Approve a pending batch job and enqueue it for the arq worker.
-
-    The status transition is atomic — if two admins click "approve" at the
-    same time, only the one whose UPDATE wins races enqueues the job; the
-    other gets a BadRequestError.
-    """
-    # First fail fast if the job doesn't exist at all (gives a clearer error
-    # than the race-loser path).
-    if bp_repo.get_job(session=session, job_id=job_id) is None:
-        raise BadRequestError(t("batch_provision.job_not_found"))
-
-    job = bp_repo.transition_pending_review(
-        session=session,
-        job_id=job_id,
-        reviewer_id=reviewer_id,
-        decision=BatchProvisionJobStatus.approved,
-        review_comment=review_comment,
-    )
-    if job is None:
-        # Either status changed under us (concurrent reviewer) or it wasn't
-        # in pending_review to begin with.
-        raise BadRequestError(
-            t("batch_provision.job_no_longer_pending")
-        )
-
-    _enqueue_after_approval(session=session, job_id=job_id, reviewer_id=reviewer_id)
-
-    logger.info("Batch provision job %s approved by %s", job_id, reviewer_id)
-
-
-def reject_batch_job(
-    *,
-    session: Session,
-    job_id: uuid.UUID,
-    reviewer_id: uuid.UUID,
-    review_comment: str | None = None,
-) -> None:
-    """Reject a pending batch job; no provisioning takes place. Same atomic
-    semantics as :func:`approve_batch_job`."""
-    if bp_repo.get_job(session=session, job_id=job_id) is None:
-        raise BadRequestError(t("batch_provision.job_not_found"))
-
-    job = bp_repo.transition_pending_review(
-        session=session,
-        job_id=job_id,
-        reviewer_id=reviewer_id,
-        decision=BatchProvisionJobStatus.rejected,
-        review_comment=review_comment,
-    )
-    if job is None:
-        raise BadRequestError(
-            t("batch_provision.job_no_longer_pending")
-        )
-    logger.info("Batch provision job %s rejected by %s", job_id, reviewer_id)
-
-
 def review_batch_jobs(
     *,
     session: Session,
@@ -205,7 +142,11 @@ def review_batch_jobs(
     decision: BatchProvisionJobStatus,
     review_comment: str | None = None,
 ) -> list[BatchProvisionJob]:
-    """Review all current jobs of a class as one atomic decision."""
+    """Review all current jobs of a class as one atomic decision.
+
+    審核一律以班級為單位：狀態轉換是一次條件式 UPDATE，兩位管理員同時按下時
+    只有一邊成功，另一邊拿到 BadRequestError；核准後才把每個工作入列。
+    """
     if not job_ids:
         raise BadRequestError(t("batch_provision.class_no_pending_jobs"))
     jobs = bp_repo.transition_pending_reviews(

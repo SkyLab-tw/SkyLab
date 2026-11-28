@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +13,6 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.exceptions import NotFoundError
 from app.models import (
-    CoursePath,
-    CoursePathStatus,
     TeachingClass,
     TeachingClassStudent,
     TeachingClassTaskFile,
@@ -60,7 +58,8 @@ class _InjectJudgeSessions:
 
 def _linked(
     session: Session, *, enrolled: bool = True
-) -> tuple[uuid.UUID, TeachingClass, CoursePath]:
+) -> tuple[uuid.UUID, TeachingClass]:
+    """一個已開放給學生的班級，以及（預設）在名單上的學生。"""
     student_id = uuid.uuid4()
     teaching_class = TeachingClass(
         name="Linux A",
@@ -72,20 +71,15 @@ def _linked(
         weekday=1,
         start_time=time(9),
         end_time=time(11),
-    )
-    path = CoursePath(
-        title="Linux",
-        teaching_class_id=teaching_class.id,
-        status=CoursePathStatus.published,
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     session.add(teaching_class)
-    session.add(path)
     if enrolled:
         session.add(
             TeachingClassStudent(class_id=teaching_class.id, user_id=student_id)
         )
     session.commit()
-    return student_id, teaching_class, path
+    return student_id, teaching_class
 
 
 def _week(
@@ -105,29 +99,27 @@ def _week(
     return week
 
 
-def test_list_returns_empty_without_enrollment_or_visible_weeks(
+def test_list_hides_the_class_without_enrollment_and_skips_draft_weeks(
     session: Session,
 ) -> None:
-    student_id, _, path = _linked(session, enrolled=False)
-    assert (
+    student_id, teaching_class = _linked(session, enrolled=False)
+    with pytest.raises(NotFoundError):
         weekly_task_service.list_student_weekly_tasks(
-            session, user_id=student_id, path_id=path.id
+            session, user_id=student_id, class_id=teaching_class.id
         )
-        == []
-    )
 
-    student_id, teaching_class, path = _linked(session)
+    student_id, teaching_class = _linked(session)
     _week(session, teaching_class, status="draft")
     assert (
         weekly_task_service.list_student_weekly_tasks(
-            session, user_id=student_id, path_id=path.id
+            session, user_id=student_id, class_id=teaching_class.id
         )
         == []
     )
 
 
 def test_list_filters_files_and_handles_bare_judge_sessions(session: Session) -> None:
-    student_id, teaching_class, path = _linked(session)
+    student_id, teaching_class = _linked(session)
     week = _week(session, teaching_class)
     session.add(
         TeachingClassTaskFile(week_id=week.id, filename="notes.docx", storage_key="a")
@@ -159,7 +151,7 @@ def test_list_filters_files_and_handles_bare_judge_sessions(session: Session) ->
     rows = weekly_task_service.list_student_weekly_tasks(
         proxy,  # type: ignore[arg-type]
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
     assert len(rows) == 1
     assert [f.filename for f in rows[0].files] == ["Guide.PDF"]
@@ -170,7 +162,7 @@ def test_get_pdf_guards_and_success(
     session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(weekly_task_service, "TASK_FILE_ROOT", tmp_path)
-    student_id, teaching_class, path = _linked(session)
+    student_id, teaching_class = _linked(session)
     week = _week(session, teaching_class)
     good = TeachingClassTaskFile(
         week_id=week.id, filename="guide.pdf", storage_key="guide.task"
@@ -190,7 +182,7 @@ def test_get_pdf_guards_and_success(
     stored, filename = weekly_task_service.get_student_weekly_task_pdf(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         week_id=week.id,
         file_id=good.id,
     )
@@ -202,7 +194,7 @@ def test_get_pdf_guards_and_success(
         weekly_task_service.get_student_weekly_task_pdf(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
             week_id=uuid.uuid4(),
             file_id=good.id,
         )
@@ -212,7 +204,7 @@ def test_get_pdf_guards_and_success(
             weekly_task_service.get_student_weekly_task_pdf(
                 session,
                 user_id=student_id,
-                path_id=path.id,
+                class_id=teaching_class.id,
                 week_id=week.id,
                 file_id=row.id,
             )

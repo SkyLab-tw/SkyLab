@@ -1,0 +1,61 @@
+# 教學環境（/course-template-management）
+id: course-template-management
+path: /course-template-management
+title: 教學環境
+access: staff
+order: 210
+purpose: 列出教學環境，可以搜尋、依狀態篩選、建立新的環境、開啟編輯或刪除。教學環境是一組固定的機器配置（每位學生最多三台），提供給正式課程、快速練習或兩者。
+when_to_use: 要找、建立、開啟或刪除教學環境（一組給班級或快速練習用的機器組合，例如一台網站伺服器加一台資料庫）。
+sections:
+  - 全部
+  - 已發布
+  - 草稿
+features:
+  - 建立：按「建立教學環境」開啟空白的編輯頁，建立新的教學環境。
+  - 篩選：切換「全部」「已發布」「草稿」，每個選項旁顯示該狀態的數量。
+  - 搜尋：在「搜尋環境名稱或說明」輸入關鍵字，比對環境名稱與環境用途；沒有符合的結果時可按「清除篩選」。
+  - 清單每列是一個環境：環境名稱、每位學生的機器（台數）、資源合計（每位學生的 CPU 與 RAM 合計）、版本、提供方式、使用班級、狀態。還沒取名的草稿顯示「無環境名稱」。
+  - 開啟：點整列進入該環境的編輯頁。
+  - 刪除：按該列的「刪除」，在確認視窗再按一次「刪除」。只有從未被班級或快速練習使用過的環境可以刪除，刪除後無法復原。
+  - 老師只看得到自己建立的環境，管理員看得到全部。
+  - 已發布且提供方式含正式課程的環境，才能在建立班級時選用；提供方式含快速練習的已發布環境，所有登入的使用者都能在快速練習開啟。
+elements:
+  - id: coursetpl.create
+    role: button
+    label: 建立教學環境
+    help: 開啟空白的編輯頁，從基本資料開始建立新的教學環境。
+  - id: coursetpl.search
+    role: text
+    label: 搜尋環境名稱或說明
+    help: 依環境名稱與環境用途篩選清單。
+  - id: coursetpl.provide_mode
+    role: readonly
+    label: 提供方式
+    help: 清單欄位。顯示「正式課程」「快速練習」或「課程＋快速練習」，對應編輯頁的「套用方式」。
+  - id: coursetpl.classes
+    role: readonly
+    label: 使用班級
+    help: 清單欄位。有幾個班級選用了這個環境。
+  - id: coursetpl.status_published
+    role: readonly
+    label: 已發布
+    help: 機器配置已鎖定，依提供方式供班級或快速練習使用。
+  - id: coursetpl.status_draft
+    role: readonly
+    label: 草稿
+    help: 還沒發布，可以繼續編輯機器配置；班級與快速練習都還用不到。
+  - id: coursetpl.delete
+    role: button
+    label: 刪除
+    help: 刪除前會跳出確認視窗；刪除後無法復原。
+    constraints:
+      - 只有從未被班級或快速練習使用過的環境可以刪除
+related:
+  - path: /course-template-management/new
+    when: 要建立新的教學環境
+  - path: /templates
+    when: 環境需要的單台機器範本還沒準備好
+  - path: /class-setup
+    when: 環境發布後要開班
+  - path: /quick-create
+    when: 要確認快速練習的學生端看到什麼

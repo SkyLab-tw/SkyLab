@@ -1,0 +1,8 @@
+# 編輯教學環境（/course-template-management/:templateId）
+# 編輯既有環境與建立新環境是同一個編輯頁，只有網址、標題與用途不同。
+id: course-template-editor
+path: /course-template-management/:templateId
+extends: course-template-new
+order: 230
+title: 編輯教學環境
+purpose: 編輯既有教學環境的基本資料與機器配置，頁面標題是環境名稱並標出版本與更新時間。草稿自動儲存；已發布的環境機器配置已鎖定，只能改基本資料並按「儲存基本資訊」。只有從班級進入才會在發布後返回班級，否則留在編輯頁。

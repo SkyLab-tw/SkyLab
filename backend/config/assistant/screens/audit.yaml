@@ -1,0 +1,62 @@
+# 稽核日誌（/audit）
+id: audit
+path: /audit
+title: 稽核日誌
+access: admin
+order: 310
+purpose: 查詢系統操作紀錄，包含危險操作與登入失敗。
+when_to_use: 要追查誰在什麼時候做了什麼操作，例如某台機器被誰刪除、有沒有異常的登入失敗。
+sections:
+  - 統計摘要
+  - 篩選與匯出
+  - 紀錄清單
+features:
+  - 統計卡顯示總紀錄數、危險操作、登入失敗與活躍使用者；統計只跟著起訖日期變，不受搜尋、操作與使用者篩選影響；統計讀不到時這排卡片不顯示。
+  - 用搜尋、操作類型、使用者與「起始日期」「結束日期」篩選，條件一改就重新查詢；兩個日期欄都標著欄位名稱，沒填日期也認得出是哪一格。有篩選時可按「清除」一次清掉。
+  - 選到今天以後的日期會自動改成今天；起始日期改到結束日期之後，結束日期會跟著移到同一天，反之亦然。
+  - 紀錄依時間新到舊，每頁 50 筆，欄位有時間、使用者（系統自動執行的顯示「系統」）、操作、內容、VMID 與 IP；內容或 IP 太長被截斷時滑過可看全文。
+  - 畫面較窄時依序收起 VMID、IP、操作、使用者欄：操作與「VMID N」改顯示在內容欄，IP 改顯示在使用者欄，使用者也收起時連同 IP 改顯示在時間欄；時間與內容一直都在。
+  - 分頁列顯示「共 N 筆」，按上一頁、下一頁或頁碼換頁；頁數超過 7 頁（或畫面很窄）時可以在「前往 __ 頁」輸入頁碼，按 Enter 或離開欄位就跳過去，超出範圍會跳到第一頁或最後一頁。改任何篩選都會回到第一頁。
+  - 「匯出 CSV」下載目前篩選條件下的紀錄，最多 10000 筆；沒設任何篩選時會先確認，匯出最新的 10000 筆。
+elements:
+  - id: audit.action_filter
+    role: select
+    label: 全部操作
+    help: 依操作類型篩選，選項前面的中括號是分類；選「全部操作」代表不篩選。
+    section: 篩選與匯出
+  - id: audit.user_filter
+    role: select
+    label: 全部使用者
+    help: 只看某一位使用者的紀錄；選「全部使用者」代表不篩選。
+    section: 篩選與匯出
+  - id: audit.search
+    role: text
+    label: 搜尋操作內容、IP...
+    help: 比對「內容」欄與「IP」欄的文字，輸入其中一部分就找得到，不分大小寫；停止輸入約 0.3 秒後才查詢。
+    section: 篩選與匯出
+  - id: audit.start_date
+    role: date
+    label: 起始日期
+    help: 選到今天以後會自動改成今天；改到結束日期之後時，結束日期會跟著移到同一天。
+    section: 篩選與匯出
+  - id: audit.end_date
+    role: date
+    label: 結束日期
+    help: 包含這一天整天；選到今天以後會自動改成今天，改到起始日期之前時，起始日期會跟著移到同一天。
+    section: 篩選與匯出
+  - id: audit.export
+    role: button
+    label: 匯出 CSV
+    help: 下載目前篩選條件下的紀錄，最多 10000 筆；沒有任何篩選時會先跳出「匯出全部稽核日誌？」確認。
+    section: 篩選與匯出
+  - id: audit.stat_danger
+    role: readonly
+    label: 危險操作
+    section: 統計摘要
+  - id: audit.stat_login_failed
+    role: readonly
+    label: 登入失敗
+    section: 統計摘要
+related:
+  - path: /admin
+    when: 查到可疑帳號，要停用或調整角色

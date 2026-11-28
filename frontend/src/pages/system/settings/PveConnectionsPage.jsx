@@ -19,7 +19,8 @@ const EMPTY = Object.freeze([]);
 
 /**
  * PVE 管理（系統管理 → PVE 管理）：上半是 PVE 連線，每筆連線是一個獨立的 PVE 入口（單台或叢集），
- * 該叢集自己的資源設定（pool / storage / 網段 / 預設節點）都在新增·編輯表單裡；
+ * 該叢集自己的資源設定（pool / ISO 與備份 storage / gateway / 預設節點）都在新增·編輯表單裡；
+ * 機器磁碟放哪個 storage 在「儲存管理」設定、機器的網段在「IP 管理」設定，不在這裡；
  * 下半是各節點的啟用狀態、連線位址與放置優先度，清單由連線的「同步」動作更新。
  * 2026-09 從「系統設定」的分頁拆成獨立頁面（舊網址 /settings 會導向這裡）；
  * 2026-10 把原本獨立的「節點管理」頁併進來（/nodes 也導向這裡），同步完節點清單直接在下面刷新。
@@ -37,11 +38,9 @@ const EMPTY_CONNECTION_FORM = {
   api_timeout: 30,
   pool_name: "SkyLab",
   iso_storage: "local",
-  data_storage: "local-lvm",
   backup_storage: "",
   task_check_interval: 2,
   gateway_ip: "",
-  local_subnet: "",
   default_node: "",
   enabled: true,
   is_default: false,
@@ -59,11 +58,9 @@ function connectionToForm(conn) {
     api_timeout: conn.api_timeout,
     pool_name: conn.pool_name ?? "",
     iso_storage: conn.iso_storage ?? "",
-    data_storage: conn.data_storage ?? "",
     backup_storage: conn.backup_storage ?? "",
     task_check_interval: conn.task_check_interval ?? 2,
     gateway_ip: conn.gateway_ip ?? "",
-    local_subnet: conn.local_subnet ?? "",
     default_node: conn.default_node ?? "",
     enabled: conn.enabled,
     is_default: conn.is_default,
@@ -86,12 +83,10 @@ function ConnectionForm({ initial, isEdit, saving, closing = false, onSubmit, on
       api_timeout: Number(form.api_timeout) || 30,
       pool_name: form.pool_name.trim() || "SkyLab",
       iso_storage: form.iso_storage.trim() || "local",
-      data_storage: form.data_storage.trim() || "local-lvm",
       /* 選填：留空＝這個叢集不開放機器備份（後端把 null／空字串都存成未設定） */
       backup_storage: form.backup_storage.trim() || null,
       task_check_interval: Number(form.task_check_interval) || 2,
       gateway_ip: form.gateway_ip.trim() || null,
-      local_subnet: form.local_subnet.trim() || null,
       default_node: form.default_node.trim() || null,
       enabled: Boolean(form.enabled),
       is_default: Boolean(form.is_default),
@@ -134,11 +129,11 @@ function ConnectionForm({ initial, isEdit, saving, closing = false, onSubmit, on
           <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={t("SettingsPage.connectionNamePlaceholder")} required />
         </label>
         <label className={styles.field}>
-          <span>Host *</span>
+          <span>{t("SettingsPage.connectionHost")}</span>
           <input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder={t("SettingsPage.hostPlaceholder")} required />
         </label>
         <label className={styles.field}>
-          <span>Port</span>
+          <span>{t("SettingsPage.port")}</span>
           <input type="number" min={1} max={65535} value={form.port} onChange={(e) => set("port", e.target.value)} />
         </label>
         <label className={styles.field}>
@@ -187,15 +182,11 @@ function ConnectionForm({ initial, isEdit, saving, closing = false, onSubmit, on
           <input value={form.pool_name} onChange={(e) => set("pool_name", e.target.value)} placeholder="SkyLab" />
         </label>
         <label className={styles.field}>
-          <span>ISO Storage</span>
+          <span>{t("SettingsPage.isoStorage")}</span>
           <input value={form.iso_storage} onChange={(e) => set("iso_storage", e.target.value)} placeholder="local" />
         </label>
         <label className={styles.field}>
-          <span>Data Storage</span>
-          <input value={form.data_storage} onChange={(e) => set("data_storage", e.target.value)} placeholder="local-lvm" />
-        </label>
-        <label className={styles.field}>
-          <span>Backup Storage</span>
+          <span>{t("SettingsPage.backupStorage")}</span>
           <input value={form.backup_storage} onChange={(e) => set("backup_storage", e.target.value)} placeholder={t("SettingsPage.optional")} />
           <em className={styles.fieldHint}>{t("SettingsPage.backupStorageHint")}</em>
         </label>
@@ -210,12 +201,9 @@ function ConnectionForm({ initial, isEdit, saving, closing = false, onSubmit, on
           />
         </label>
         <label className={styles.field}>
-          <span>Gateway IP</span>
+          <span>{t("SettingsPage.gatewayIp")}</span>
           <input value={form.gateway_ip} onChange={(e) => set("gateway_ip", e.target.value)} placeholder={t("SettingsPage.optional")} />
-        </label>
-        <label className={styles.field}>
-          <span>{t("SettingsPage.localSubnet")}</span>
-          <input value={form.local_subnet} onChange={(e) => set("local_subnet", e.target.value)} placeholder={t("SettingsPage.localSubnetPlaceholder")} />
+          <em className={styles.fieldHint}>{t("SettingsPage.gatewayIpHint")}</em>
         </label>
         <label className={styles.field}>
           <span>{t("SettingsPage.defaultNode")}</span>
@@ -450,6 +438,17 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
   );
 }
 
+/**
+ * 節點優先度：後端只收 1–10 的整數。空白或超出範圍回 null，讓呼叫端擋下並提示，
+ * 不替使用者換成別的數字。
+ */
+export function parseNodePriority(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return null;
+  const priority = Number(text);
+  return priority >= 1 && priority <= 10 ? priority : null;
+}
+
 /* ── 節點：編輯 Modal（改用彈窗，列本身不再變形，#22） ── */
 function NodeEditDialog({ node, saving, closing = false, onClose, onSave }) {
   const { t } = useTranslation("system");
@@ -483,7 +482,7 @@ function NodeEditDialog({ node, saving, closing = false, onClose, onSave }) {
       }
     >
       <label className={styles.field}>
-        <span>Host</span>
+        <span>{t("SettingsPage.nodeHost")}</span>
         <input
           value={form.host}
           onChange={(e) => setForm((p) => ({ ...p, host: e.target.value }))}
@@ -491,7 +490,7 @@ function NodeEditDialog({ node, saving, closing = false, onClose, onSave }) {
         />
       </label>
       <label className={styles.field}>
-        <span>Port</span>
+        <span>{t("SettingsPage.port")}</span>
         <input
           type="number"
           min={1}
@@ -505,6 +504,10 @@ function NodeEditDialog({ node, saving, closing = false, onClose, onSave }) {
         <span>{t("SettingsPage.nodePriorityLabel")}</span>
         <input
           type="number"
+          min={1}
+          max={10}
+          step={1}
+          required
           value={form.priority}
           onChange={(e) => setForm((p) => ({ ...p, priority: e.target.value }))}
         />
@@ -523,12 +526,17 @@ function NodesSection({ nodes, loading, onNodeUpdated }) {
   const [saving, setSaving] = useState(false);
 
   async function saveEdit(node, form) {
+    const priority = parseNodePriority(form.priority);
+    if (priority === null) {
+      toast.error(t("SettingsPage.nodePriorityInvalid"));
+      return;
+    }
     setSaving(true);
     try {
       const updated = await ProxmoxConfigService.updateNode(node.id, {
         host: form.host.trim(),
         port: Number(form.port) || 8006,
-        priority: Number(form.priority) || 0,
+        priority,
         enabled: node.enabled ?? true,
       });
       onNodeUpdated(updated);
@@ -585,7 +593,7 @@ function NodesSection({ nodes, loading, onNodeUpdated }) {
                   )}
                 </span>
                 <span className={styles.rowMeta}>
-                  {node.host}:{node.port} · Priority {node.priority}
+                  {node.host}:{node.port} · {t("SettingsPage.nodePriorityMeta", { priority: node.priority })}
                   {node.enabled === false && ` · ${t("SettingsPage.notAcceptingNewVms")}`}
                 </span>
               </div>

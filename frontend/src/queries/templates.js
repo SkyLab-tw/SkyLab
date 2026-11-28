@@ -10,6 +10,7 @@ export const templateKeys = Object.freeze({
   all: ["templates"],
   list: ["templates", "list"],
   catalog: ["templates", "catalog"],
+  detail: (templateId) => ["templates", "detail", String(templateId)],
   attachments: (templateId) => ["templates", "attachments", String(templateId)],
 });
 
@@ -57,6 +58,19 @@ export function useTemplateCatalogQuery({ enabled = true } = {}) {
     queryKey: templateKeys.catalog,
     queryFn: ({ signal }) => TemplatesService.catalog({ signal }),
     enabled,
+  });
+}
+
+/**
+ * 單一範本。清單沒有的 is_windows 只有這裡有（後端要打 PVE 才查得到），
+ * 克隆視窗用它決定要不要列出 Windows 的密碼規則。OS 不會變，開著視窗時不必重抓。
+ */
+export function useTemplateQuery(templateId, { enabled } = {}) {
+  return useQuery({
+    queryKey: templateKeys.detail(templateId),
+    queryFn: ({ signal }) => TemplatesService.get(templateId, { signal }),
+    enabled: enabled ?? templateId != null,
+    refetchOnWindowFocus: false,
   });
 }
 

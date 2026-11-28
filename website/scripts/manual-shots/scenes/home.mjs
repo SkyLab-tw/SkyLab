@@ -107,13 +107,14 @@ function studentMocks(m) {
       start_blocked_reason: "window_ended", window_end_at: ago(2 * D) },
   ];
   const today = dateKey(NOW);
+  // GET /courses/schedule: id is the teaching class id and title is the class name.
   const schedule = [
-    { id: "path-linux-a", title: m.L("Linux System Administration (IM 2A)", "Linux 系統管理（資管二甲）"), state: "now", session_date: today,
-      start_at: "2026-10-12T01:10:00Z", end_at: "2026-10-12T04:00:00Z", teacher: m.L("Prof. Lin", "林志明"), location: m.L("Info Building B302", "資訊大樓 B302"), total_questions: 8, completed_questions: 3 },
-    { id: "path-cloud", title: m.L("Cloud Computing Practice (IM 3A)", "雲端運算實務（資管三甲）"), state: "later", session_date: today,
-      start_at: "2026-10-12T05:10:00Z", end_at: "2026-10-12T08:00:00Z", teacher: m.L("Prof. Chen", "陳美玲"), location: m.L("Info Building B201", "資訊大樓 B201"), total_questions: 6, completed_questions: 6 },
-    { id: "path-db", title: m.L("Database Systems (IM 2B)", "資料庫系統（資管二乙）"), state: "available", session_date: dateKey(NOW + 3 * D),
-      start_at: "2026-10-15T05:10:00Z", end_at: "2026-10-15T08:00:00Z", teacher: m.L("Prof. Lin", "林志明"), location: m.L("Info Building B105", "資訊大樓 B105"), total_questions: 5, completed_questions: 1 },
+    { id: "cls-linux-a", title: m.L("Linux System Administration (IM 2A)", "Linux 系統管理（資管二甲）"), state: "now", label: "", session_date: today,
+      start_at: "2026-10-12T01:10:00Z", end_at: "2026-10-12T04:00:00Z", teacher: m.L("Prof. Lin", "林志明"), location: m.L("Info Building B302", "資訊大樓 B302") },
+    { id: "cls-cloud", title: m.L("Cloud Computing Practice (IM 3A)", "雲端運算實務（資管三甲）"), state: "later", label: "", session_date: today,
+      start_at: "2026-10-12T05:10:00Z", end_at: "2026-10-12T08:00:00Z", teacher: m.L("Prof. Chen", "陳美玲"), location: m.L("Info Building B201", "資訊大樓 B201") },
+    { id: "cls-db", title: m.L("Database Systems (IM 2B)", "資料庫系統（資管二乙）"), state: "available", label: "", session_date: dateKey(NOW + 3 * D),
+      start_at: "2026-10-15T05:10:00Z", end_at: "2026-10-15T08:00:00Z", teacher: m.L("Prof. Lin", "林志明"), location: m.L("Info Building B105", "資訊大樓 B105") },
   ];
   const quick = [
     { id: "qp-1", version_id: "qpv-1", usage_scope: "public", name: m.L("Docker Basics", "Docker 入門練習"), description: m.L("Docker and Compose on a single host", "單機 Docker 與 Compose 練習環境"), duration_hours: 4, per_student: true,

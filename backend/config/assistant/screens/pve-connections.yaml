@@ -1,0 +1,255 @@
+# PVE 管理（/pve-connections）
+# 原「系統設定」的分頁，2026-09 升格為系統管理底下的獨立頁面。
+# label 一律沿用畫面上的文字，help 取自各欄既有的 hint / placeholder / 確認訊息。
+id: pve-connections
+path: /pve-connections
+title: PVE 管理
+access: admin
+order: 330
+purpose: 管理 Proxmox VE 的連線入口與每個叢集自己的 pool、ISO 與備份 Storage、預設節點設定，以及各節點的啟用狀態、連線位址與放置優先度（原「節點管理」頁已併入）。
+when_to_use: 第一次接上 Proxmox VE、新增或修改叢集連線，或調整節點是否接收新機器與放置優先度。
+sections:
+  - 連線
+  - 連線設定
+  - 此叢集的資源設定
+  - 節點
+features:
+  - 連線清單每列顯示名稱、Host:Port 與 API 使用者、「啟用」或「停用」，以及節點數；預設連線另標「預設」。
+  - 新增連線：按「新增連線」開啟視窗填連線與這個叢集的資源設定；還沒有任何連線時，只能從空白畫面上的「新增連線」開始，第一組會自動成為預設連線。
+  - 測試連線：按該列的「測試」，用這組連線已儲存的設定實際連一次 PVE，成功時列出偵測到的節點。
+  - 同步：按該列的「同步」重新抓這組 PVE 的節點與 Storage 清單，完成後回報同步到幾個節點、幾個 storage，節點清單隨即更新。
+  - 編輯或刪除連線：按該列的「編輯」修改設定；按「刪除」並確認後，連線與它的節點、Storage 記錄一併移除。
+  - 刪除的限制：還有其他連線時，預設連線不能刪除，要先把別的連線設為預設；這組連線底下還有 SkyLab 管理的機器時也會被拒絕，要先刪除或搬移那些機器。
+  - 強制刪除：刪除時連不上這個 PVE、無法確認底下有沒有機器，會改問「強制刪除 PVE 連線」，只有確定這個 PVE 已永久停用時才按「強制刪除」，這個動作會記在稽核日誌。
+  - 節點：每個節點顯示 Host:Port、「優先度 N」與在線或離線，主節點標「主節點」，停用的節點標「停用」並寫「不接收新 VM（既有 VM 不受影響）」；切換「啟用」開關會立即儲存；按「編輯」修改連線位址、Port 與優先度。
+  - 節點的即時用量、趨勢圖與警告不在這一頁，在資源監控頁。
+  - 機器磁碟可以放哪些 Storage 不在這裡設定，在「儲存空間」頁；機器的網段在「IP 管理」頁。連線表單沒有 Data Storage 與內網網段欄位。
+elements:
+  # 連線清單上的動作
+  - id: pve.add_connection
+    role: button
+    label: 新增連線
+    help: 建立一組 PVE 連線。還沒有任何連線時，第一組會自動成為預設連線。
+    section: 連線
+  - id: pve.connection_test
+    role: button
+    label: 測試
+    help: 用這組連線已儲存的設定實際連一次 PVE，成功時列出偵測到的節點；表單裡還沒儲存的修改不會被測到。
+    section: 連線
+  - id: pve.connection_sync
+    role: button
+    label: 同步
+    help: 從這組 PVE 重新抓一次節點與 Storage 清單，完成後會回報同步到幾個節點、幾個 storage。
+    section: 連線
+  - id: pve.connection_edit
+    role: button
+    label: 編輯
+    help: 修改這組連線的設定，開啟的視窗標題是「編輯連線」。
+    section: 連線
+  - id: pve.connection_delete
+    role: button
+    label: 刪除
+    help: 刪除這組連線，它底下的節點與 Storage 記錄會一併移除。還有其他連線時不能刪預設連線；底下還有機器時會被拒絕；連不上 PVE 時會改問要不要強制刪除。
+    section: 連線
+  - id: pve.default_badge
+    role: readonly
+    label: 預設
+    help: 這組是預設連線；沒有指定連線時使用它的設定。同時只會有一組預設連線。
+    section: 連線
+  # 連線設定表單
+  - id: pve.connection_name
+    role: text
+    label: 名稱
+    help: 這組連線的識別名稱，例：機房A。
+    constraints:
+      - 必填
+    section: 連線設定
+  - id: pve.host
+    role: text
+    label: Host
+    help: PVE 的位址，例：192.168.100.2。
+    constraints:
+      - 必填
+    section: 連線設定
+  - id: pve.port
+    role: number
+    label: Port
+    help: 預設 8006。
+    constraints:
+      - 1 到 65535
+    section: 連線設定
+  - id: pve.api_user
+    role: text
+    label: API 使用者
+    help: 例：root@pam。
+    constraints:
+      - 必填
+    section: 連線設定
+  - id: pve.password
+    role: text
+    label: 密碼
+    help: 編輯既有連線時留空表示不變更。
+    constraints:
+      - 新增時必填
+    section: 連線設定
+    sensitive: true
+  - id: pve.api_timeout
+    role: number
+    label: API Timeout（秒）
+    help: 預設 30。
+    constraints:
+      - 1 到 300
+    section: 連線設定
+  - id: pve.verify_ssl
+    role: toggle
+    label: 驗證 SSL 憑證
+    help: 勾選後才會出現「CA 憑證 PEM」欄位。
+    section: 連線設定
+  - id: pve.ca_cert
+    role: textarea
+    label: CA 憑證 PEM
+    help: 勾選「驗證 SSL 憑證」後才出現；以 -----BEGIN CERTIFICATE----- 開頭。編輯既有連線時留空表示不變更。
+    section: 連線設定
+  - id: pve.enable_connection
+    role: toggle
+    label: 啟用此連線
+    section: 連線設定
+  - id: pve.set_default
+    role: toggle
+    label: 設為預設連線
+    help: 勾選後原本的預設連線會被取消，同時只會有一組預設連線。
+    section: 連線設定
+  - id: pve.save_connection
+    role: button
+    label: 儲存連線
+    section: 連線設定
+  # 此叢集的資源設定
+  - id: pve.pool_name
+    role: text
+    label: Pool 名稱
+    help: 這個叢集建立的 VM / LXC 會放進這個 pool；Pool、ISO 與備份 Storage、預設節點是各叢集獨立的設定。留空時使用 SkyLab。
+    section: 此叢集的資源設定
+  - id: pve.iso_storage
+    role: text
+    label: ISO Storage
+    help: 這個叢集讀取 ISO 映像與 LXC 範本的 storage；留空時使用 local。
+    section: 此叢集的資源設定
+  - id: pve.backup_storage
+    role: text
+    label: Backup Storage
+    help: 選填。機器不能用快照時，改用備份當還原點；留空表示這個叢集不開放備份。建議指定專用的備份 storage，不要和正式的排程備份共用。
+    section: 此叢集的資源設定
+  - id: pve.task_check_interval
+    role: number
+    label: 任務檢查間隔（秒）
+    help: 等待 PVE 任務完成時，每隔幾秒查一次任務狀態；預設 2。
+    constraints:
+      - 1 到 60
+    section: 此叢集的資源設定
+  - id: pve.gateway_ip
+    role: text
+    label: Gateway IP
+    help: 選填，這個叢集的閘道位址。平台只拿它來保護閘道：機器回報的 IP 如果是這個位址，就不能用網址或對外 port 對外開放。
+    section: 此叢集的資源設定
+  - id: pve.default_node
+    role: text
+    label: 預設節點
+    help: 選填，未指定節點時優先使用這個節點。
+    section: 此叢集的資源設定
+  # 節點（2026-10 併入 PVE 管理頁的下半段）
+  - id: nodes.enable
+    role: toggle
+    label: 啟用
+    help: 切換後立即儲存。停用後不再接收新 VM，既有 VM 不受影響。
+    section: 節點
+  - id: nodes.edit
+    role: button
+    label: 編輯
+    help: 修改這個節點的連線位址、Port 與放置優先度。
+    section: 節點
+  - id: nodes.primary
+    role: readonly
+    label: 主節點
+    help: 這組連線的 Host 所連到的那個節點（PVE 叢集狀態回報的本機節點）。
+    section: 節點
+  - id: nodes.online
+    role: readonly
+    label: 在線
+    help: 平台最近一次連這個節點的 PVE API 時連得上；同步後會先標為在線。
+    section: 節點
+  - id: nodes.offline
+    role: readonly
+    label: 離線
+    help: 平台最近一次連這個節點的 PVE API 時連不上。
+    section: 節點
+  - id: nodes.disabled
+    role: readonly
+    label: 停用
+    help: 這個節點被取消「啟用」，不接收新 VM（既有 VM 不受影響）。
+    section: 節點
+dialogs:
+  - id: connection
+    title: 新增連線
+    opened_by: 新增連線
+    purpose: 設定一組 PVE 連線與這個叢集自己的資源設定，或（從連線列的「編輯」開啟時）修改既有連線。
+    fields:
+      - label: 名稱
+        help: 識別用，例：機房A。
+        required: true
+      - label: Host
+        help: PVE 的位址，例：192.168.100.2。
+        required: true
+      - label: Port
+        help: 1 到 65535，預設 8006。
+      - label: API 使用者
+        help: 例：root@pam。
+        required: true
+      - label: 密碼
+        help: 新增時必填；編輯時留空表示不變更。
+      - label: API Timeout（秒）
+        help: 1 到 300，預設 30。
+      - label: 驗證 SSL 憑證
+        help: 勾選後才會出現「CA 憑證 PEM」欄位。
+      - label: CA 憑證 PEM
+        help: 勾選「驗證 SSL 憑證」後才出現；編輯時留空表示不變更。
+      - label: Pool 名稱
+        help: 這個叢集建立的 VM / LXC 會放進這個 pool；留空時使用 SkyLab。
+      - label: ISO Storage
+        help: 讀取 ISO 映像與 LXC 範本的 storage；留空時使用 local。
+      - label: Backup Storage
+        help: 選填；機器不能用快照時改用備份當還原點，留空表示這個叢集不開放備份。建議指定專用的備份 storage，不要和正式的排程備份共用。
+      - label: 任務檢查間隔（秒）
+        help: 1 到 60，預設 2；等待 PVE 任務完成時多久查一次狀態。
+      - label: Gateway IP
+        help: 選填，這個叢集的閘道位址；機器回報的 IP 如果是這個位址，就不能用網址或對外 port 對外開放。
+      - label: 預設節點
+        help: 選填，未指定節點時優先使用這個節點。
+      - label: 啟用此連線
+      - label: 設為預設連線
+        help: 勾選後原本的預設連線會被取消；沒有指定連線時使用預設連線的設定。
+    notes:
+      - 從連線列的「編輯」開啟時，視窗標題是「編輯連線」，「密碼」與「CA 憑證 PEM」留空表示不變更。
+      - Pool、ISO 與備份 Storage、預設節點是各叢集獨立的設定，建立於此連線的 VM / LXC 會套用這裡的值。機器磁碟可以放哪些 Storage 在「儲存空間」頁設定，機器的網段在「IP 管理」頁設定。
+  - id: edit-node
+    title: 編輯節點
+    opened_by: 編輯
+    purpose: 修改單一節點的連線位址與放置優先度。
+    fields:
+      - label: Host
+        help: 平台呼叫此節點 PVE API 的位址，改錯會讓同步與開關機失效。
+        required: true
+      - label: Port
+        help: 1 到 65535。
+      - label: 優先度
+        help: 必填，1 到 10 的整數，數字小的優先；只在各節點放置分數接近時作決勝（預設 5）。清空或超出範圍時不會送出，會提示「優先度請填 1 到 10 的整數」。
+    notes:
+      - 視窗標題會帶節點名稱，例如「編輯節點 pve1」。
+related:
+  - path: /storage
+    when: 要設定機器磁碟可以放哪些 Storage，以及各 Storage 的速度等級與優先度
+  - path: /ip-management
+    when: 要設定機器的 IP 網段
+  - path: /scheduler
+    when: 要調整放置與超配參數
+  - path: /monitoring
+    when: 要看節點的即時負載、趨勢圖與警告

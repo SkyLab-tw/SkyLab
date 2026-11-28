@@ -1,7 +1,8 @@
 """Student-safe projection of approved Teacher Judge assignments.
 
-Teacher Judge artifacts and Course Lab paths are both linked to one teaching class.
-A student can only see approved artifacts from the exact class linked to the path.
+Teacher Judge artifacts are linked to one teaching class.  A student can only see
+approved artifacts of a class they are enrolled in, once that class is open to
+students (see ``course_service.get_student_class_or_404``).
 
 Only the rubric requirements are exposed.  Generated scripts, command keys,
 detection methods, fallbacks, policy reviews, and other students' results stay
@@ -644,30 +645,20 @@ def list_student_ai_assignments(
     session: Session,
     *,
     user_id: uuid.UUID,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
 ) -> list[CourseAIAssignmentStudent]:
-    """Return the AI checks visible to one student for a path.
+    """Return the AI checks visible to one student in one of their classes.
 
     一週一個對話，學生看到的作業就是那個對話：檢查點來自最新一次製作的整組
     腳本（多台機器合在一起），結果只採用生效組的 child，保留同組重跑結果。
+    班級不存在、還沒開放給學生或學生不在名單上時一律 404。
     """
 
-    teaching_class = course_service.get_student_class_for_path(
+    teaching_class = course_service.get_student_class_or_404(
         session,
         user_id=user_id,
-        path_id=path_id,
+        class_id=class_id,
     )
-    if teaching_class is None:
-        return []
-    enrolled = session.exec(
-        select(TeachingClassStudent).where(
-            TeachingClassStudent.class_id == teaching_class.id,
-            TeachingClassStudent.user_id == user_id,
-            TeachingClassStudent.status == "active",
-        )
-    ).first()
-    if enrolled is None:
-        return []
 
     judge_sessions = session.exec(
         select(TeacherJudgeSession)
@@ -747,7 +738,7 @@ def get_student_ai_assignment(
     session: Session,
     *,
     user_id: uuid.UUID,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     assignment_id: uuid.UUID,
 ) -> CourseAIAssignmentStudent:
     """Return one visible assignment or hide it behind a 404."""
@@ -758,7 +749,7 @@ def get_student_ai_assignment(
             for item in list_student_ai_assignments(
                 session,
                 user_id=user_id,
-                path_id=path_id,
+                class_id=class_id,
             )
             if item.id == assignment_id
         ),
@@ -773,7 +764,7 @@ def get_student_ai_assignment_source_document(
     session: Session,
     *,
     user_id: uuid.UUID,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     assignment_id: uuid.UUID,
 ) -> tuple[Path, str]:
     """Return an enrolled student's PDF path after assignment authorization."""
@@ -781,7 +772,7 @@ def get_student_ai_assignment_source_document(
     assignment = get_student_ai_assignment(
         session,
         user_id=user_id,
-        path_id=path_id,
+        class_id=class_id,
         assignment_id=assignment_id,
     )
     judge_session = session.get(TeacherJudgeSession, assignment.session_id)
@@ -808,7 +799,7 @@ def get_student_ai_check(
     session: Session,
     *,
     user_id: uuid.UUID,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     assignment_id: uuid.UUID,
     run_id: uuid.UUID,
 ) -> CourseAICheckStudent:
@@ -817,7 +808,7 @@ def get_student_ai_check(
     assignment = get_student_ai_assignment(
         session,
         user_id=user_id,
-        path_id=path_id,
+        class_id=class_id,
         assignment_id=assignment_id,
     )
     # 作業就是這一週的對話：run 的腳本必須屬於這個對話，也就釘住了班級
@@ -841,7 +832,7 @@ def update_student_completion(
     session: Session,
     *,
     user_id: uuid.UUID,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     assignment_id: uuid.UUID,
     item_id: str | None,
     completed: bool,
@@ -855,7 +846,7 @@ def update_student_completion(
     assignment = get_student_ai_assignment(
         session,
         user_id=user_id,
-        path_id=path_id,
+        class_id=class_id,
         assignment_id=assignment_id,
     )
     submission = _student_submission(

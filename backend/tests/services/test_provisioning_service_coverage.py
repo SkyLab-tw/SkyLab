@@ -293,6 +293,59 @@ def test_build_gpu_hostpci_wraps_lookup_errors(
         svc._build_gpu_hostpci("gpu0", None)
 
 
+@pytest.mark.parametrize(
+    ("machine", "expected"),
+    [
+        ("q35", "mapping=gpu0,pcie=1"),
+        ("pc-q35-9.0+pve1", "mapping=gpu0,pcie=1"),
+        ("type=q35,viommu=virtio", "mapping=gpu0,pcie=1"),
+        ("viommu=intel,type=pc-q35-8.1", "mapping=gpu0,pcie=1"),
+        # PCIe 只有 q35 機型能用：i440fx 帶了 pcie=1 會開不了機
+        ("pc-i440fx-9.0", "mapping=gpu0"),
+        ("pc", "mapping=gpu0"),
+        ("viommu=virtio", "mapping=gpu0"),
+        (None, "mapping=gpu0"),
+    ],
+)
+def test_gpu_hostpci_for_vm_enables_pcie_only_on_q35(
+    monkeypatch: pytest.MonkeyPatch,
+    pm: MagicMock,
+    machine: str | None,
+    expected: str,
+) -> None:
+    _patch_gpu(monkeypatch, lambda _m: _gpu_detail())
+    pm.get_config.return_value = {"machine": machine} if machine else {}
+
+    assert svc.build_gpu_hostpci_for_vm("pve1", 900, "gpu0", None) == expected
+    pm.get_config.assert_called_once_with("pve1", 900, "qemu")
+
+
+def test_gpu_hostpci_for_vm_keeps_vgpu_profile_with_pcie(
+    monkeypatch: pytest.MonkeyPatch, pm: MagicMock
+) -> None:
+    profile = SimpleNamespace(
+        mdev_type="nvidia-1436", name="NVIDIA H200-4C", vram_mb=4096, creatable=True
+    )
+    _patch_gpu(monkeypatch, lambda _m: _gpu_detail(profiles=[profile]))
+    pm.get_config.return_value = {"machine": "pc-q35-9.0+pve1"}
+
+    assert (
+        svc.build_gpu_hostpci_for_vm("pve1", 900, "gpu0", "nvidia-1436")
+        == "mapping=gpu0,mdev=nvidia-1436,pcie=1"
+    )
+
+
+def test_gpu_hostpci_for_vm_fails_when_machine_type_unreadable(
+    monkeypatch: pytest.MonkeyPatch, pm: MagicMock
+) -> None:
+    # 讀不到機型就不知道能不能開 PCIe：讓建機失敗，不可猜一個值繼續
+    _patch_gpu(monkeypatch, lambda _m: _gpu_detail())
+    pm.get_config.side_effect = RuntimeError("PVE unreachable")
+
+    with pytest.raises(RuntimeError, match="PVE unreachable"):
+        svc.build_gpu_hostpci_for_vm("pve1", 900, "gpu0", None)
+
+
 # ── _select_request_placement ──────────────────────────────
 
 
@@ -521,6 +574,10 @@ def test_create_vm_with_gpu_and_guest_os(
 ) -> None:
     _patch_gpu(monkeypatch, lambda _m: _gpu_detail())
     stack.pm.clone_vm.return_value = "UPID:clone"
+    # 只有克隆出來的那台回 q35：讀錯機器（例如範本 9000）就不會帶 pcie
+    stack.pm.get_config.side_effect = lambda node, vmid, *_a, **_k: (
+        {"machine": "pc-q35-9.0+pve1"} if (node, vmid) == ("pve1", 500) else {}
+    )
     vm_data = SimpleNamespace(
         hostname="vm-one",
         template_id=9000,
@@ -543,7 +600,7 @@ def test_create_vm_with_gpu_and_guest_os(
 
     assert response.vmid == 500
     updates = stack.pm.update_config.call_args.kwargs
-    assert updates["hostpci0"] == "mapping=gpu0"
+    assert updates["hostpci0"] == "mapping=gpu0,pcie=1"
     assert updates["ciuser"] == "student"
     assert updates["nameserver"] == "1.1.1.1"
     assert session.commits == 1
@@ -853,6 +910,26 @@ def test_execute_provision_qemu_cross_node_clone(
     assert "cipassword" not in updates
     assert "ciuser" not in updates
     assert plan["login_password_applied"] is False
+
+
+def test_execute_provision_qemu_gpu_enables_pcie_on_q35_clone(
+    monkeypatch: pytest.MonkeyPatch, stack: SimpleNamespace
+) -> None:
+    _patch_gpu(monkeypatch, lambda _m: _gpu_detail())
+    # 跨節點克隆後機器在 pve2：機型要讀那台的，讀成範本節點就不會帶 pcie
+    stack.pm.get_config.side_effect = lambda node, vmid, *_a, **_k: (
+        {"machine": "q35"} if (node, vmid) == ("pve2", 900) else {}
+    )
+    plan = _vm_plan(
+        target_node="pve2",
+        gpu_mapping_id="gpu0",
+        start_immediately=False,
+        disk_size=None,
+    )
+
+    assert svc.execute_provision(plan) == (900, "pve2")
+    updates = stack.pm.update_config.call_args.kwargs
+    assert updates["hostpci0"] == "mapping=gpu0,pcie=1"
 
 
 def test_execute_provision_qemu_cross_node_falls_back_to_template_node(

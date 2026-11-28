@@ -26,7 +26,6 @@ B1_SOURCES = [
     "app/schemas/course_environment.py",
     "app/schemas/teaching_class.py",
     "app/api/routes/courses.py",
-    "app/api/routes/course_admin.py",
     "app/api/routes/classroom.py",
     "app/api/routes/quick_practice.py",
     "app/ai/teacher_judge/session_chat_service.py",

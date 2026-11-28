@@ -1,0 +1,13 @@
+{
+  "aiAssistant.unavailable": "請稍後再試一次。",
+  "aiAssistant.degradedPageGuide": "先提供這一頁的固定說明：",
+  "aiAssistant.outOfScope": "我只能協助 SkyLab 平台的操作與說明。請告訴我你想處理的頁面、機器或功能。",
+  "aiAssistant.plan.purpose.question": "這台機器主要要拿來做什麼？",
+  "aiAssistant.plan.purpose.options": "課程作業|專題開發|架設網站|AI 訓練|資料庫",
+  "aiAssistant.plan.gpu.question": "需要 GPU 嗎？",
+  "aiAssistant.plan.gpu.options": "需要 GPU|不需要 GPU|不確定，你幫我判斷",
+  "aiAssistant.plan.display.question": "需要 Windows 或圖形桌面嗎？",
+  "aiAssistant.plan.display.options": "需要圖形桌面|需要 Windows|Linux 指令列就好",
+  "aiAssistant.plan.duration.question": "大概要用多久？",
+  "aiAssistant.plan.duration.options": "3 天|2 週|1 個月|3 個月"
+}

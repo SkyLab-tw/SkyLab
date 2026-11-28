@@ -53,7 +53,7 @@ SkyLab repo 的所有文件都在本站，位於 repo 的 `website/` 目錄。�
 | 頁面 | 內容 |
 | --- | --- |
 | [多機教學環境 SOP](/zh-TW/guides/multi-machine-environment-sop) | 建構、發布與使用多機教學環境的正式 SOP |
-| [導覽 AI 與教學流程](/zh-TW/guides/ai-navigation-teaching-workflows) | 建班與環境編輯精靈中導覽 AI 的設計筆記 |
+| [內建 AI 助手](/zh-TW/guides/ai-assistant) | 助手怎麼回答：帶工具的單一對話端點、一個畫面一個檔的知識、模型設定與回答檢查 |
 | [AI 導師檢查流程與不可破壞契約](/zh-TW/guides/ai-teacher-judge-contract)（僅中文） | 提案、AI 編輯、全表核對、保存與腳本編譯的標準流程 |
 | [頁面導覽文案盤點](/zh-TW/guides/user-guide-content-audit)（僅中文） | 應用內頁面導覽文案的改寫建議（尚未套用） |
 

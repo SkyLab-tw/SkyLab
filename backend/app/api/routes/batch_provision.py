@@ -96,34 +96,6 @@ def get_recurrence_preview(
     return RecurrencePreview(windows=windows)
 
 
-@router.post("/{job_id}/review", response_model=BatchProvisionJobPublic)
-def review_batch_job(
-    job_id: uuid.UUID,
-    body: BatchProvisionReviewRequest,
-    session: SessionDep,
-    current_user: AdminUser,
-) -> BatchProvisionJobPublic:
-    if body.decision == "approved":
-        batch_provision_service.approve_batch_job(
-            session=session,
-            job_id=job_id,
-            reviewer_id=current_user.id,
-            review_comment=body.review_comment,
-        )
-    else:
-        batch_provision_service.reject_batch_job(
-            session=session,
-            job_id=job_id,
-            reviewer_id=current_user.id,
-            review_comment=body.review_comment,
-        )
-
-    job = bp_repo.get_job(session=session, job_id=job_id)
-    if not job:
-        raise NotFoundError(t("batchProvision.jobNotFound"))
-    return batch_provision_service.to_public(session, job)
-
-
 @router.post(
     "/class/{class_id}/review",
     response_model=list[BatchProvisionJobPublic],

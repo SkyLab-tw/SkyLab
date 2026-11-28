@@ -17,7 +17,7 @@ export const teachingClassKeys = Object.freeze({
    之後不輪詢、切回分頁也不重抓，打到一半的內容不會被背景資料蓋掉 */
 const EDITING_OPTIONS = Object.freeze({ staleTime: 0, refetchOnMount: "always", refetchOnWindowFocus: false });
 
-/** 我的班級清單（老師首頁、班級管理、課程 CMS 共用） */
+/** 我的班級清單（老師首頁、班級管理共用） */
 export function useTeachingClassesQuery({ enabled = true, refetchInterval = LIST_REFRESH_INTERVAL, select } = {}) {
   return useQuery({
     queryKey: teachingClassKeys.list,

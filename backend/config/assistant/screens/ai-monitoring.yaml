@@ -1,0 +1,118 @@
+# AI 用量監控（/ai-monitoring）
+id: ai-monitoring
+path: /ai-monitoring
+title: AI 用量監控
+access: admin
+order: 440
+purpose: 彙整全站的 AI 用量與健康狀況：使用者用申請的金鑰經 AI API 發出的呼叫、平台內建 AI 功能（範本推薦、AI 導覽、Teacher Judge 等）的 Template 呼叫，以及 AI Gateway 與各模型的運行狀態。
+when_to_use: 要掌握 AI 的整體用量與錯誤率、找出呼叫量或錯誤率異常的模型或使用者，或確認 AI Gateway 與模型部署是否正常。
+sections:
+  - AI 監控摘要
+  - 呼叫與錯誤趨勢
+  - 系統狀態
+  - 呼叫明細
+  - 模型
+  - 金鑰 API 呼叫
+  - Template 呼叫
+  - 使用者用量
+features:
+  - 時間範圍：切換「近 7 天」「近 30 天」「近 90 天」會同時改變摘要、趨勢圖與呼叫明細；資料每 30 秒自動更新，「最後更新」顯示最近一次取得資料的時間。
+  - 有啟用監控 stack 時會多一個「在 Grafana 查看詳細」，開啟 Grafana 的 SkyLab AI 儀表板。
+  - 摘要有四個指標：「呼叫次數」「Tokens 總計」「錯誤率」「活躍使用者」，都包含金鑰 API 呼叫與 Template 呼叫；呼叫次數與錯誤率會跟前一個等長期間比較（呼叫次數用百分比，錯誤率用百分點 pp），Tokens 總計與活躍使用者只算目前選取的期間。
+  - 「呼叫與錯誤趨勢」：可以切換呼叫量、Tokens、失敗呼叫、錯誤率或平均延遲；近 7 天以小時為單位，較長的期間以天為單位。
+  - 「系統狀態」只在有異常時出現：用量資料載入失敗、AI Gateway Readiness 異常、模型部署離線或部分異常、錯誤率達 5% 以上或比前期上升超過 0.5 個百分點；點任一項會切到對應的明細分頁（錯誤率那一項會切到「金鑰 API 呼叫」並只看失敗的呼叫）。
+  - 「呼叫明細」：分「模型」「金鑰 API 呼叫」「Template 呼叫」「使用者用量」四個分頁，分頁上的數字是各分頁的筆數；視窗太窄放不下時，其餘分頁收進「更多」。搜尋框只在目前分頁裡找，換分頁會清掉搜尋字。某個分頁的資料一筆都還沒拿到就載入失敗時，分頁數字顯示「—」，分頁裡顯示「發生錯誤」與「重試」。
+  - 「模型」分頁：各模型的 Runtime 狀態、部署狀態、呼叫次數、Tokens 總計、失敗率與平均延遲；有呼叫紀錄的模型名稱可以點，會切到「金鑰 API 呼叫」並用這個模型名稱搜尋。
+  - 「金鑰 API 呼叫」分頁是使用者用自己的金鑰發出的每筆呼叫，可以用「全部」「成功」「失敗」篩選；「Template 呼叫」分頁是平台內建 AI 功能的呼叫紀錄；兩者都只載入期間內最新 100 筆，搜尋也只在這些資料裡找。
+  - 「使用者用量」分頁：把金鑰 API 呼叫與 Template 呼叫合計，依使用者列出呼叫次數、Tokens 總計、平均延遲與失敗率。
+elements:
+  - id: aimon.stat_calls
+    role: readonly
+    label: 呼叫次數
+    help: 期間內的呼叫總數（金鑰 API 呼叫加 Template 呼叫），附上跟前一個等長期間比較的百分比。也是「模型」與「使用者用量」表格的欄位。
+    section: AI 監控摘要
+  - id: aimon.stat_tokens
+    role: readonly
+    label: Tokens 總計
+    help: 目前選取期間的輸入加輸出 Tokens（金鑰 API 呼叫加 Template 呼叫）。
+    section: AI 監控摘要
+  - id: aimon.stat_error
+    role: readonly
+    label: 錯誤率
+    help: 失敗呼叫占全部呼叫的比例，並附上跟前一個等長期間相比的變化（百分點 pp），上升時以紅色標示。
+    section: AI 監控摘要
+  - id: aimon.active_users
+    role: readonly
+    label: 活躍使用者
+    help: 目前選取期間內有金鑰 API 呼叫或 Template 呼叫的使用者數（摘要的第四個指標）。
+    section: AI 監控摘要
+  - id: aimon.open_grafana
+    role: button
+    label: 在 Grafana 查看詳細
+    help: 有啟用監控 stack 時才出現，開啟 Grafana 的 SkyLab AI 儀表板。
+    section: AI 監控摘要
+  - id: aimon.trend
+    role: chart
+    label: 呼叫與錯誤趨勢
+    help: 可以切換呼叫量、Tokens、失敗呼叫、錯誤率與平均延遲；滑鼠停在圖上可以看該時段的完整數字。近 7 天以小時為單位，較長的期間以天為單位。
+    section: 呼叫與錯誤趨勢
+  - id: aimon.stat_latency
+    role: readonly
+    label: 平均延遲
+    help: 呼叫的平均耗時；是「模型」與「使用者用量」表格的欄位，「呼叫與錯誤趨勢」也可以切到這個指標。
+    section: 呼叫與錯誤趨勢
+  - id: aimon.health
+    role: list
+    label: 系統狀態
+    help: 只在有異常時出現，列出用量資料載入失敗、AI Gateway Readiness 異常、模型部署異常或錯誤率偏高；點任一項會切到對應的明細分頁。這裡的 AI Gateway 是 AI 模型的閘道（LiteLLM），不是閘道 VM。
+    section: 系統狀態
+  - id: aimon.tab_models
+    role: list
+    label: 模型
+    help: 依模型列出 Runtime 狀態（線上、部分異常、離線、未知）、部署狀態（健康與異常的部署數），以及期間內的呼叫次數、Tokens 總計、失敗率與平均延遲（含金鑰 API 呼叫與 Template 呼叫）。
+    section: 模型
+  - id: aimon.col_runtime_status
+    role: table
+    label: Runtime 狀態
+    help: 模型在 AI Gateway 上的狀態：線上、部分異常、離線或未知；沒有運行資料時顯示「—」。
+    section: 模型
+  - id: aimon.col_deployments
+    role: table
+    label: 部署狀態
+    help: 這個模型健康與異常的部署數。
+    section: 模型
+  - id: aimon.tab_proxy
+    role: list
+    label: 金鑰 API 呼叫
+    help: 使用者用申請的金鑰發出的 AI API 呼叫紀錄，可以用「全部」「成功」「失敗」篩選；只載入期間內最新 100 筆。
+    section: 金鑰 API 呼叫
+  - id: aimon.col_first_token
+    role: table
+    label: 首 Token
+    help: 從送出到收到第一個 token 的時間。
+    section: 金鑰 API 呼叫
+  - id: aimon.col_output_rate
+    role: table
+    label: 端到端輸出速度
+    help: 每秒輸出的 token 數；上游沒有回報用量時不計算。
+    section: 金鑰 API 呼叫
+  - id: aimon.col_usage_evidence
+    role: table
+    label: Token 證據
+    help: 成功而且上游有回報用量的呼叫顯示「success」；成功但上游沒回報用量的顯示「上游未回報」（這筆的 token 記為 0，也不計算輸出速度）。失敗的呼叫改顯示錯誤代碼，例如「429 rate_limit」（請求太頻繁）、「HTTP 502」這類上游 HTTP 錯誤、「timeout」（逾時）、「server_busy」（平台這端排隊已滿或排隊逾時）、「cancelled」（已取消），認不出的一律顯示「error」；滑鼠停在代碼上可以看原始錯誤訊息。
+    section: 金鑰 API 呼叫
+  - id: aimon.tab_template
+    role: list
+    label: Template 呼叫
+    help: 平台內建 AI 功能（範本推薦、AI 導覽、Teacher Judge 等）的呼叫紀錄；只載入期間內最新 100 筆。
+    section: Template 呼叫
+  - id: aimon.tab_users
+    role: list
+    label: 使用者用量
+    help: 把金鑰 API 呼叫與 Template 呼叫合計，依使用者列出呼叫次數、Tokens 總計、平均延遲與失敗率。
+    section: 使用者用量
+related:
+  - path: /ai-api-keys
+    when: 發現異常用量，要找出或刪除某把金鑰
+  - path: /ai-api-review
+    when: 要處理新的 AI API 金鑰申請

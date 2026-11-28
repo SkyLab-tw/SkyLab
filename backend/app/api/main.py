@@ -6,7 +6,6 @@ from app.api.routes import (
     batch_provision,
     classroom,
     cloudflare,
-    course_admin,
     course_environments,
     courses,
     desktop_client,
@@ -65,7 +64,6 @@ api_router.include_router(governance.router)
 api_router.include_router(quotas.router)
 api_router.include_router(teaching_classes.router)
 api_router.include_router(courses.router)
-api_router.include_router(course_admin.router)
 api_router.include_router(course_environments.router)
 api_router.include_router(quick_practice.router)
 api_router.include_router(ldap_config.router)

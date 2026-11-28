@@ -1,0 +1,13 @@
+{
+  "aiAssistant.unavailable": "Please try again in a moment.",
+  "aiAssistant.degradedPageGuide": "Here is the built-in guide for this page:",
+  "aiAssistant.outOfScope": "I can only help with using the SkyLab platform. Tell me which page, machine or feature you want to work on.",
+  "aiAssistant.plan.purpose.question": "What will this machine mainly be used for?",
+  "aiAssistant.plan.purpose.options": "Coursework|Project development|Hosting a website|AI training|Database",
+  "aiAssistant.plan.gpu.question": "Do you need a GPU?",
+  "aiAssistant.plan.gpu.options": "I need a GPU|No GPU needed|Not sure, you decide",
+  "aiAssistant.plan.display.question": "Do you need Windows or a graphical desktop?",
+  "aiAssistant.plan.display.options": "I need a graphical desktop|I need Windows|Linux command line is fine",
+  "aiAssistant.plan.duration.question": "Roughly how long will you use it?",
+  "aiAssistant.plan.duration.options": "3 days|2 weeks|1 month|3 months"
+}

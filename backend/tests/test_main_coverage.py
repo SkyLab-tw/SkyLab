@@ -137,12 +137,6 @@ async def test_lifespan_starts_and_stops_scheduler_and_reconciler(
             ("sess",),
             "classroom_watch",
         ),
-        (
-            main.websocket_course_progress,
-            "course_progress_proxy",
-            ("path-1",),
-            "course_progress",
-        ),
     ],
 )
 async def test_websocket_endpoints_delegate_with_tracking(

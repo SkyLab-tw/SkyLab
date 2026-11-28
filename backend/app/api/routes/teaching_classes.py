@@ -51,7 +51,7 @@ from app.schemas.teaching_class import (
     StudentGroupImport,
     WeekIn,
 )
-from app.services.course import course_service, weekly_task_service
+from app.services.course import weekly_task_service
 from app.services.course_environment import upload_store
 from app.services.proxmox import proxmox_service
 from app.services.teaching import (
@@ -417,11 +417,6 @@ def create_class(body: ClassCreate, session: SessionDep, current_user: Instructo
     )
     class_lifecycle_service.validate_schedule(item)
     session.add(item)
-    session.flush()
-    course_service.ensure_class_path(
-        session,
-        teaching_class=item,
-    )
     session.commit()
     session.refresh(item)
     class_lifecycle_service.generate_weeks(session, item)

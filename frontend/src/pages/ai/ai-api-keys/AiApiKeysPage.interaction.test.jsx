@@ -144,6 +144,53 @@ test("換分頁後這組條件載入失敗，背景重抓期間維持錯誤畫�
   expect(mocks.toast.error).toHaveBeenCalledTimes(1);
 });
 
+describe("空清單的說法", () => {
+  const titles = () => host.textContent;
+  const clearButton = () => [...host.querySelectorAll("button")].find((button) => button.textContent.includes("EmptyState.clearFilters"));
+
+  async function renderWith(response) {
+    mocks.listAllCredentials.mockResolvedValue(response);
+    await act(async () => root.render(withQueryClient(<AiApiKeysPage />, createTestQueryClient())));
+    await flush();
+  }
+
+  test("全站一把金鑰都沒有：說「尚無金鑰紀錄」，不叫人清除篩選（預設的「啟用中」分頁不算篩選）", async () => {
+    await renderWith({ data: [], count: 0, total_count: 0, active_count: 0, inactive_count: 0 });
+
+    expect(titles()).toContain("AiApiKeysPage.emptyTitle");
+    expect(titles()).not.toContain("AiApiKeysPage.emptyFilteredTitle");
+    expect(clearButton()).toBeUndefined();
+  });
+
+  test("「啟用中」是空的、但已停用的還有：這個分頁是被分頁篩掉的，可以清除篩選看全部", async () => {
+    await renderWith({ data: [], count: 0, total_count: 3, active_count: 0, inactive_count: 3 });
+
+    expect(titles()).toContain("AiApiKeysPage.emptyFilteredTitle");
+    expect(clearButton()).toBeDefined();
+
+    mocks.listAllCredentials.mockResolvedValue({ ...page("key-old", "revoked"), total_count: 3, active_count: 0, inactive_count: 3 });
+    await act(async () => clearButton().click());
+    await flush();
+    expect(mocks.listAllCredentials).toHaveBeenLastCalledWith(expect.objectContaining({ status: undefined }));
+    expect(host.textContent).toContain("key-old");
+  });
+
+  test("搜尋不到東西：不管有沒有金鑰都是「沒有符合條件」", async () => {
+    await renderWith({ data: [], count: 0, total_count: 0, active_count: 0, inactive_count: 0 });
+    const input = host.querySelector('input[type="search"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "nobody");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    /* 搜尋框有 220ms 的 debounce */
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    await flush();
+
+    expect(titles()).toContain("AiApiKeysPage.emptyFilteredTitle");
+    expect(clearButton()).toBeDefined();
+  });
+});
+
 describe("窄版收欄", () => {
   const detailed = {
     id: "k1",

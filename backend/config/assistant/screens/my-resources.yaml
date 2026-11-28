@@ -1,0 +1,149 @@
+# 我的資源（/my-resources）
+id: my-resources
+path: /my-resources
+title: 我的資源
+access: all
+order: 50
+purpose: 查看與管理自己的虛擬機和容器（包含課堂與快速練習的機器），開關機、連線與刪除，也看得到還在審核或開通中的申請。
+when_to_use: 要使用已經開好的機器：開關機、連進去操作、看 IP 或對外網址，或不需要時刪除。
+sections:
+  - 機器清單
+  - 電源操作
+  - 連線方式
+  - 刪除
+features:
+  - 「控制台」（虛擬機）或「終端機」（容器）直接在瀏覽器連進機器；機器要在執行中才能開，開機中、使用時段還沒開始或已結束時按鈕停用。
+  - ⋮「更多操作」打開「電源控制」：啟動、強制停止、關機、強制重置、重新啟動，以及「刪除」；狀態不符的項目會停用，使用時段還沒開始或已結束時不能啟動，選單會寫出原因。別人共享給你的機器與課堂機器沒有「刪除」。老師與管理員自己的個人機器另有「轉成範本」。
+  - 刪除會先確認，刪除後無法復原；機器會排入刪除佇列，進度在背景任務查看。
+  - 點機器那一列進入資源詳情頁，可以調規格、建快照或備份、改防火牆、重設密碼與申請延長。
+  - 同一組課程或快速練習的機器會收成一列，點那一列展開或收合，開合狀態記在這台瀏覽器，下次進來維持；⋮「整組電源」可以「整組開機」、「整組關機」，快速練習環境還能「結束練習」（整組機器立刻回收，未儲存的內容會消失，已使用的建立次數不會退還）。組內每台機器有自己的控制台／終端機與電源控制（整組環境可以使用時才能操作），但不能單台刪除；整組在準備回收或回收中時，每台機器的狀態跟著整組顯示。
+  - 審核中或開通中的申請也會列成一列，可以按「取消申請」（會先確認）。
+  - 開通失敗的機器在 ⋮ 裡可以「重建」（機器沒建起來時）或「重新開機」（機器建好、之後開機失敗時），也可以刪除；刪除時這筆申請會一併取消。
+  - 「IP 位址」欄也會列出機器的對外網址，點一下直接開啟；課程環境的機器還會列出對外 port（沒有入口主機時寫「對外 port N（入口主機請詢問老師）」）。
+  - 視窗或表格區比較窄時，表格會依序收起「節點」「到期日」「環境／系統」「來源」「IP 位址」欄，收起的內容改寫在「名稱」欄（來源徽章、節點、環境）與「狀態」欄（IP、到期日）裡；名稱、狀態、操作一定會顯示，收到底還放不下才左右捲動。
+  - 「我的資源配額」顯示個人機器已用的 CPU、記憶體、磁碟與實例數；課堂與課程環境的機器不計入。
+  - 「申請資源」開啟機器申請表單；還沒有任何機器時畫面顯示「尚無資源」，按那裡的「申請資源」。「下載連線 App」下載桌面連線工具：會依電腦的作業系統只顯示「下載連線 App (Windows)」或「下載連線 App (macOS)」，偵測不出來（例如手機、平板或其他系統）時兩顆都顯示。
+elements:
+  - id: myres.status_scheduled
+    role: readonly
+    label: 已排程
+    section: 機器清單
+  - id: myres.status_provisioning
+    role: readonly
+    label: 開通中
+    section: 機器清單
+  - id: myres.status_starting
+    role: readonly
+    label: 開機中
+    help: 開機還在進行，開完之前不能開控制台。
+    section: 機器清單
+  - id: myres.status_running
+    role: readonly
+    label: 執行中
+    section: 機器清單
+  - id: myres.status_stopped
+    role: readonly
+    label: 已關機
+    section: 機器清單
+  - id: myres.status_paused
+    role: readonly
+    label: 已暫停
+    section: 機器清單
+  - id: myres.status_partial_failed
+    role: readonly
+    label: 需要處理
+    section: 機器清單
+  - id: myres.status_stopping
+    role: readonly
+    label: 準備回收
+    section: 機器清單
+  - id: myres.status_reclaiming
+    role: readonly
+    label: 回收中
+    section: 機器清單
+  - id: myres.status_deleting
+    role: readonly
+    label: 刪除中
+    section: 刪除
+  - id: myres.status_failed
+    role: readonly
+    label: 開通失敗
+    help: 機器沒有建起來；⋮ 裡可以「重建」或刪除。
+    section: 機器清單
+  - id: myres.status_start_failed
+    role: readonly
+    label: 開機失敗
+    help: 機器已經建好，但之後開機失敗；⋮ 裡可以「重新開機」或刪除。
+    section: 機器清單
+  - id: myres.status_deleted
+    role: readonly
+    label: 已刪除
+    section: 刪除
+  - id: myres.status_unknown
+    role: readonly
+    label: 狀態未知
+    help: 平台目前讀不到這台機器在 PVE 上的狀態。
+    section: 機器清單
+  - id: myres.creating_pending
+    role: readonly
+    label: 審核中
+    help: 申請還在等管理員審核，可以按「取消申請」。
+    section: 機器清單
+  - id: myres.creating_scheduling
+    role: readonly
+    label: 排程中
+    help: 申請已核准，等排程器開始建立；開始時間過了五分鐘還沒開始建立會改顯示「超時」。
+    section: 機器清單
+  - id: myres.actions
+    role: button
+    label: 操作
+    help: 每台機器的「控制台」／「終端機」與 ⋮「更多操作」都在這一欄。
+    section: 電源操作
+  - id: myres.request
+    role: button
+    label: 申請資源
+    help: 開啟機器申請表單。
+  - id: myres.download_app
+    role: button
+    label: 下載連線 App
+    help: 下載 SkyLab 的桌面連線工具。依電腦的作業系統只顯示 Windows 或 macOS 版的按鈕（按鈕後面括號寫著是哪一版）；偵測不出來時兩顆都顯示。
+  - id: myres.quota
+    role: readonly
+    label: 我的資源配額
+    help: 個人機器的資源上限與目前用量；接近上限時可以對現有機器提出規格調整申請。
+dialogs:
+  - id: convert-template
+    title: 把 VM 轉為範本
+    opened_by: 轉成範本
+    purpose: 把調好的機器變成範本，之後可以用它開新機器。
+    access: staff
+    fields:
+      - label: 來源機器
+        help: 從「轉成範本」開啟時固定為這台機器，不能更改。
+      - label: 範本名稱
+        help: 預先帶入機器名稱，可以修改。
+        required: true
+      - label: 說明（選填）
+        help: 這個範本裝了什麼、適合哪些課程使用。
+      - label: 可見範圍
+        help: 「私人」只有自己看得到；「全部可見」時其他老師看得到，學生申請機器時也選得到。
+      - label: 這個範本需要 GPU
+        help: 勾選後用它開機器一定要選一張 GPU；只有 VM 範本能設定。
+      - label: 自訂預設規格
+        help: 不勾選時沿用來源機器本身的 CPU 與記憶體；勾選後可設定預設 CPU 核心數（1–8）與預設記憶體 (RAM)（0.5–32 GB）。
+      - label: 使用手冊 / 附件（選填，最多 10 個）
+        help: 支援 PDF、Office 文件、圖片、壓縮檔等，單檔 50MB 內；會在轉換開始後自動上傳。
+    notes:
+      - 按「開始轉換」後會再確認一次（「關機並轉換」）：來源機會先被關機，之後成為範本母機，無法再當一般機器開機使用，這個動作無法復原。
+      - 轉換後這台機器會從資源列表消失，改出現在「機器範本」。
+      - 轉換時會偵測機器有沒有 cloud-init；沒有的話範本會標示「密碼無法由平台設定」，開出來的機器沿用範本內的帳號密碼。
+      - 只有自己能管理的個人機器有「轉成範本」；課堂機器沒有這個選項。
+related:
+  - path: /my-requests
+    when: 還沒有機器，或要追蹤申請進度
+  - path: /quick-create
+    when: 想立刻開一組練習環境
+  - path: /firewall
+    when: 要讓機器互通或把服務開放給外部
+  - path: /jobs
+    when: 要看刪除、備份或建立等背景任務的進度

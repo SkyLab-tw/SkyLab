@@ -344,15 +344,30 @@ def test_wordpress_is_not_mistaken_for_remote_desktop() -> None:
     assert intent.needs_desktop is False
 
 
-def test_intake_does_not_treat_wordpress_as_display_answer() -> None:
-    from app.ai.navigation.intake import read_intake
-    from app.ai.navigation.schemas import NavigationMessage
+def test_assistant_plan_facts_for_wordpress_do_not_ask_for_a_desktop() -> None:
+    """助手整理出的需求原樣交給推薦規劃：用途裡的 WordPress 不能被讀成要遠端桌面。"""
+    from app.ai.assistant.machine_plan import resolve_plan
 
-    state = read_intake(
-        [NavigationMessage(role="user", content="我要架 WordPress 網站")]
+    plan = resolve_plan(
+        {
+            "purpose": "我要架 WordPress 網站",
+            "gpu": "no",
+            "display": "cli",
+            "duration_days": 30,
+            "assumed": ["gpu", "display"],
+        },
+        lang="zh-TW",
     )
-    assert state.facts.display == "Linux 指令列就好"
-    assert "display" in state.facts.inferred
+    assert plan.status == "ready"
+    assert plan.facts.display == "Linux 指令列就好"
+    assert plan.facts.inferred == ["gpu", "display"]
+
+    facts = IntakeFactsContext.model_validate(plan.facts.model_dump())
+    intent = svc.infer_intent_from_chat(_chat("我要架 WordPress 網站", facts=facts))
+    assert intent.needs_desktop is False
+    assert intent.needs_windows is False
+    assert intent.requires_gpu is False
+    assert svc.parse_duration_days(plan.facts.duration) == 30
 
 
 def test_keyword_spans_match_whole_ascii_words_only() -> None:

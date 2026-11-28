@@ -412,7 +412,10 @@ export default function AiApiKeysPage() {
   }, [page, totalPages]);
 
   const activeFilterCount = roleFilters.length + (createdRange === "all" ? 0 : 1);
-  const hasFilters = Boolean(statusFilter !== "all" || query.trim() || roleFilters.length || createdRange !== "all");
+  /* 預設停在「啟用中」，分頁本身不算篩選：一把金鑰都沒有時要說「尚無金鑰紀錄」。
+     別的分頁還有金鑰（allCount 跨所有狀態）時，這個分頁空著才是被分頁篩掉的。 */
+  const narrowed = Boolean(query.trim() || roleFilters.length || createdRange !== "all");
+  const hasFilters = narrowed || (statusFilter !== "all" && allCount > 0);
   const tabs = useMemo(() => [
     { key: "active", label: t("AiApiKeysPage.tabActive"), count: activeCount },
     { key: "inactive", label: t("AiApiKeysPage.tabInactive"), count: inactiveCount },

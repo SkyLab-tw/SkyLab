@@ -440,7 +440,8 @@ export function batchJobs(m) {
         error: status === "failed" ? "clone timed out on pve-02" : null, started_at: null, finished_at: null };
     });
     return {
-      id, teaching_class_id: o.cls ?? null, teaching_class_name: o.className ?? null,
+      // Every batch job belongs to a class (teaching_class_id is NOT NULL on the backend).
+      id, teaching_class_id: o.cls, teaching_class_name: o.className ?? null,
       resource_type: o.type ?? "lxc", hostname_prefix: o.prefix, status: o.status,
       total: o.total, done, failed_count: failed, created_at: o.created, finished_at: null,
       initiated_by: (o.by ?? P.lin).id, initiated_by_email: (o.by ?? P.lin).email, initiated_by_name: (o.by ?? P.lin).full_name,
@@ -460,7 +461,7 @@ export function batchJobs(m) {
     job({ cls: cls(2), className: m.L("Database Systems (IM 2B)", "資料庫系統（資管二乙）"), prefix: "dbms", status: "pending_review", total: 20,
       created: ago(20 * H), by: P.chen, rule: "FREQ=WEEKLY;BYDAY=MO,WE;BYHOUR=9;BYMINUTE=0",
       spec: { cores: 2, memory: 4096, rootfs_size: 20, os_info: "MySQL 8.4 (LXC)" } }),
-    job({ prefix: "ai-workshop", status: "pending_review", total: 10, type: "vm", created: ago(1 * D + 4 * H),
+    job({ cls: cls(9), className: m.L("Generative AI Workshop (IM 4A)", "生成式 AI 實務（資管四甲）"), prefix: "ai-workshop", status: "pending_review", total: 10, type: "vm", created: ago(1 * D + 4 * H),
       rule: "FREQ=WEEKLY;BYDAY=SA;BYHOUR=13;BYMINUTE=0;UNTIL=20261010T050000Z",
       spec: { cores: 4, memory: 8192, disk_size: 64, os_info: "Ubuntu 24.04 LTS" } }),
     job({ cls: cls(3), className: m.L("Linux System Administration (IM 2A)", "Linux 系統管理（資管二甲）"), prefix: "linux-lab", status: "running", total: 30, done: 18,

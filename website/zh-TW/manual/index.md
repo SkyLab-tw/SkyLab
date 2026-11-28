@@ -29,7 +29,6 @@
 - [班級工作頁](/zh-TW/manual/class-workspace)：學生、機器、監看、廣播、每週內容
 - [AI 導師檢查](/zh-TW/manual/ai-judge)：檢查表、產生腳本、在學生機器上執行檢查
 - [教學環境](/zh-TW/manual/course-templates)：建構與發布多機拓樸，另見 [SOP](/zh-TW/guides/multi-machine-environment-sop)
-- [課程管理](/zh-TW/manual/course-cms)：學習路徑、任務與題目
 
 ## 管理員
 

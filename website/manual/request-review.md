@@ -43,7 +43,7 @@ Administrators only. Listing all requests, loading the resource assessment and s
    - **Node / VMID**: for a pending creation request, the node the platform projects for it; for a spec change, the machine's VMID.
    - **Reason / Notes** from the requester. Long text is folded; click **Show more** to expand it.
 2. The panel only shows the request you clicked. It never switches to another request on its own when the list refreshes; if the request leaves the list, the panel is cleared.
-3. For a pending creation request, the page loads the resource assessment (**Loading resource assessment...**). If it cannot be built, an error is shown in red and the request cannot be approved.
+3. For a pending creation request, the page loads the resource assessment (**Loading resource assessment...**). If it cannot be built, an error is shown in red and the request cannot be approved. If the assessment finds that no node can host the request, the reason is written next to **Approve**.
 
 ![Look at a request (numbers match the steps above)](/manual-shots/en/request-review/s03.webp)
 
@@ -51,7 +51,7 @@ Administrators only. Listing all requests, loading the resource assessment and s
 
 1. Click the pending request and wait for the assessment to finish.
 2. Optionally write the reason in **Review Notes**.
-3. Click **Approve**. The button is only enabled once the assessment has finished and found enough capacity on a node for the whole usage window.
+3. Click **Approve**. The button is only enabled once the assessment has finished and found enough capacity on a node for the whole usage window. When it is disabled, the reason is shown next to it: either no node can host this request for the window, or another approved request with an overlapping window can no longer be placed on any node (the message names that request).
 4. On approval the platform reserves the projected node for that window, taking into account the other approved requests that overlap it. If the request asks for a GPU, only nodes that carry that GPU mapping and still have a free slot are considered.
 5. What happens next:
    - If the window has already started, provisioning starts right away in the background.
@@ -108,7 +108,7 @@ Administrators only. Listing all requests, loading the resource assessment and s
 
 ## Limits and behaviour to know
 
-- **Approve** stays disabled for a creation request while the assessment is loading, when it failed, or when no node has room for the window.
+- **Approve** stays disabled for a creation request while the assessment is loading, when it failed, or when no node has room for the window. In the last two cases the reason is shown next to the button.
 - A creation request whose usage window has already ended cannot be approved.
 - A request that someone else has already reviewed cannot be reviewed again; reload the list.
 - Pending requests whose window ends without a decision are marked **Expired** automatically, and so are approved requests whose window ends before a machine is created.
