@@ -5,6 +5,8 @@ import styles from "./AiApiKeysPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import DataTable from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import Modal from "../../../components/Modal/Modal";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
@@ -16,6 +18,7 @@ import { useLoadError } from "../../../hooks/useQueryLoadState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Pagination from "../../../components/Pagination/Pagination";
 import { formatDate, formatDateTime } from "../../../utils/formatDate";
 
 const PAGE_SIZE = 50;
@@ -76,8 +79,37 @@ function HeaderLabel({ column }) {
   return t(column.columnDef.meta.headerKey);
 }
 
+/* ── 窄版收欄（useTableFit，樣式規範「表格」規則四） ──
+   表格區不夠寬時依序收起建立日期、擁有者、申請用途、活動；金鑰、狀態、操作永遠在。
+   擁有者、申請用途是「誰的、為什麼要」，收進金鑰名稱底下：擁有者併進原本的 Email 那一行（姓名 · Email），
+   用途另起一行，兩行都單行截斷、全文在 title（Email 不會被從中間折成兩行）。
+   兩個時間一律排在一起：只收建立日期時接在活動（最後使用時間）底下；兩個都收時依先後排在狀態徽章底下
+   （只寫日期，完整時間在 title；沒用過的寫「尚未使用」，本身看得懂，不加欄名）。
+   欄寬只寫在這裡：完整日期時間（英文 11/17/2026, 14:30:15）要 170px；狀態欄 160px 放得下收進來的
+   「Activity 11/18/2026」「建立日期 2026/11/17」（日文的「アクティビティ」較長，會在日期前換行）；
+   英文的 Delete 鈕要 120px；金鑰欄含 40px 圖示，220px 留 140px 給名稱與 Email。
+   全部 1110px：1440（表格區約 1003～1018px）收掉建立日期剩 990px；1366 筆電（約 929～944px）再收擁有者剩 850px；
+   1100 寬視窗（約 678px）再收申請用途剩 670px；1440 開著 AI 助手（約 567px）再收活動，只剩金鑰、狀態、操作 500px。
+   手機（約 448px）收到底仍放不下，橫捲並固定金鑰欄 */
+const CREDENTIAL_FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 220 },
+  { id: "user_full_name", width: 140, fold: 2 },
+  { id: "request_purpose", width: 180, fold: 3 },
+  { id: "activity", width: 170, fold: 4 },
+  { id: "status", width: 160 },
+  { id: "created_at", width: 120, fold: 1 },
+  { id: "actions", width: 120 },
+]);
+
+/* 擁有者收起時，名稱底下那一行改成「姓名 · Email」（沒有姓名就只有 Email） */
+function ownerLine(item) {
+  return [item.user_full_name, item.user_email].filter(Boolean).join(" · ");
+}
+
 function NameCell({ row }) {
+  const fit = useTableFitContext();
   const item = row.original;
+  const meta = fit.isFolded("user_full_name") ? ownerLine(item) : item.user_email;
   return (
     <div className={styles.nameCell}>
       <div className={styles.rowIcon}>
@@ -85,7 +117,10 @@ function NameCell({ row }) {
       </div>
       <div className={styles.rowMain}>
         <span className={styles.rowName} title={item.api_key_name || undefined}>{item.api_key_name || "—"}</span>
-        <span className={styles.rowMeta} title={item.user_email || undefined}>{item.user_email || "—"}</span>
+        <span className={styles.rowMeta} title={meta || undefined}>{meta || "—"}</span>
+        {fit.isFolded("request_purpose") && item.request_purpose && (
+          <span className={styles.rowMeta} title={item.request_purpose}>{item.request_purpose}</span>
+        )}
       </div>
     </div>
   );
@@ -96,10 +131,52 @@ function TextCell({ getValue }) {
   return <span className={styles.cellText} title={value || undefined}>{value || "—"}</span>;
 }
 
+/* 收進其他欄的時間：欄名＋日期，完整時間在 title（同 AI API 頁金鑰表收起的建立時間） */
+function FoldedDateLine({ labelKey, value, ...rest }) {
+  const { t } = useTranslation("ai");
+  return (
+    <div className={styles.foldedLine} title={formatDateTime(value)} {...rest}>
+      {t(labelKey)} {formatDate(value)}
+    </div>
+  );
+}
+
+/* 收進狀態底下的活動（最後使用時間）；活動的導覽錨點跟著搬過來，收欄後導覽照樣指得到 */
+function FoldedActivityLine({ item }) {
+  const { t } = useTranslation("ai");
+  if (!item.last_used_at) {
+    return <div className={styles.foldedLine} data-guide="ai-keys-admin-activity">{t("AiApiKeysPage.detailNeverUsed")}</div>;
+  }
+  return <FoldedDateLine labelKey="AiApiKeysPage.detailActivity" value={item.last_used_at} data-guide="ai-keys-admin-activity" />;
+}
+
+/* 活動；窄版只收起建立日期時，建立日期接在底下（兩個時間排在一起） */
 function ActivityCell({ row }) {
   const { t } = useTranslation("ai");
-  const lastUsedAt = row.original.last_used_at;
-  return lastUsedAt ? formatDateTime(lastUsedAt) : <span className={styles.cellMuted}>{t("AiApiKeysPage.detailNeverUsed")}</span>;
+  const fit = useTableFitContext();
+  const item = row.original;
+  return (
+    <>
+      {item.last_used_at
+        ? formatDateTime(item.last_used_at)
+        : <span className={styles.cellMuted}>{t("AiApiKeysPage.detailNeverUsed")}</span>}
+      {fit.isFolded("created_at") && <FoldedDateLine labelKey="AiApiKeysPage.colCreatedAt" value={item.created_at} />}
+    </>
+  );
+}
+
+/* 狀態；窄版兩個時間都收起時，依先後（建立→最後使用）接在徽章底下 */
+function StatusCell({ row }) {
+  const fit = useTableFitContext();
+  const item = row.original;
+  const timesFolded = fit.isFolded("activity") && fit.isFolded("created_at");
+  return (
+    <>
+      <StatusBadge item={item} />
+      {timesFolded && <FoldedDateLine labelKey="AiApiKeysPage.colCreatedAt" value={item.created_at} />}
+      {timesFolded && <FoldedActivityLine item={item} />}
+    </>
+  );
 }
 
 function CreatedAtCell({ getValue }) {
@@ -128,6 +205,7 @@ function columnMeta(headerKey, extra) {
   return { headerKey, thClassName: styles.th, tdClassName: styles.td, ...extra };
 }
 
+/* 欄寬與收合順序在 CREDENTIAL_FIT_COLUMNS（id 要對得上） */
 const credentialColumns = columnHelper.columns([
   columnHelper.display({ id: "name", header: HeaderLabel, cell: NameCell, meta: columnMeta("AiApiKeysPage.colName") }),
   columnHelper.accessor("user_full_name", { header: HeaderLabel, cell: TextCell, meta: columnMeta("AiApiKeysPage.detailOwner") }),
@@ -138,7 +216,7 @@ const credentialColumns = columnHelper.columns([
     cell: ActivityCell,
     meta: columnMeta("AiApiKeysPage.detailActivity", { tdProps: { "data-guide": "ai-keys-admin-activity" } }),
   }),
-  columnHelper.display({ id: "status", header: HeaderLabel, cell: ({ row }) => <StatusBadge item={row.original} />, meta: columnMeta("AiApiKeysPage.colStatus") }),
+  columnHelper.display({ id: "status", header: HeaderLabel, cell: StatusCell, meta: columnMeta("AiApiKeysPage.colStatus") }),
   columnHelper.accessor("created_at", { header: HeaderLabel, cell: CreatedAtCell, meta: columnMeta("AiApiKeysPage.colCreatedAt") }),
   columnHelper.display({ id: "actions", header: HeaderLabel, cell: RevokeCell, meta: columnMeta("AiApiKeysPage.colActions") }),
 ]);
@@ -306,6 +384,7 @@ export default function AiApiKeysPage() {
     getRowId: (item) => String(item.id),
     meta: { onRevoke: setDeletingItem },
   });
+  const fit = useTableFit(CREDENTIAL_FIT_COLUMNS);
   const total = res?.count ?? 0;
   const allCount = res?.total_count ?? res?.count ?? 0;
   const activeCount = res?.active_count ?? 0;
@@ -389,11 +468,18 @@ export default function AiApiKeysPage() {
             clearFilters();
           }} /> : (
             <>
-              <div className={styles.tableWrap} data-guide="ai-keys-admin-table">
-                <DataTable table={table} className={styles.table} rowClassName={credentialRowClassName} />
+              <div ref={fit.ref} className={styles.tableWrap} data-guide="ai-keys-admin-table">
+                <DataTable table={table} fit={fit} className={styles.table} rowClassName={credentialRowClassName} />
               </div>
 
-              {totalPages > 1 && <div className={styles.pagination}><span className={styles.paginationInfo}>{t("AiApiKeysPage.paginationInfo", { page: page + 1, totalPages, total })}</span><div className={styles.paginationBtns}><button type="button" className={styles.btnSecondary} disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>{t("AiApiKeysPage.prevPage")}</button><button type="button" className={styles.btnSecondary} disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>{t("AiApiKeysPage.nextPage")}</button></div></div>}
+              {totalPages > 1 && (
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  info={t("AiApiKeysPage.paginationInfo", { total })}
+                  onChange={setPage}
+                />
+              )}
             </>
           )
         )}

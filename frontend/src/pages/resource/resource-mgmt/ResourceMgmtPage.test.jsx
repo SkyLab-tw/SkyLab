@@ -447,6 +447,142 @@ describe("ResourceMgmtPage 批量操作", () => {
   });
 });
 
+describe("ResourceMgmtPage 窄版收欄", () => {
+  /* happy-dom 沒有版面：表格區（.tableWrap）的寬度由測試指定；ResizeObserver 換成手動觸發 */
+  let wrapWidth;
+  let resizeCallbacks;
+  const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    wrapWidth = 0;
+    resizeCallbacks = [];
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() { return this.getAttribute("data-guide") === "resource-mgmt-table" ? wrapWidth : 0; },
+    });
+    globalThis.ResizeObserver = class {
+      constructor(callback) { this.callback = callback; }
+      observe() { resizeCallbacks.push(this.callback); }
+      unobserve() {}
+      disconnect() { resizeCallbacks = resizeCallbacks.filter((callback) => callback !== this.callback); }
+    };
+    mocks.listAll.mockResolvedValue([vm(101, {
+      node: "pve-01",
+      environment_type: "Docker",
+      os_info: "Ubuntu 24.04",
+      ip_address: "10.0.0.5",
+      expiry_date: "2026-12-31",
+      can_control: true,
+    })]);
+    mocks.buildEnvironmentGroups.mockReturnValue([{
+      id: "course:1",
+      kind: "course",
+      title: "課程 A",
+      timingLabel: "依課程時段管理",
+      nodeLabel: "pve-02",
+      machines: [{
+        id: "m1", vmid: 201, requestId: 201, name: "lab-01", role: "Web", type: "qemu", os: "Debian 12",
+        status: "running", ip: "10.0.1.1", node: "pve-02", resource: { vmid: 201, status: "running" },
+      }],
+    }]);
+  });
+
+  afterEach(() => {
+    if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+    else delete HTMLElement.prototype.clientWidth;
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  const headers = () => [...host.querySelectorAll("thead th")].map((th) => th.textContent);
+  const colWidths = () => [...host.querySelectorAll("colgroup col")].map((col) => col.style.width);
+  /* 每一列（不含虛擬化的空白列）的儲存格數都要跟表頭一樣 */
+  const cellCounts = () => [...host.querySelectorAll("tbody tr")]
+    .filter((tr) => tr.children.length > 0)
+    .map((tr) => tr.children.length);
+  const cell = (name, index) => rowOf(name).children[index].textContent;
+
+  test("筆電寬度（1366／1440）收掉節點、到期日、環境：節點與環境進名稱欄，到期日進狀態欄", async () => {
+    wrapWidth = 929;
+    await renderPage();
+
+    const table = host.querySelector("table");
+    expect(table.getAttribute("data-folded")).toBe("node expiry env");
+    expect(table.hasAttribute("data-overflow")).toBe(false);
+    expect(table.style.minWidth).toBe("896px");
+    expect(headers()).toEqual([
+      "",
+      "ResourceMgmtPage.columnName",
+      "ResourceMgmtPage.columnKind",
+      "ResourceMgmtPage.columnStatus",
+      "ResourceMgmtPage.columnIp",
+      "ResourceMgmtPage.columnActions",
+    ]);
+    expect(colWidths()).toEqual(["36px", "190px", "190px", "150px", "150px", "180px"]);
+    /* 群組列、環境內機器列（自己畫 <td>）與散機列欄數一致 */
+    expect(cellCounts()).toEqual([6, 6, 6]);
+
+    expect(cell("vm-101", 1)).toContain("pve-01");
+    expect(cell("vm-101", 1)).toContain("Docker · Ubuntu 24.04");
+    expect(cell("vm-101", 3)).toContain("ResourceMgmtPage.columnExpiry");
+    expect(cell("vm-101", 3)).toContain("2026/12/31");
+    /* IP 欄還在，狀態欄不重複寫 */
+    expect(cell("vm-101", 3)).not.toContain("10.0.0.5");
+    expect(cell("vm-101", 4)).toContain("10.0.0.5");
+
+    expect(cell("課程 A", 1)).toContain("ResourceMgmtPage.courseEnvironment");
+    expect(cell("課程 A", 1)).toContain("pve-02");
+    expect(cell("課程 A", 3)).toContain("依課程時段管理");
+    expect(cell("lab-01", 1)).toContain("pve-02");
+    expect(cell("lab-01", 1)).toContain("Debian 12");
+  });
+
+  test("1440 開著 AI 助手（567px）收到只剩勾選、名稱、狀態、操作，不橫捲；IP 也收進狀態欄", async () => {
+    wrapWidth = 567;
+    await renderPage();
+
+    const table = host.querySelector("table");
+    expect(table.getAttribute("data-folded")).toBe("node expiry env kind ip");
+    expect(table.hasAttribute("data-overflow")).toBe(false);
+    expect(table.style.minWidth).toBe("556px");
+    expect(headers()).toEqual([
+      "",
+      "ResourceMgmtPage.columnName",
+      "ResourceMgmtPage.columnStatus",
+      "ResourceMgmtPage.columnActions",
+    ]);
+    expect(cellCounts()).toEqual([4, 4, 4]);
+    expect(cell("vm-101", 2)).toContain("10.0.0.5");
+    expect(cell("lab-01", 2)).toContain("10.0.1.1");
+    /* 勾選與資料導覽的標記不受收欄影響 */
+    expect(rowOf("vm-101").querySelector('input[type="checkbox"]')).not.toBeNull();
+    expect(rowOf("vm-101").querySelector('[data-guide="resource-mgmt-row-actions"]')).not.toBeNull();
+  });
+
+  test("手機寬度收到底還放不下才橫捲，勾選框與名稱欄一起固定", async () => {
+    wrapWidth = 448;
+    await renderPage();
+    /* 勾選框＋名稱欄一起固定；加上操作欄後中間不到 160px，操作欄跟著捲 */
+    expect(host.querySelector("table").getAttribute("data-overflow")).toBe("start");
+    expect(host.querySelector("table").getAttribute("data-pin-lead")).toBe("2");
+    expect(cellCounts()).toEqual([4, 4, 4]);
+  });
+
+  test("視窗變窄時跟著收欄，自己畫 <td> 的群組列與機器列也一起變", async () => {
+    wrapWidth = 1400;
+    await renderPage();
+    expect(host.querySelector("table").hasAttribute("data-folded")).toBe(false);
+    expect(headers()).toHaveLength(9);
+    expect(cellCounts()).toEqual([9, 9, 9]);
+
+    wrapWidth = 567;
+    await act(async () => { resizeCallbacks.forEach((callback) => callback()); });
+    expect(headers()).toHaveLength(4);
+    expect(cellCounts()).toEqual([4, 4, 4]);
+    expect(cell("vm-101", 2)).toContain("10.0.0.5");
+  });
+});
+
 describe("ResourceMgmtPage 搜尋與狀態篩選", () => {
   const machines = [
     { vmid: 101, name: "web", status: "running", type: "qemu", can_control: true, owner_name: "王小明" },

@@ -3,15 +3,31 @@
 /* 分段切換器：外框膠囊 + 選中段以主色填滿。
    高度固定 36px，跟按鈕（btn-*）、輸入框（form-control）同高，同一列才對得齊；
    各段撐滿內框（36 − 內距 3×2 − 框 1×2 = 28px），文字垂直置中，有沒有徽章都一樣高 */
+/* 寬度跟著內容走：放進直排 flex／grid 容器時，子層會被轉成區塊並拉滿容器寬，軌道後面空出一大截。
+   用 :where 把權重降到 0，頁面 className 要撐滿（width: 100%、flex: 1）照樣蓋得過；要撐滿請優先用 fullWidth。
+   段數多、放不下時 fit-content 等於內容寬，再由頁面的 max-width: 100% + overflow-x: auto 橫向捲動 */
+:where(.segment) {
+  width: fit-content;
+}
+
+/* 放不下時元件會收成下拉（見 SegmentedControl.jsx）；收起來之前那一瞬間、或瀏覽器沒有 ResizeObserver 時，
+   退回橫向捲動且不顯示捲軸：Windows 的捲軸會佔掉 36px 裡的高度，按鈕被壓扁、字跟選中底色都被切掉 */
 .segment {
   box-sizing: border-box;
   display: inline-flex;
   height: 36px;
+  max-width: 100%;
   padding: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
   border: 1px solid var(--color-border);
   border-radius: $radius-8;
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .segmentBtn {
@@ -37,10 +53,11 @@
     cursor: not-allowed;
   }
 
+  /* 焦點外框畫在按鈕內側：外框容器會橫捲（overflow），畫在外面會被裁掉 */
   &:focus-visible,
   &[aria-pressed="true"]:focus-visible {
     outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    outline-offset: -2px;
   }
 }
 
@@ -72,6 +89,12 @@
   }
 }
 
+/* 選中段是主色實心：內側的主色焦點框會跟底色糊在一起，改白框再往內縮一點 */
+.segmentBtn.segmentActive:focus-visible {
+  outline-color: var(--color-text-on-primary);
+  outline-offset: -4px;
+}
+
 /* 可選的數量徽章 */
 .segmentBadge {
   min-width: 20px;
@@ -89,8 +112,61 @@
   background: color-mix(in srgb, var(--color-text-on-primary) 22%, transparent);
   color: var(--color-text-on-primary);
 }
+
+/* 收成下拉（放不下時）：外框沿用分段的外觀（36px、框線、底色），裡面整塊是一顆觸發鈕，
+   顯示目前選項＋向下箭頭，點開是共用的 ListboxPopover */
+.segmentCollapsed {
+  padding: 0;
+}
+
+.collapsedTrigger {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px 0 12px;
+  border-radius: inherit;
+  color: var(--color-text-primary);
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background $transition-base;
+
+  &:hover {
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+}
+
+.collapsedLabel,
+.optionLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.collapsedLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collapsedChevron {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .segmentBtn {
+  .segmentBtn,
+  .collapsedTrigger {
     transition: none;
   }
 }

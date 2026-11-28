@@ -196,11 +196,24 @@
   text-align: center;
 }
 
+/* 卡片底部按鈕列：左右內距跟 .formGrid／.cardHeader／列表列的 22px 一致，按鈕右緣才對得齊上面的欄位。
+   跟著內容走的按鈕列不畫分隔線（全站頁內表單的慣例，同建班精靈）；
+   固定在畫布下方的機器配置另外補回分隔線（見 .templateMachineWorkspace .actionFooter） */
 .actionFooter {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 16px;
+  padding: 16px 22px 22px;
+}
+
+/* 表單下方：.formGrid 已有 22px 底部內距，按鈕列不再疊上方內距，間距才不會比欄位之間大一截 */
+.formGrid + .actionFooter {
+  padding-top: 0;
+}
+
+/* 機器配置：按鈕列貼在拓撲畫布下方（高度夠時整頁鎖高、畫布自己捲），保留分隔線把畫布和動作分開 */
+.templateMachineWorkspace .actionFooter {
+  padding-bottom: 16px;
   border-top: 1px solid var(--color-border);
 }
 
@@ -1590,53 +1603,50 @@ button.heatAttentionChip {
   font-size: $font-size-12;
 }
 
+/* 規格：一行 12px 文字，中間用「·」隔開（不做成一顆顆淡底標籤：疊在玻璃上幾乎看不出底色） */
 .envChoiceSpecs {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: $font-size-12;
+  font-variant-numeric: tabular-nums;
 }
 
 .envChoiceSpecs>span {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border-radius: $radius-8;
-  color: var(--color-text-secondary);
-  background: color-mix(in srgb, var(--color-hover) 55%, transparent);
-  font-size: $font-size-10;
-  font-weight: $font-weight-500;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
-.envChoiceSpecs>span:first-child {
+.envChoiceSpecs>span+span::before {
+  content: "·";
+  padding: 0 $spacing-8;
+  color: var(--color-text-muted);
+}
+
+/* 每人幾台：帶圖示、深色中粗，是這一行的重點 */
+.envChoiceSpecs>.envChoiceUnit {
+  gap: 4px;
+  color: var(--color-text-primary);
+  font-weight: $font-weight-500;
+}
+
+.envChoiceUnit :global(.material-icons-outlined) {
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
 }
 
+/* 選中的列：主色「✓ 已選擇」文字，不包膠囊（整列就是按鈕，不另外做一顆假按鈕） */
 .envChoices em {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  min-height: 30px;
-  padding: 0 11px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-pill;
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
+  color: var(--color-primary);
   font-size: $font-size-12;
   font-style: normal;
   font-weight: $font-weight-500;
   white-space: nowrap;
-}
-
-.envChoiceSelected em {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
 }
 
 /* 手機：四欄放不下（名稱會被擠到 0 寬、規格被切掉），改成
@@ -1739,10 +1749,6 @@ button.heatAttentionChip {
   background: transparent;
 }
 
-.topologyCanvas :global(.react-flow) svg {
-  max-width: none;
-}
-
 .topologyCanvas :global(.react-flow__edge path) {
   stroke-opacity: 1 !important;
 }
@@ -1841,10 +1847,6 @@ button.heatAttentionChip {
    用 visibility 而非 opacity：蓋得過 hover 規則，連接點仍佔位、線照樣接得上 */
 .readonlyTopology :global(.react-flow__handle) {
   visibility: hidden;
-}
-
-.readonlyTopology :global(.react-flow) svg {
-  max-width: none;
 }
 
 .readonlyTopology :global(.react-flow__edge path) {
@@ -2287,9 +2289,14 @@ button.heatAttentionChip {
     height: 38px;
   }
 
-  .setupSummary .btnPrimary {
+  /* 按鈕包在 .setupActions 裡：要拉滿整列的是這一層（只對按鈕下 grid-column 不會生效，
+     外層會被排進 38px 的圖示欄、按鈕跟著被擠成 38px）；裡面的按鈕平分整列 */
+  .setupSummary .setupActions {
     grid-column: 1 / -1;
-    width: 100%;
+  }
+
+  .setupSummary .setupActions > button {
+    flex: 1 1 auto;
   }
 
   .setupChecklist {
@@ -2311,6 +2318,16 @@ button.heatAttentionChip {
     width: 100%;
     margin-left: 0;
     grid-template-columns: 1fr 1fr;
+  }
+
+  /* 手機：名單鎖定說明跟標題同一列（靠右），搜尋框換到下一列撐滿；
+     原本說明排在搜尋框後面，換行後自己一列貼在右邊 */
+  .memberTitle {
+    order: -2;
+  }
+
+  .memberLockedNote {
+    order: -1;
   }
 
   .heatmapHeader,
@@ -2557,9 +2574,11 @@ button.heatAttentionChip {
   @include table-wrap;
 }
 
+/* 窄版收欄（useTableFit，樣式規範表格規則四）：欄寬與收合順序寫在 CourseTemplateManagementPage 的
+   ENV_FIT_COLUMNS，DataTable 依它畫 colgroup 與 min-width；這裡只留 fixed layout，照欄寬排 */
 .envTable {
   @include table-base;
-  min-width: 880px;
+  table-layout: fixed;
 }
 
 .envTable th {
@@ -2571,18 +2590,26 @@ button.heatAttentionChip {
   padding-block: 12px;
 }
 
+/* 整列點下去開啟編輯頁：游標與 hover 用 table-tr-clickable，
+   hover 底色經 table-row-bg 設在列上，窄版橫捲時固定的名稱欄跟同一列同色 */
 .envTable tbody tr {
   @include table-tr;
-  cursor: pointer;
-}
-
-.envTable tbody tr:hover {
-  background: var(--color-hover);
+  @include table-tr-clickable;
 }
 
 .envTable td strong {
   color: var(--color-text-primary);
   font-weight: $font-weight-500;
+}
+
+/* 環境名稱照常在空白與中文字之間換行；整串沒有空白、比欄寬還長時才在字中折行，不溢出到下一欄 */
+.envName {
+  overflow-wrap: break-word;
+}
+
+/* 收進名稱底下的機器數、資源合計、版本：每一項不從中間折開，只在項目之間換行 */
+.envFoldedItem {
+  white-space: nowrap;
 }
 
 .envTable td small {

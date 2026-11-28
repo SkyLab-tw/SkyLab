@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.ai.teacher_judge import chat_transport, rubric_normalization
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.template_command_service import (
     DEFAULT_SYSTEM_COMMAND_TIMEOUT_SECONDS,
@@ -124,7 +125,7 @@ def test_validate_python_entrypoint_fills_platform_timeout_when_uncoercible(
 
 
 def test_normalize_rubric_item_accepts_string_timeout_for_python_entrypoint() -> None:
-    normalized = teacher_judge_service._normalize_rubric_items(
+    normalized = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -155,7 +156,7 @@ def test_normalize_rubric_item_accepts_string_timeout_for_python_entrypoint() ->
 
 
 def test_normalize_does_not_infer_python_version_intent_from_text() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -173,7 +174,7 @@ def test_normalize_does_not_infer_python_version_intent_from_text() -> None:
 
 
 def test_normalize_preserves_structured_python_judgement_mode() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -201,7 +202,7 @@ def test_normalize_preserves_structured_python_judgement_mode() -> None:
 
 
 def test_normalize_python_version_with_expected_answer_keeps_ai_judgement() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-1",
@@ -258,7 +259,7 @@ async def test_python_version_lookup_proposal_preserves_model_contract(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -313,7 +314,7 @@ async def test_python_version_requirement_forms_proposal_when_model_marks_it_man
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -339,7 +340,7 @@ async def test_python_version_requirement_forms_proposal_when_model_marks_it_man
 
 
 def test_normalize_rejects_unknown_python_package_command() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-torch",
@@ -366,7 +367,7 @@ def test_normalize_rejects_unknown_python_package_command() -> None:
 
 
 def test_normalize_does_not_replace_python_package_version_requirement() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-torch-version",
@@ -428,7 +429,7 @@ async def test_python_package_status_forms_proposal_instead_of_system_error(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -453,7 +454,7 @@ async def test_python_package_status_forms_proposal_instead_of_system_error(
 
 def test_normalize_preserves_objectively_verifiable_main_py_checkpoint() -> None:
     command = _python_entrypoint_command()
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "title": "main.py 執行結果",
@@ -487,7 +488,7 @@ def test_normalize_preserves_objectively_verifiable_main_py_checkpoint() -> None
 
 
 def test_normalize_marks_missing_python_parameters_as_missing_information() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "title": "main.py 執行結果",
@@ -517,7 +518,7 @@ def test_normalize_marks_missing_python_parameters_as_missing_information() -> N
 
 
 def test_normalize_python_code_quality_stays_manual() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [{"title": "評估 main.py 的架構品質", "detectable": "manual"}],
         template_key="python",
         template_commands=[_python_entrypoint_command()],

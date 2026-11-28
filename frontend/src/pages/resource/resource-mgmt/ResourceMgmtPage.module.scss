@@ -62,13 +62,19 @@
   margin-bottom: $spacing-16;
 }
 
-/* ── 勾選欄（勾選框是共用 SelectCheckbox） ── */
-.checkCell {
-  width: 36px;
-}
-
+/* ── 勾選欄（勾選框是共用 SelectCheckbox；欄寬在 RESOURCE_MGMT_FIT_COLUMNS） ── */
 .trSelected > td {
   @include row-selected;
+}
+
+/* 橫捲時固定的首尾欄（table-pin-edges）蓋掉儲存格自己的底色，改疊列上的 --table-row-bg：
+   勾選列也給同一個色（同 row-selected），hover 時疊在 hover 色上，固定欄才跟同一列其他欄同色 */
+.trSelected {
+  --table-row-bg: color-mix(in srgb, var(--color-primary) 7%, transparent);
+
+  &.trClickable:hover {
+    --table-row-bg: color-mix(in srgb, var(--color-primary) 7%, var(--color-row-hover));
+  }
 }
 
 /* ── Content ── */
@@ -113,23 +119,41 @@
 }
 
 /* 欄寬由 <colgroup> 固定。auto layout 會依全部列的內容重算每一欄，
-   展開群組時新增的機器列（完整 8 欄）會讓整張表的欄寬跳動，
-   所以改成 fixed。每一欄都給定寬度，兩張資源表才會是同一組比例。 */
+   展開群組時新增的機器列（完整欄位）會讓整張表的欄寬跳動，所以改成 fixed。
+   欄寬、min-width 與窄版收欄都由 ResourceMgmtPage.jsx 的 RESOURCE_MGMT_FIT_COLUMNS（useTableFit）決定，
+   收合順序跟「我的資源」相同 */
 .table {
   @include table-base;
   table-layout: fixed;
-  min-width: 1341px;
 }
 
-.colCheck   { width:  36px; }
-.colName    { width: 260px; }
-.colKind    { width: 190px; }
-.colEnv     { width: 160px; }
-.colStatus  { width: 110px; }
-.colIp      { width: 190px; }
-.colExpiry  { width: 150px; }
-.colNode    { width:  85px; }
-.colActions { width: 160px; }
+/* 窄版收起的欄改畫在名稱欄、狀態欄裡的小字行 */
+.foldedLine {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  text-overflow: ellipsis;
+}
+
+.foldedLabel {
+  margin-right: 4px;
+}
+
+/* 收起來源欄時，來源徽章接在名稱後面同一行；名稱加徽章放不下時徽章換到下一行。
+   左右留 10px，徽章不會像黏在名稱上 */
+.nameLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  min-width: 0;
+
+  > * {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+}
 
 .th {
   @include table-th;
@@ -154,8 +178,9 @@
   @include table-tr-clickable;
 }
 
+/* 有底色的列一律用 table-row-bg：底色也給橫捲時的固定欄用，固定欄才會跟同一列同色 */
 .environmentMachineRow {
-  background: var(--color-surface);
+  @include table-row-bg(var(--color-surface));
 }
 
 .environmentToggle {
@@ -198,10 +223,12 @@
   gap: $spacing-8;
 }
 
+/* 欄寬固定（190px）：沒有連字號可斷的長主機名也要在欄內換行，不溢到隔壁欄 */
 .namePrimary {
   font-size: $font-size-14;
   font-weight: $font-weight-500;
   color: var(--color-text-primary);
+  overflow-wrap: anywhere;
 }
 
 .nameSub {

@@ -124,15 +124,18 @@ describe("全站問題與畫面問題要分得開", () => {
 });
 
 describe("頁面導覽與彈出視窗", () => {
-  test("指著這頁要介紹 → 畫面說明（後端回完整導覽）", () => {
-    expect(routeQuestion("介紹這個頁面")).toBe("help");
-    expect(routeQuestion("這頁怎麼用？")).toBe("help");
-    expect(routeQuestion("這裡可以做什麼")).toBe("help");
+  test("指著這頁問整體怎麼用 → 開前端頁面導覽", () => {
+    expect(routeQuestion("介紹這個頁面")).toBe("tour");
+    expect(routeQuestion("這頁怎麼用？")).toBe("tour");
+    expect(routeQuestion("這裡可以做什麼")).toBe("tour");
+  });
+
+  test("問這頁的具體用途 → 畫面說明交給 AI", () => {
     expect(routeQuestion("什麼時候會用到這頁")).toBe("help");
   });
 
   test("在教學頁問這頁怎麼用，不會被帶去建立班級", () => {
-    expect(routeQuestion("班級管理這頁怎麼用")).toBe("help");
+    expect(routeQuestion("班級管理這頁怎麼用")).toBe("tour");
   });
 
   test("問跳出來的視窗 → 畫面說明", () => {

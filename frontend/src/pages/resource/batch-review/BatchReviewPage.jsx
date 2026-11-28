@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import styles from "./BatchReviewPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
+import Collapse from "../../../components/Collapse/Collapse";
 import { BatchProvisionService } from "../../../services/batchProvision";
 import {
   useAllBatchProvisionQuery,
@@ -15,6 +16,8 @@ import { useLoadError } from "../../../hooks/useQueryLoadState";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import DataToolbar from "../../../components/DataToolbar/DataToolbar";
+import ToolbarSearch from "../../../components/DataToolbar/ToolbarSearch";
 import { formatShortDateTime } from "../../../utils/formatDate";
 
 /* 這些 hook 的回傳值會進 useMemo 的相依陣列，
@@ -397,9 +400,9 @@ export default function BatchReviewPage() {
         title={t("BatchReviewPage.pageTitle")}
       />
 
-      <div className={styles.tabsRow}>
+      {/* 跟一般審核同一套工具列：分段切換與搜尋同為 36px */}
+      <DataToolbar>
         <SegmentedControl
-          className={styles.tabsControl}
           options={tabs.map(({ key, label }) => ({
             value: key,
             label,
@@ -411,17 +414,13 @@ export default function BatchReviewPage() {
           ariaLabel={t("BatchReviewPage.tabsAriaLabel")}
         />
 
-        <div className={styles.search} data-guide="batch-review-search">
-          <MIcon name="search" size={16} />
-          <input
-            type="text"
-            className={styles.searchInput}
-            placeholder={t("BatchReviewPage.searchPlaceholder")}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-      </div>
+        <ToolbarSearch
+          value={query}
+          onChange={setQuery}
+          placeholder={t("BatchReviewPage.searchPlaceholder")}
+          data-guide="batch-review-search"
+        />
+      </DataToolbar>
 
       <div className={styles.content}>
         <div className={styles.reviewGrid}>
@@ -544,18 +543,17 @@ export default function BatchReviewPage() {
                         </span>
                       )}
                       {Array.isArray(preview) && (
-                        <div ref={recurListRef} className={`${styles.recurCollapse} ${previewOpen ? styles.recurCollapseOpen : ""}`}>
-                          <div className={styles.recurCollapseInner}>
-                            <ul className={styles.recurWindows}>
-                              {preview.length === 0 && <li>{t("BatchReviewPage.noScheduledWindows")}</li>}
-                              {preview.map(([start, end]) => (
-                                <li key={start}>
-                                  {shortTime(start, t)} ～ {shortTime(end, t)}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
+                        /* gap 對應 .reasonBox 的 8px：收合時不多留一段空白 */
+                        <Collapse ref={recurListRef} open={previewOpen} gap={8}>
+                          <ul className={styles.recurWindows}>
+                            {preview.length === 0 && <li>{t("BatchReviewPage.noScheduledWindows")}</li>}
+                            {preview.map(([start, end]) => (
+                              <li key={start}>
+                                {shortTime(start, t)} ～ {shortTime(end, t)}
+                              </li>
+                            ))}
+                          </ul>
+                        </Collapse>
                       )}
                     </div>
                   )}

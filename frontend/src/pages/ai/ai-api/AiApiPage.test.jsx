@@ -115,7 +115,7 @@ describe("AiApiPage my usage", () => {
 
     await renderPage();
     await flush();
-    const usageTab = host.querySelector('[data-group="AiApiPage.tabsAriaLabel"] [data-value="usage"]');
+    const usageTab = host.querySelector('[role="tablist"][aria-label="AiApiPage.tabsAriaLabel"] [data-guide-tab="usage"]');
     await act(async () => { usageTab.click(); });
     await flush();
     const sevenDays = host.querySelector('[data-group="AiApiPage.usageRangeLabel"] [data-value="7d"]');
@@ -157,7 +157,7 @@ describe("AiApiPage my usage", () => {
 
       await renderPage();
       await flush();
-      const usageTab = host.querySelector('[data-group="AiApiPage.tabsAriaLabel"] [data-value="usage"]');
+      const usageTab = host.querySelector('[role="tablist"][aria-label="AiApiPage.tabsAriaLabel"] [data-guide-tab="usage"]');
       await act(async () => { usageTab.click(); });
       await flush();
       const summary = host.querySelector('[data-guide="ai-usage-records"] [aria-expanded="false"]');
@@ -183,7 +183,7 @@ describe("AiApiPage my usage", () => {
       });
       await renderPage();
       await flush();
-      const usageTab = host.querySelector('[data-group="AiApiPage.tabsAriaLabel"] [data-value="usage"]');
+      const usageTab = host.querySelector('[role="tablist"][aria-label="AiApiPage.tabsAriaLabel"] [data-guide-tab="usage"]');
       await act(async () => { usageTab.click(); });
       await flush();
 

@@ -1,0 +1,206 @@
+@use "../../assets/styles/variables" as *;
+
+$tab-padding-x: 12px;
+$tab-active-weight: 600;
+
+/* 分頁：只有一種樣子。圖示放進 28px 圓角方塊，選中的方塊換主色實心白圖示、字加粗（方塊就是選中記號，不畫字下指示條）；
+   字 16px、列高 44px，份量壓得過旁邊的篩選。
+   整列往左拉一個內距，第一個方塊對齊容器左緣（頁面標題、卡片內容）；hover 淡底會比內容左緣多出這段內距，屬預期。
+   放不下時把排不下的收進最右邊的「更多」（Tabs.jsx 量寬度決定），連一個加「更多」都放不下才橫向捲動（不顯示捲軸） */
+.tabs {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: $spacing-4;
+  max-width: calc(100% + #{$tab-padding-x});
+  margin-left: -$tab-padding-x;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* 真正的 tablist：「更多」是開清單的按鈕、不是分頁，放在 tablist 外面 */
+.tabList {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  gap: $spacing-4;
+}
+
+/* 「更多」：外觀跟沒選中的分頁一樣（16px、44px、hover 淡底），字＋向下箭頭 */
+.moreBtn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: $spacing-4;
+  min-height: 44px;
+  padding: 0 $spacing-8 0 $tab-padding-x;
+  border: 0;
+  border-radius: $radius-8;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: $font-size-16;
+  font-weight: $font-weight-500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color $transition-base, background $transition-base;
+
+  &:hover,
+  &[aria-expanded="true"] {
+    color: var(--color-text-primary);
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+}
+
+/* 全部排開時只用來量「更多」要佔多寬，不顯示、不佔位 */
+.moreMeasure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 「更多」清單裡的一列：小一號的圖示方塊＋名稱＋徽章 */
+.menuOption {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-8;
+  min-width: 0;
+}
+
+.menuOptionText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.iconBoxSmall {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: $radius-8;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-8;
+  min-height: 44px;
+  padding: 0 $tab-padding-x;
+  border: 0;
+  border-radius: $radius-8;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: $font-size-16;
+  font-weight: $font-weight-500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color $transition-base, background $transition-base;
+
+  &:hover {
+    color: var(--color-text-primary);
+    background: var(--color-hover);
+  }
+
+  &:hover .iconBox {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+}
+
+/* 選中：字色深一階＋加粗，圖示方塊換主色實心 */
+.tabActive {
+  color: var(--color-text-primary);
+  font-weight: $tab-active-weight;
+}
+
+.tabActive .iconBox,
+.tabActive:hover .iconBox {
+  background: var(--color-primary);
+  color: var(--color-text-on-primary);
+}
+
+.iconBox {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: $radius-8;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-text-secondary);
+  transition: background $transition-base, color $transition-base;
+}
+
+/* 標籤寬度＝加粗後的寬度：::after 用 data-label 排一份隱形的粗體字（第二列、高度 0），
+   格線欄寬取兩者較寬的，選中變粗時不會把後面的分頁往右推 */
+.label {
+  display: inline-grid;
+  min-width: 0;
+
+  &::after {
+    content: attr(data-label);
+    content: attr(data-label) / "";
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    font-weight: $tab-active-weight;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+  }
+}
+
+.labelText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* 數量徽章：中性淡底；選中的分頁換主色淡底主色字（徽章不加外框） */
+.badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: $radius-pill;
+  line-height: 18px;
+  background: var(--color-hover);
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  /* 固定字重：不跟著選中分頁加粗，數字變寬會把後面的分頁推開 */
+  font-weight: $font-weight-500;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.tabActive .badge {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .iconBox,
+  .moreBtn {
+    transition: none;
+  }
+}

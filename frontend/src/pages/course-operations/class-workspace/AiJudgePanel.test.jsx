@@ -872,7 +872,7 @@ describe("RubricTable", () => {
     expect(versionHtml).not.toContain("缺少資訊");
   });
 
-  test("展開後用白話列出檢查機器、步驟、通過條件與判定方式", async () => {
+  test("展開後用白話列出檢查機器、步驟與通過條件，判定方式交給徽章", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -916,8 +916,9 @@ describe("RubricTable", () => {
     expect(container.textContent).toContain("檢查機器");
     expect(container.textContent).toContain("n8n（P1）");
     expect(container.textContent).toContain("workflow · LXC · 映像：Ubuntu 24.04");
-    expect(container.textContent).toContain("系統自動判定");
-    expect(container.textContent).toContain("檢查步驟");
+    // 右上徽章已寫「可自動檢查」，展開後不再多一行「系統自動判定」
+    expect(container.textContent).not.toContain("系統自動判定");
+    expect(container.querySelector('ol[aria-label="檢查步驟"]')).toBeTruthy();
     expect(container.textContent).toContain("執行指令");
     expect(container.textContent).toContain("python3 /home/student/project/main.py");
     expect(container.textContent).toContain("通過條件：結束代碼為 0");
@@ -1275,9 +1276,57 @@ describe("proposalToolCallLines", () => {
     };
 
     expect(proposalToolCallLines(message)).toEqual([
-      { icon: "check_circle", text: "已建立提案：檢查 Python 版本" },
-      { icon: "check_circle", text: "已送出修改提案：既有 Port 檢查" },
+      { icon: "check_circle", text: "已建立 1 項提案" },
+      { icon: "check_circle", text: "已送出 1 項修改提案" },
       { icon: "cancel", text: "提案未建立：未讀取項目" },
+    ]);
+  });
+
+  test("多個成功新增合併成一行，修改另計，失敗維持逐項", () => {
+    const staged = (title, operation = "add") => ({
+      tool: operation === "update" ? "edit_checklist_item" : "create_checklist_item",
+      status: "staged",
+      operation,
+      title,
+    });
+    const message = {
+      metadata_json: {
+        tool_calls: [
+          staged("檢查 A"),
+          staged("檢查 B"),
+          staged("檢查 C"),
+          staged("檢查 D"),
+          staged("檢查 E"),
+          staged("既有 F", "update"),
+          staged("既有 G", "update"),
+          { tool: "create_checklist_item", status: "rejected", title: "缺路徑項目" },
+          { tool: "edit_checklist_item", status: "no_change", title: "Port 檢查" },
+        ],
+      },
+    };
+
+    expect(proposalToolCallLines(message)).toEqual([
+      { icon: "check_circle", text: "已建立 5 項提案" },
+      { icon: "check_circle", text: "已送出 2 項修改提案" },
+      { icon: "cancel", text: "提案未建立：缺路徑項目" },
+      { icon: "info", text: "內容未變更，未建立提案：Port 檢查" },
+    ]);
+  });
+
+  test("同標題重試只算一次，已 resolved 的 staged 不計數", () => {
+    const message = {
+      metadata_json: {
+        tool_calls: [
+          { status: "staged", operation: "add", title: "檢查 A" },
+          { status: "staged", operation: "add", title: "檢查 A" },
+          { status: "staged", operation: "add", title: "檢查 B", resolved: true },
+          { status: "staged", operation: "add", title: "檢查 C" },
+        ],
+      },
+    };
+
+    expect(proposalToolCallLines(message)).toEqual([
+      { icon: "check_circle", text: "已建立 2 項提案" },
     ]);
   });
 
@@ -1293,7 +1342,7 @@ describe("proposalToolCallLines", () => {
       { status: "error", title: "套件檢查" },
       { status: "error", title: "套件檢查" },
     ] } })).toEqual([
-      { icon: "check_circle", text: "已送出修改提案：Python 版本" },
+      { icon: "check_circle", text: "已送出 1 項修改提案" },
       { icon: "cancel", text: "提案未建立：套件檢查" },
     ]);
   });
@@ -1709,7 +1758,7 @@ describe("teacher review run-once（整組檢查點）", () => {
       expect(container.textContent).not.toContain(i18n.t("AiJudgePanel.executionEnvironmentHint", { ns: "teaching" }));
       expect(container.textContent).not.toContain("此檢查點沒有回傳可顯示的結果。");
       expect(container.textContent).not.toContain("腳本沒有回傳可顯示的檢查項目。");
-      expect([...container.querySelectorAll("summary > span:first-child")].filter((element) => element.textContent === i18n.t("AiJudgePanel.timingTitle", { ns: "teaching" }))).toHaveLength(1);
+      expect([...container.querySelectorAll("button[aria-expanded] > span:first-child")].filter((element) => element.textContent === i18n.t("AiJudgePanel.timingTitle", { ns: "teaching" }))).toHaveLength(1);
     } finally {
       await act(async () => root.unmount());
       container.remove();

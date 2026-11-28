@@ -26,6 +26,7 @@ Administrators only. Other roles do not see the page in the sidebar.
 - **Call Count**: total calls in the period. The line below compares it with the previous period of the same length, as a percentage.
 - **Total Tokens**: tokens used in the selected period only.
 - **Error rate**: share of failed calls. The line below shows the change from the previous period in percentage points (pp); a rise is shown in red.
+- **Active users**: number of users with calls in the selected period.
 
 ![Read the summary metrics](/manual-shots/en/ai-monitoring/s02.webp)
 
@@ -70,7 +71,7 @@ A model that only appears in past usage and is not known to the gateway shows "â
 3. Type in the search box to filter by user, model, call type or request ID.
 4. Read the row: **Time** (with the start of the request ID), **User**, **Model** (shown as "requested â†’ answered" when the upstream answered with a different model), **Type**, **Input** and **Output** tokens, **Duration**, **First token** (time until the first token arrived), **E2E output rate**, **Token evidence** and **Status**.
 
-When **Token evidence** says **Missing upstream**, the model did not report its token usage: tokens are recorded as 0 and no output rate is computed.
+**Token evidence** shows **success** for successful calls. When it says **Missing upstream**, the model did not report its token usage: tokens are recorded as 0 and no output rate is computed. Failed calls show the logged error code instead, such as **429 rate_limit**, **HTTP 404**, **timeout** or **server_busy**; hover it to see the original error message.
 
 ![Inspect individual calls (numbers match the steps above)](/manual-shots/en/ai-monitoring/s06.webp)
 
@@ -92,7 +93,6 @@ Click **View details in Grafana**. The SkyLab AI dashboard opens in a new tab, a
 
 | Item | Meaning | Notes |
 | --- | --- | --- |
-| Successful calls / Failed calls / Active users | Totals for the selected period | Shown above the detail tabs |
 | Detail tabs | **Models**, **API Key Calls**, **Template Calls**, **User Usage** | The number on each tab is its row count |
 | Status filter | **All**, **Success**, **Failed** | Only on **API Key Calls** |
 | Search | Filters the current tab | Placeholder changes per tab |

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createTestQueryClient, withQueryClient } from "../../../queries/testing";
 import AiApiKeysPage from "./AiApiKeysPage";
 
@@ -45,6 +45,15 @@ function page(name, status) {
 
 let host;
 let root;
+const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+
+/* happy-dom 沒有版面：指定表格區（data-guide="ai-keys-admin-table"）的寬度，useTableFit 才會收欄 */
+function setTableWidth(width) {
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get() { return this.getAttribute("data-guide") === "ai-keys-admin-table" ? width : 0; },
+  });
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -59,6 +68,8 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   vi.useRealTimers();
+  if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+  else delete HTMLElement.prototype.clientWidth;
 });
 
 /* setTimeout 是假的（搜尋框 debounce）：TanStack Query 的通知排在 setTimeout(0)，要推進假時鐘 0ms 才會送出 */
@@ -131,4 +142,79 @@ test("換分頁後這組條件載入失敗，背景重抓期間維持錯誤畫�
   await flush();
   expect(host.textContent).toContain("Error.retry");
   expect(mocks.toast.error).toHaveBeenCalledTimes(1);
+});
+
+describe("窄版收欄", () => {
+  const detailed = {
+    id: "k1",
+    api_key_name: "lab-key",
+    status: "active",
+    user_full_name: "王小明",
+    user_email: "a@campus.edu.tw",
+    request_purpose: "期末專題",
+    last_used_at: "2026-11-17T06:30:00Z",
+    created_at: "2026-11-01T06:30:00Z",
+  };
+  const headers = () => [...host.querySelectorAll("thead th")].map((th) => th.textContent);
+  const cells = () => [...host.querySelectorAll("tbody td")].map((td) => td.textContent);
+
+  async function renderAt(width, item = detailed) {
+    mocks.listAllCredentials.mockResolvedValue({ data: [item], count: 1 });
+    setTableWidth(width);
+    await act(async () => root.render(withQueryClient(<AiApiKeysPage />, createTestQueryClient())));
+    await flush();
+  }
+
+  test("1366 筆電（約 929px）：建立日期接在活動底下，擁有者併進名稱底下的 Email 那一行", async () => {
+    await renderAt(929);
+
+    expect(headers()).toEqual([
+      "AiApiKeysPage.colName", "AiApiKeysPage.detailPurpose", "AiApiKeysPage.detailActivity",
+      "AiApiKeysPage.colStatus", "AiApiKeysPage.colActions",
+    ]);
+    const [name, , activity, status] = cells();
+    expect(name).toContain("王小明 · a@campus.edu.tw");
+    expect(activity).toContain("AiApiKeysPage.colCreatedAt");
+    expect(status).not.toContain("AiApiKeysPage.colCreatedAt");
+    expect(host.querySelector("table").hasAttribute("data-overflow")).toBe(false);
+  });
+
+  test("1100 寬視窗（約 678px）：申請用途也收進名稱底下，時間還在活動欄", async () => {
+    await renderAt(678);
+
+    expect(headers()).toEqual([
+      "AiApiKeysPage.colName", "AiApiKeysPage.detailActivity", "AiApiKeysPage.colStatus", "AiApiKeysPage.colActions",
+    ]);
+    const name = host.querySelector("tbody td");
+    expect(name.textContent).toContain("期末專題");
+    expect(name.querySelector('[title="期末專題"]')).not.toBeNull();
+  });
+
+  test("開著 AI 助手（約 567px）：只剩金鑰、狀態、操作，兩個時間依先後排在狀態底下，導覽錨點跟著搬", async () => {
+    await renderAt(567);
+
+    expect(headers()).toEqual(["AiApiKeysPage.colName", "AiApiKeysPage.colStatus", "AiApiKeysPage.colActions"]);
+    const statusCell = host.querySelectorAll("tbody td")[1];
+    const status = statusCell.textContent;
+    expect(status).toContain("AiApiKeysPage.statusActive");
+    expect(status.indexOf("AiApiKeysPage.colCreatedAt")).toBeGreaterThan(-1);
+    expect(status.indexOf("AiApiKeysPage.detailActivity")).toBeGreaterThan(status.indexOf("AiApiKeysPage.colCreatedAt"));
+    expect(statusCell.querySelector('[data-guide="ai-keys-admin-activity"]')).not.toBeNull();
+    expect(host.querySelector("table").hasAttribute("data-overflow")).toBe(false);
+  });
+
+  test("沒用過的金鑰收進狀態底下只寫「尚未使用」，不加欄名", async () => {
+    await renderAt(567, { ...detailed, last_used_at: null });
+
+    const status = cells()[1];
+    expect(status).toContain("AiApiKeysPage.detailNeverUsed");
+    expect(status).not.toContain("AiApiKeysPage.detailActivity");
+  });
+
+  test("手機（約 448px）收到底仍放不下：橫捲並固定第一欄", async () => {
+    await renderAt(448);
+
+    expect(headers()).toEqual(["AiApiKeysPage.colName", "AiApiKeysPage.colStatus", "AiApiKeysPage.colActions"]);
+    expect(host.querySelector("table").getAttribute("data-overflow")).toBe("start");
+  });
 });

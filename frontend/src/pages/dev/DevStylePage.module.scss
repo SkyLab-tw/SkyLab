@@ -446,7 +446,8 @@
 .chatAttach       { @include chat-composer-btn($primary: false); }
 .chatSend         { @include chat-composer-btn; }
 
-/* 釘選鈕（比照側邊欄導覽）：未釘選滑過該列才浮出、已釘選常駐傾斜釘子無底色 */
+/* 釘選鈕（比照側邊欄導覽）：未釘選滑過該列才浮出（只給能滑過的裝置；觸控裝置不放未釘選的釘子）、
+   已釘選常駐傾斜釘子無底色 */
 .pinRow {
   display: flex;
   align-items: center;
@@ -465,7 +466,11 @@
   transition: opacity $transition-base, background $transition-base, color $transition-base;
 
   &:not(.pinBtnPinned) {
-    opacity: 0;
+    @include reveal-on-hover;
+
+    @media (hover: none) {
+      display: none;
+    }
   }
 }
 
@@ -612,12 +617,6 @@
 .badge_pending { background: color-mix(in srgb, var(--color-pending) 12%, transparent); color: var(--color-pending); }
 .badge_danger  { background: color-mix(in srgb, var(--color-danger)  12%, transparent); color: var(--color-danger); }
 .badge_muted   { background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent); color: var(--color-status-neutral); }
-
-/* ── segment：超過 4 段的橫向捲動 ── */
-.segmentScroll {
-  max-width: 100%;
-  overflow-x: auto;
-}
 
 /* ── dropzone ── */
 .dropRow {
@@ -897,6 +896,25 @@
   width: 220px;
   max-width: 100%;
   padding: $spacing-8;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border-radius: $radius-12;
+}
+
+/* 分頁列窄容器示範：360px（手機、開著 AI 助手的清單），頁碼收成「5 / 16」 */
+.paginationNarrowBox {
+  width: 360px;
+  max-width: 100%;
+  padding: 0 12px 12px;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border-radius: $radius-12;
+}
+
+/* 分頁「更多」示範：固定 400px 寬，不用拉窄視窗就看得到收進「更多」；
+   左內距留 16px，分頁整列往左拉的 12px 才不會貼到虛線框 */
+.tabsNarrowBox {
+  width: 400px;
+  max-width: 100%;
+  padding: $spacing-8 $spacing-8 $spacing-8 $spacing-16;
   border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
   border-radius: $radius-12;
 }

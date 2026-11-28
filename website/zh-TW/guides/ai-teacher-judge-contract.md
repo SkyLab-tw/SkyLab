@@ -355,7 +355,7 @@ SSH 維持每 run 最多 50 台、單一 backend process 共用最多 200 worker
 
 | 發現 | 目前證據 | 對後續修改的要求 |
 | --- | --- | --- |
-| 全表機器驗證不等於全表 AI 語意審查 | `_run_proposal_tool_loop` 強制第一次 list，之後 auto；`test_refine_tool_loop.py` 明確容許 list 後直接說明 | 若產品要求每項均由 AI 深讀，需另補可驗證的完整內容覆蓋機制；本文件不宣稱目前已有 |
+| 全表機器驗證不等於全表 AI 語意審查 | `run_proposal_tool_loop`（[proposal_tool_loop.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/proposal_tool_loop.py)）強制第一次 list，之後 auto；`test_refine_tool_loop.py` 明確容許 list 後直接說明 | 若產品要求每項均由 AI 深讀，需另補可驗證的完整內容覆蓋機制；本文件不宣稱目前已有 |
 | 製作 API 不要求 Finalizer 完成證明 | `_session_rubric_for_script_set` 重讀保存內容、檢查版本與 blockers，沒有驗證同 revision 必須有先前 Finalizer 成功紀錄；revision 在 API schema 亦可省略 | 正常 UI 已維持完整順序，但不能把 UI 流程說成所有 API client 都被強制走過 AI 核對 |
 | 絕對程式路徑不能保證程式的工作目錄依賴 | 編譯器不設定 cwd；遠端從受管暫存目錄啟動 script.py | 需要專案目錄才可執行的作業不能被靜默判為資訊已足夠；不要重新偷偷加入 cwd 相容層 |
 | 程式執行不是沙箱 | 允許指定語言的學生原始碼，executor 使用 root SSH | 不把靜態政策當作學生程式的副作用隔離；進一步隔離屬另一次明確的安全設計工作 |
@@ -371,8 +371,8 @@ SSH 維持每 run 最多 50 台、單一 backend process 共用最多 200 worker
 | --- | --- |
 | 前端提案／接受／製作 | [AiJudgePanel.jsx](https://github.com/SkyLab-tw/SkyLab/blob/main/frontend/src/pages/course-operations/class-workspace/AiJudgePanel.jsx)：`ChatPanel`、`applyPendingProposal`、`handleSaveAndCreate` |
 | 前端 API 與潤飾指令 | [aiJudge.js](https://github.com/SkyLab-tw/SkyLab/blob/main/frontend/src/services/aiJudge.js)：`sendSessionMessage`、`updateFileAnalysis`、`createSessionScriptSet` |
-| 對話 HTTP 與交易 | [teacher_judge_sessions.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/api/routes/teacher_judge_sessions.py)：版本、session、refine readiness、script set 入口 |
-| AI 意圖與工具回合 | [prompt.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/prompt.py)、[service.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/service.py)：read-before-edit、staged proposals、缺口與工具修正 |
+| 對話 HTTP 與交易 | [teacher_judge_sessions.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/api/routes/teacher_judge_sessions.py)：endpoint、模型呼叫與逾時、例外對應、script set 入口；[session_chat_service.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/session_chat_service.py)：訊息受理（鎖定、版本檢查）、讀取脈絡、保存回覆與失敗回收 |
+| AI 意圖與工具回合 | [prompt.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/prompt.py)、[chat_prompt.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/chat_prompt.py)、[service.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/service.py)、[proposal_tool_loop.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/proposal_tool_loop.py)、[proposal_dispatch.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/proposal_dispatch.py)、[attachment_itemwise.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/attachment_itemwise.py)：read-before-edit、staged proposals、缺口與工具修正、附件逐項核查 |
 | 欄位契約 | [schemas.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/schemas.py)、[check_plan_contract.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/check_plan_contract.py)：typed schema、新寫入、位置矛盾、舊資料邊界 |
 | 全表製作就緒 | [session_chat_service.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/session_chat_service.py)、[automation_support.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/automation_support.py)：candidate 合併後的 blockers 與 script_ready |
 | 保存與版本 | [file_service.py](https://github.com/SkyLab-tw/SkyLab/blob/main/backend/app/ai/teacher_judge/file_service.py)：`TeacherJudgeFile.analysis_json`、`analysis_revision`、資料庫條件更新 |

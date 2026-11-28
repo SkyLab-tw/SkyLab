@@ -10,7 +10,9 @@ from fastapi import HTTPException
 from sqlmodel import Session
 
 from app.ai.teacher_judge import (
+    attachment_itemwise,
     attachment_service,
+    chat_transport,
     file_service,
     script_artifact_service,
     script_run_service,
@@ -152,7 +154,7 @@ def test_stale_session_cannot_overwrite_a_newer_saved_revision(monkeypatch, expe
 
 
 def test_attachment_extraction_does_not_silently_discard_excess_rows():
-    sources, error = service._parse_attachment_extraction(json.dumps({
+    sources, error = attachment_itemwise._parse_attachment_extraction(json.dumps({
         "items": [{"title": f"Requirement {index}"} for index in range(51)],
     }))
     assert sources == []
@@ -176,13 +178,13 @@ def test_oversized_attachment_is_not_saved_as_a_partial_document(tmp_path, monke
 
 @pytest.mark.parametrize("row", [None, {}, {"title": "Requirement", "description": "x" * 501}])
 def test_malformed_or_overlong_source_row_is_not_silently_omitted(row):
-    sources, error = service._parse_attachment_extraction(json.dumps({"items": [{"title": "First"}, row]}))
+    sources, error = attachment_itemwise._parse_attachment_extraction(json.dumps({"items": [{"title": "First"}, row]}))
     assert sources == []
     assert error
 
 
 def test_multiple_proposals_for_one_source_are_reported_as_unresolved():
-    result = service._itemwise_result_from_chat(
+    result = attachment_itemwise._itemwise_result_from_chat(
         {"source_index": 1, "source_label": "第 1 列", "title": "Two requirements"},
         service.TeacherJudgeChatResult(reply="ready", proposal=[{"id": "a"}, {"id": "b"}], metrics={}),
     )
@@ -204,9 +206,9 @@ async def test_teacher_instruction_reaches_attachment_extraction_and_each_row(mo
         return service.TeacherJudgeChatResult(reply="需要路徑", proposal=None, metrics={}, proposal_status="needs_information")
 
     patch_teacher_judge_vllm_settings(monkeypatch)
-    monkeypatch.setattr(service, "_call_vllm_message", extract)
-    monkeypatch.setattr(service, "analyze_requirement_item", analyze)
-    result = await service.analyze_attachments_itemwise(
+    monkeypatch.setattr(chat_transport, "call_vllm_message", extract)
+    monkeypatch.setattr(attachment_itemwise, "analyze_requirement_item", analyze)
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         teacher_message=instruction, rubric_context="{}", attachment_context="Old document",
     )
     assert captured == [instruction]
@@ -224,9 +226,9 @@ async def test_attachment_rows_cannot_overwrite_each_others_edits(monkeypatch):
         return service.TeacherJudgeChatResult(reply="ready", proposal=[operation], metrics={})
 
     patch_teacher_judge_vllm_settings(monkeypatch)
-    monkeypatch.setattr(service, "extract_attachment_requirements", extract)
-    monkeypatch.setattr(service, "analyze_requirement_item", analyze)
-    result = await service.analyze_attachments_itemwise(
+    monkeypatch.setattr(attachment_itemwise, "extract_attachment_requirements", extract)
+    monkeypatch.setattr(attachment_itemwise, "analyze_requirement_item", analyze)
+    result = await attachment_itemwise.analyze_attachments_itemwise(
         rubric_context=json.dumps({"items": [saved]}), attachment_context="Two rows changing the same item",
     )
     assert result.proposal is None

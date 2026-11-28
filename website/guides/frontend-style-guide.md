@@ -99,7 +99,8 @@ Always look up and reuse what is already defined in `_variables.scss` (spacing, 
 | `--color-divider` | Divider line |
 | `--color-hover` | Hover background |
 | `--color-row-hover` | Table row hover background (darker than `--color-hover` so it does not match the header colour) |
-| `--color-overlay` | Modal backdrop |
+| `--color-track` | Track of progress bars and meters (the unfilled part): 28% of the muted text colour, visible in light, dark and custom primary colours. Do not use `--color-hover` as a track: with a custom primary colour the light hover can equal the page background, and the track all but disappears on a card |
+| `--color-overlay` | Modal backdrop: in light mode it is derived from the deep shadow colour (darkened, then 25%), so it follows a custom primary colour; dark mode stays black at 60%. Do not hard-code a tinted backdrop: under a warm theme the glass dialog would show a blue cast |
 
 #### Shadows
 | Variable | Purpose |
@@ -246,7 +247,7 @@ $z-ai-assistant: 2000   $z-screen-dialog: 2100   // see z-index layers
 @include glass-surface($shadow: var(--shadow-sm));    // different shadow
 @include glass-surface($shadow: none);                // no box-shadow emitted
 @include glass-surface(8px, 1.2);                     // fixed filter parameters (ignores style switching; special cases only)
-@include popover-glass;                               // popups from the sidebar: glass-surface + shadow-lg, heavier on liquid / dark liquid
+@include popover-glass;                               // floating menus and sidebar popups: glass-surface + shadow-lg, heavier on liquid / dark liquid
 ```
 
 The backdrop-filter of a glass surface always goes through `var(--glass-backdrop-filter)`
@@ -354,9 +355,10 @@ The standard form:
 
 - A clickable card's hover only gets a light tint (`background: var(--color-hover)`) or a shadow / lift, with a `transition` for fade-in and fade-out; **do not change the border colour** — a blue border is reserved for the "selected / current" state (such as an active tab or the current step of a flow)
 - "Selected / current" comes in two tiers; do not mix them:
-  - **Navigation** (sidebar, class tabs, `SegmentedControl`): solid primary with white text. One per level, short labels
+  - **Navigation** (sidebar, the selected segment of a `SegmentedControl`): solid primary with white text. One per level, short labels
+  - **Tabs** (`Tabs`): the selected icon square turns solid primary and the label goes bold, with no fill across the whole tab. Deliberately unlike a fully filled segmented control, so "switch content" and "filter" can sit on the same row and still be told apart
   - **Current item of a content list** (the row in a master–detail list whose details are shown on the right, such as the week list in AI Check): `@include item-current;` — an 8% primary tint plus a 3px primary bar on the left, **no border**. The tint alone is indistinguishable from the hover tint, so the bar is the marker; it is deliberately one step lighter than navigation so it does not compete with the page's primary button. Covers the AI Check week list, the request review list and the environment picked when setting up a class; when the row itself is a white card pass `item-current(var(--color-surface))`
-- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons
+- Two or more short options side by side where exactly one applies always use `SegmentedControl` (such as scheduled / immediate on the request form, or switching machines in class monitoring); do not hand-write a row of buttons. Tabs that switch a whole block of content use `Tabs` instead (see "Tabs"). Its width follows its content, so it doesn't stretch inside a column container (leaving a long empty track); use `fullWidth` when it should fill the row, and pages no longer need `align-self: flex-start`. When it doesn't fit, it collapses into a dropdown (one button showing the current option, opening the shared `ListboxPopover`) and expands back into segments once there is room, so no label gets cut off; pages don't add `overflow-x`
 - Option buttons that carry a swatch, a description or their own border (appearance settings, template visibility): the selected one uses `@include option-selected;` — primary border, 8% tint, primary text. These are options, not the current item of a list, so a border is fine
 - Expanded is not selected: an expanded card only gets a deeper shadow (`var(--shadow-md)`) and keeps its border colour; an info row that is the only item and cannot be chosen gets no selected style
 - Do not build the tint with a `linear-gradient` layer: gradients cannot transition, so the hover colour would jump instantly
@@ -440,6 +442,24 @@ Buttons always use the button mixin family (six variants) from `_mixins.scss`; *
   but a danger modifier **must show red text before hover**, and its hover must also include `:not(:disabled)`
 - Danger items inside dropdown menus (PowerMenu, the ⋮ ActionMenu in page headers) are menu styles and are not among these six variants
 
+#### Controls revealed on hover
+
+Controls that stay invisible until you hover their row — a row's delete button, the sidebar pin button, the connection handles on topology nodes —
+are always hidden with `@include reveal-on-hover`; the caller still writes when they appear (`opacity: 1` on the parent's `:hover` / `:focus-within`):
+
+```scss
+.removeBtn { @include btn-icon($danger: true); @include reveal-on-hover; }
+.row:hover .removeBtn,
+.row:focus-within .removeBtn { opacity: 1; }
+```
+
+- The mixin only hides the control on devices that can hover (mouse, trackpad: `(hover: hover)`); touch devices can't hover, so it is always shown there
+- **Don't write `opacity: 0` and bring it back to 1 on `:hover`**: on iOS (iPhone / iPad), if a tap's hover makes something hidden appear,
+  the first tap only counts as a hover and a second tap is needed to click — the whole row, node or sidebar item then needs two taps
+- Hover effects driven by JS state follow the same rule (for example the label that appears when you hover a topology connection): use `onPointerEnter` and don't set the hover state when `pointerType` is `touch`
+- A control that touch devices don't need can be removed there entirely (`@media (hover: none) { display: none; }`), such as unpinned pins in the sidebar:
+  pinning new items is left to devices with a mouse, while pinned items still show their pin and a tap unpins them
+
 #### Chat panels (AI assistant, checklist assistant)
 
 Both chat panels share one mixin family for the header icon buttons, the rounded composer and its send / attach buttons; do not copy them per page:
@@ -475,6 +495,12 @@ Form fields always use the form mixin family from `_mixins.scss`; **do not inven
 > The height is computed the same way as for buttons: site-wide line-height 1.6 (14px text → 22.4) + vertical padding 6×2 + border 1×2 ≈ 36px.
 > Writing 8px padding makes it 40px; a search box whose border sits on the container uses `min-height: 36px`, not 38px.
 > The shared SegmentedControl is also fixed at 36px, so it sits on the same row as fields and buttons without extra height locking.
+
+- Optional settings at the bottom of a form (advanced settings) go in the shared `components/Disclosure`: a full-width clickable row with a white background and hairline border, 14px / 500, an optional primary icon on the left, an optional muted note on the right (such as "Optional") and a chevron that turns half a circle when open. The content sits 16px below the row, aligned with the fields above (not wrapped in the box), and the built-in `Collapse` animates its height and fade when it opens or closes. Don't use the browser's native ▶ marker or a hand-written `<details>` (its content just appears and disappears, with no animation); use `className` for layout (such as `grid-column: 1 / -1`) and `bodyClassName` for the field grid. Used by the class setup wizard and the first-run setup wizard
+- Inline disclosures for supplementary details (execution evidence, error details, tool history, limits and error codes) use the same component with `variant="inline"`: just "text + down chevron", no box, weight 500, font size inherited from the outer element (set 12 / 14px with `className`), muted until hovered or opened, when it turns primary and the chevron turns half a circle. The content follows directly and sets its own spacing. Used by AI Check, the AI API docs, the AI chat tool history and the crash screen. Collapsible card headers (class info card, check groups) are structured differently and don't use this component
+- When the expanded content doesn't follow the toggle (for example "Show inactive keys" merges rows into the table above, so it can't sit inside the disclosure), use the button version `components/Disclosure/DisclosureToggle` (`open` + `onToggle`), which looks the same as the inline disclosure. Don't use a ghost button for a "show more / inactive" toggle that sits on the page background: the ghost tints are meant for white cards, and on low-saturation themes (Milk Tea and similar) the page background is nearly the same color as the ghost hover, so the button seems to vanish on hover
+- A region whose open state you control yourself (a card collapsed from its title row, a list opened by a "Preview" chip) always goes in `components/Collapse/Collapse` (`open`): its height transitions with grid 0fr↔1fr while the content fades in and out, and collapsed content stays mounted but `inert`. Don't mount and unmount it with `{open && …}`, which has no animation. Inside a flex column with a gap, pass `gap` (px) so no extra blank strip is left when it is collapsed
+- A start / end pair of `input type="time"` needs about 130px per box to show "1:10 PM" plus the clock icon; when half a column is too narrow, let that row take the full width (with the card's `@container`) rather than shrinking the inputs until the text is cut off
 > Inside a container narrower than 240px (sidebar tabs) use its `compact` (8px segment padding) and `fullWidth` (fills the container, segments share the width) props
 > instead of overriding the component's internal buttons from page SCSS.
 
@@ -519,7 +545,7 @@ List-page tables always use the table mixin family from `_mixins.scss`; **do not
 ```
 
 - Page-specific differences such as column widths, alignment and special cells (`.thRight`, `.tdNowrap`, …) go after the `@include`
-- The responsive behaviour is uniformly **horizontal scrolling of the container** (`table-wrap` has `overflow-x: auto` built in); tables are not turned into cards
+- Responsive behaviour: when the table area gets narrow, **fold secondary columns first, and only scroll the container horizontally once even the folded table does not fit** (see Rule 4); tables are not turned into cards
 - When a table is embedded inside an existing card you may use only `table-base` / `table-th` / `table-tr` / `table-td` and omit the outer `table-wrap`
 - The `<table>` itself is rendered by `components/DataTable` (TanStack Table, see the [development guide](/guides/development)), and the classes still come from the page's SCSS Module: `className` for the table, `rowClassName(row)` for rows, and `meta.thClassName` / `meta.tdClassName` on each column
 
@@ -560,6 +586,91 @@ The default `table-layout: auto` computes column widths from **the content of ev
 `MIcon` is always `aria-hidden`, so screen readers cannot read it. If the information the icon encodes
 is already written in the adjacent text (type, category), it is just layout habit — remove it and let the text speak.
 
+#### Rule 4: fold columns first when narrow; scroll and pin the first and last columns only as a last resort
+
+On a 1366-wide laptop the table area is about 944px; at 1440 with the AI assistant open it is only about 567px. When a wide table scrolls as a whole,
+the first column (which row this is) scrolls out of view. So when the table area gets narrow:
+
+1. **Fold columns by importance**: secondary columns are hidden and their content is drawn as small lines inside a main column (the second line of the name column, under the status badge)
+2. **Only when even the folded table does not fit**, scroll horizontally and pin the first column (you can always see which row it is); the last column (actions) is pinned too when the middle still keeps 160px to scroll
+
+```jsx
+// Column widths and fold order live only here (a module-level constant); lower fold folds first, columns without fold always show
+const FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 230 },
+  { id: "node", width: 85, fold: 1 },
+  { id: "status", width: 150 },
+  { id: "actions", width: 180 },
+]);
+
+const fit = useTableFit(FIT_COLUMNS);             // hooks/useTableFit
+<div ref={fit.ref} className={styles.tableWrap}>  // measure the element that scrolls
+  <DataTable table={table} fit={fit} className={styles.table} />
+</div>
+
+// Main cells (and rows that draw their own <td>) read which columns are folded from context
+const fit = useTableFitContext();                 // components/DataTable/TableFitContext
+{fit.isFolded("node") && <small>{resource.node}</small>}
+```
+
+- With `fit`, `DataTable` draws the `<colgroup>` and `min-width` itself and skips the header and cells of folded columns; the SCSS keeps only `table-layout: fixed` — **no more column width classes or min-width**
+- Rows that draw their own `<td>` (group rows, rows still being created) must skip folded columns with `useTableFitContext()` so the column count lines up
+- Put folded content in the main column closest in meaning: identity (node, environment, source, VMID) goes into the name column, state (IP, expiry, visibility) goes under the status; add the column name when the value alone is unclear ("Expiry 2026/12/31")
+- Check at least two widths: a 1366 laptop (944px) does not scroll; 1440 with the AI assistant open (567px) fits once folded down to the main columns
+- Pinning is built into `table-base` (it only applies with `data-overflow="start|both"`). Rows with their own background (group rows, hover) set it with `@include table-row-bg(colour)` so the pinned cells match the rest of the row
+- When the first column is a checkbox, set `pinNext: true` on it: when scrolling, the checkbox and the name column after it stay pinned together. Pages that build their own body (for example one tbody for group rows and one for virtualized rows) use `DataTableShell`, which handles the fold colgroup, min-width and context
+- Currently used on: My resources, Resource management, Machine templates, GPU management, My requests, AI API keys and request history, AI key request review, AI key management, AI monitoring, Course environment templates, IP management, Background jobs, Audit logs, System monitoring
+
+#### Rule 5: with lots of rows, choose pagination, virtual scrolling or load more by the kind of data
+
+| Approach | When | Used on |
+|---|---|---|
+| Pagination: `components/Pagination` (50 per page, "N total" plus arrows, page numbers and "Go to page __") | Often hundreds or thousands of rows that people page back through, together with search and filters | User management, audit logs, IP management, feedback, AI key management, AI API usage details |
+| Virtual scrolling: `hooks/useVirtualRows` (kicks in from 60 rows) | Everything needs to be seen at once and compared by scrolling, without switching pages | Resource management |
+| Load more (20 at a time) | Records ordered by time where almost only the latest few matter | None at the moment (AI API usage details used it until 2026-11; with hundreds of calls over 90 days people page back, so it switched to pagination) |
+
+- A user's own small set of data (their keys, their machines) is simply listed in full, with secondary items (expired) collapsed
+- Pagination bars always use `components/Pagination`, never a hand-written copy in the page. Pages pass only "N total" (`info`); the current page is shown by the page numbers, so don't write "Page x of y". The component translates the arrow and page-number labels itself
+- Page numbers always take 7 slots (first and last, plus one on each side of the current page; near either end, five in a row), so the bar doesn't change width when you switch pages. The current page is solid primary with white text; other page numbers have no fill or border and get a light fill on hover
+- "Go to page __" appears only past 7 pages: digits only, jumps on Enter or when the field loses focus, and values out of range snap to the first or last page
+- When the container is narrower than 520px (AI assistant open, phones) the page numbers collapse to "5 / 16" and the go-to field always shows; with a single page only "N total" remains
+
+### Tabs
+
+**Switching a whole block of content always uses `components/Tabs`; filters and options use `SegmentedControl`.** Do not swap them:
+
+| Purpose | Component | Examples |
+| --- | --- | --- |
+| Tabs: switch the whole page or a whole block | `Tabs` | Below the page title: AI API, account settings, resource detail, class page (active), Gateway, course content; inside a card: AI usage monitoring details, monitoring alerts / mining |
+| Tabs in a narrow sidebar (under 240px) | `SegmentedControl compact fullWidth` | Task setup / tutor review in the AI Check sidebar |
+| List filter: narrow the same list (usually with counts) | `SegmentedControl` | Status on the review pages, resource management, class management, environment management, key management, background jobs, user feedback, storage |
+| View option: same data, different presentation | `SegmentedControl` | Time range (AI API usage, AI usage monitoring, resource monitoring), chart metric (AI usage trend, class monitoring, resource monitoring), endpoint kind / code language in the API docs |
+| Form value: pick one value that counts when the form is sent or saved | `SegmentedControl` | Sign-in method, request mode, appearance background, feedback category, question difficulty / type, connection publish method / direction |
+
+When it's unclear whether something is a tab or a filter, look at the screen after switching: the same list getting shorter is a filter (the badge counts add up to "All"); a different block with its own layout and columns is a tab.
+
+Each component has a single look: `Tabs` is the icon-square style (no separate section and page variants); `SegmentedControl` is the solid style with only a narrow-container variant (`compact` + `fullWidth`) and the automatic collapse into a dropdown — there is no light variant.
+
+```jsx
+<Tabs
+  ariaLabel={t("…tabsAriaLabel")}
+  value={tab}
+  onChange={setTab}
+  options={[
+    { value: "models", label: t("…tabModels"), icon: "model_training", badge: count, buttonProps: { "data-guide-tab": "…" } },
+    …
+  ]}
+/>
+```
+
+- Look: every tab needs an `icon`; the icon sits in a 28px rounded square, and the selected square turns solid primary with a white icon while the label turns dark and goes to weight 600 (each label reserves its bold width up front, so the tabs after it don't shift; badges stay at 500). No indicator under the label; a light tint on hover. 16px text and a 44px row, so a filter next to the tabs can't outweigh them. The row is pulled left by one padding so the first square lines up with the container's left edge (the page title, a card's content)
+- Below a page title, always place the tabs below `PageHeader` (never inside the header's right side), and give the tab row `@include page-tabs-row`, which brings the gap to the content down to 12px (title to tabs keeps the page's 24px), so the tabs sit with the content they control
+- A sidebar under 240px is too narrow for tabs; use `SegmentedControl compact fullWidth` there (AI Check sidebar)
+- `badge` is a count (0 is shown, `null` / `undefined` is not); on the selected tab it switches to a primary tint with primary text. Pass "—" when loading failed
+- When it doesn't fit (narrow screens): the tabs that fit stay in the row, always with their labels, and the rest go into a "More ▾" button at the end that opens the shared `ListboxPopover` (a smaller icon square, the name and the badge). The selected tab is always in the row; picking a hidden one from "More" moves it into the last slot. As the container widens the tabs come back one by one, and "More" disappears once everything fits; only when not even one tab plus "More" fits does the row scroll horizontally (scrollbar hidden). Don't fall back to icons only (they can't be guessed). Pages don't wrap it in `overflow-x`; a tab inside "More" isn't on screen, and neither are guide anchors on it. A page's `className` is for layout only (`align-self` and the like) — don't override `.tab`
+- Accessibility: `role="tablist"` / `"tab"` with `aria-selected`; only the selected tab is in the Tab order, and the arrow keys (wrapping), Home and End move and switch straight away. Put guide anchors such as `data-guide-tab` in `buttonProps`, and find the current tab with `[aria-selected="true"]`
+- A toolbar (filters + search) can sit to the right of the tabs: tabs on the left, toolbar on the right, and the toolbar wraps to the next line when there isn't room (AI usage monitoring details)
+
 ### List toolbar and batch actions (DataToolbar)
 
 The "filters + search" bar above a list or table and the "batch actions after ticking rows" **always use the `components/DataToolbar` set**. Don't build a separate floating action bar or your own checkboxes in a page:
@@ -595,19 +706,20 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 - **Batch review (approve / reject)** uses the shared `components/BatchReviewDialog`: it lists the items about to be processed (up to 5) plus one shared review note (optional, saved on every item). `tone="reject"` shows the red warning icon and a danger button; `tone="approve"` shows the primary-colour icon and a primary button. Approve sits with the normal actions, reject goes after a `BatchDivider`. When approving takes up resources (request review: the backend picks a node and reserves capacity), pass `concurrency: 1` to `runBatch` so requests go one at a time; the failed ones stay ticked and the reason goes into the toast
 - When there is no batch API on the backend, use `utils/runBatch` to call the single-item API one by one (4 at a time by default; one failure doesn't stop the rest)
 - Ticked rows get `@include row-selected;` for their background (list rows that are cards themselves pass `var(--color-surface)`)
-- Guide attributes such as `data-guide` can be passed straight to `DataToolbar` (attached to the toolbar's outer frame), so a tour step can spotlight the whole filters + search bar
+- Guide attributes such as `data-guide` can be passed straight to `DataToolbar` (attached to the toolbar's outer frame), so a tour step can spotlight the whole filters + search bar; pass them to `ToolbarSearch` to spotlight just the search box
+- **Search boxes** always use `ToolbarSearch` (36px, Esc clears) — don't hand-roll one. Add `clearable` when a visible clear button helps: an ✕ appears on the right while there is text, and focus stays in the box after clearing
 - **Re-check widths after adding a checkbox column**: when list rows use grid, decide between one line and two lines by the **container width** (`container-type: inline-size` + `@container`), not the viewport — once the sidebar appears (≥1024) the content area is narrower than at 992, so a viewport switch overflows sideways between 1024 and 1180
 - Currently used on: resource management, user management (batch enable / disable, add to or remove from a group, delete), request review and AI API review (batch approve / reject), class management (batch archive and reclaim), and the class workspace student roster (batch remove)
 
 ### Dropdown menus
 
 - Menus that float over lists are portalled to `document.body` with `position: fixed` and positioned by `hooks/useAnchoredMenu`: it follows the anchor button on scroll and resize, opens downward or upward depending on the space left, closes when the anchor scrolls out of view, and closes on an outside click or Esc. Used by `PowerMenu`, the port suggestions in `ConnectionDialog`, and menus on the AI API and templates pages
-- Give the menu an opaque `var(--color-surface)` background, not `glass-surface`: list rows underneath would show through. The one exception is popups that extend out of the sidebar (below): they use `popover-glass`, the same glass as the sidebar, so they change with the interface style (solid on white / black, see-through on glass / liquid)
+- Every menu uses `@include popover-glass` for its background: the same glass as the sidebar, changing with the interface style and theme colour (solid on white / black, see-through on glass / liquid; liquid adds extra blur and coating so text underneath does not get in the way of reading). `ActionMenu`, `ListboxPopover` and `PowerMenu` have it built in; hand-written menus use it too — do not write `background: var(--color-surface)`
 - The close animation uses `useDialogPresence(open, 130)` + a CSS `transition`, not `onAnimationEnd`
 - Keyboard handling for these menus (focus on open, arrow keys, Esc / Tab returning focus to the trigger) is shared through `hooks/useMenuKeyboard`; `ActionMenu`, `ListboxPopover` and `PowerMenu` all use it, so new menus should too instead of writing their own key handlers
 - To pick one item from a list where each item needs a second line (status, date), use `components/ListboxPopover`, e.g. the week switcher on the narrow AI tutor check layout. The trigger carries `aria-haspopup="listbox"` and `aria-expanded`, and the arrow keys open it. On open, focus lands on the selected item, scrolled to the middle; arrow keys / Home / End move, Enter picks, and Esc or Tab closes and returns focus to the trigger
 - For long scrollable lists, pass `maxHeight` to `useAnchoredMenu`: when there is not enough room below, the list shrinks to the space left instead of being pushed up over its trigger
-- Popups from the bottom of the sidebar (language, account, background tasks) pass `placement="side"`: they open beside the sidebar's outer edge with their bottom aligned to the trigger, in the same place whether the sidebar is expanded or collapsed. The language menu is a `ListboxPopover`, the account menu an `ActionMenu` with `header` (avatar, name), and the background-tasks panel uses `useAnchoredMenu` directly. All three pass `glass` (or include `popover-glass`) to keep the sidebar's glass
+- Popups from the bottom of the sidebar (language, account, background tasks) pass `placement="side"`: they open beside the sidebar's outer edge with their bottom aligned to the trigger, in the same place whether the sidebar is expanded or collapsed. The language menu is a `ListboxPopover`, the account menu an `ActionMenu` with `header` (avatar, name), and the background-tasks panel uses `useAnchoredMenu` directly. Their background is `popover-glass` like every other menu, with no extra prop
 - "More actions" menus use `components/ActionMenu`; the trigger is always the vertical ⋮ (`more_vert`) with `aria-haspopup="menu"` and `aria-expanded`. On open, focus lands on the first enabled item; arrow keys wrap, Home / End jump, and Esc or Tab closes and returns focus to the trigger. Esc is marked as handled, so other Esc listeners on the page do not fire too. Put destructive items last with `separatorBefore` and mark them `danger` instead of forcing the color with `!important`. Non-interactive context above the items (the account menu's avatar and name) goes in `header`, which gets a divider below it
 
 ### Stepper
@@ -730,4 +842,4 @@ If a component has special dark-mode needs, scope the override under `body.dark`
 
 > ⚠️ Note: elements with `backdrop-filter` or `transform` create a new stacking context, so the `z-index` of their children cannot escape to the outside. If a dropdown is hidden behind another card, check whether the parent has one of these properties.
 >
-> A glass surface (`glass-surface`) combined with an `overflow: hidden` container will also **clip** an absolutely positioned menu that overflows. If a floating layer may extend beyond its container, `createPortal` it to `document.body` and position it with `position: fixed` (example: `components/PowerMenu`), and give it an opaque `var(--color-surface)` background, otherwise the list content underneath shows through.
+> A glass surface (`glass-surface`) combined with an `overflow: hidden` container will also **clip** an absolutely positioned menu that overflows. If a floating layer may extend beyond its container, `createPortal` it to `document.body` and position it with `position: fixed` (example: `components/PowerMenu`), with a `popover-glass` background (see Dropdown menus above).

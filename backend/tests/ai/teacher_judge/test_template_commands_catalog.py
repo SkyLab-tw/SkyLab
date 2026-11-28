@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from sqlmodel import Session, SQLModel, create_engine
 
+from app.ai.teacher_judge import rubric_normalization
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.template_command_service import (
     GENERAL_COMMAND,
@@ -211,7 +212,7 @@ def test_validate_check_steps_reports_model_owned_unknown_command() -> None:
 
 
 def test_normalize_repairs_flattened_system_command_shape() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "check-main-log-success",
@@ -250,7 +251,7 @@ def test_normalize_repairs_flattened_system_command_shape() -> None:
 
 
 def test_normalize_converges_uncatalogued_readonly_argv_to_general_command() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
+    items = rubric_normalization.normalize_rubric_items(
         [
             {
                 "id": "item-jq",

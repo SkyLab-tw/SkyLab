@@ -112,10 +112,11 @@
   @include table-wrap;
 }
 
+/* 欄寬、min-width 與窄版收欄都由 JobsPage.jsx 的 JOB_FIT_COLUMNS（useTableFit）決定；
+   fixed layout 才會照欄寬排，收欄算出來的寬度才準 */
 .table {
   @include table-base;
-  /* 7 欄；沒有 min-width 時 table-wrap 的橫向卷動永遠不會觸發，欄位互擠讓狀態 badge 溢出 */
-  min-width: 1080px;
+  table-layout: fixed;
 }
 
 .th {
@@ -132,17 +133,16 @@
   @include table-td;
 }
 
-/* 類型等短標籤欄不換行，寬度交給 table-wrap 橫向捲動 */
-.tdNowrap {
-  white-space: nowrap;
+/* 類型、申請人欄不換行；欄寬固定，放不下時在欄內截斷（title 看全文） */
+.tdTruncate {
+  @include text-truncate;
 }
 
-/* 名稱欄過長時單行截斷＋省略號：外層上限寬、文字容器 min-width: 0 才截得住 */
+/* 名稱欄過長時單行截斷＋省略號：欄寬由 colgroup 固定，文字容器 min-width: 0 才截得住 */
 .nameCell {
   display: flex;
   align-items: center;
   gap: $spacing-8;
-  max-width: 520px;
 }
 
 .nameCell > div:last-child {
@@ -166,11 +166,27 @@
   color: var(--color-text-primary);
 }
 
+/* 名稱下的小字行：任務 ID（等寬），窄版收起的類型接在 ID 前面、申請人另起一行 */
 .nameSub {
   @include text-truncate;
   font-size: $font-size-12;
   color: var(--color-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.mono {
+  font-family: $font-family-mono;
+}
+
+/* 窄版收起的時間改畫在狀態徽章底下（或另一個時間底下）的小字行 */
+.foldedLine {
+  @include text-truncate;
+  margin-top: 4px;
+  font-size: $font-size-12;
+  color: var(--color-text-muted);
+}
+
+.foldedLabel {
+  margin-right: 4px;
 }
 
 /* ── Status badge ── */
@@ -196,18 +212,23 @@
 .badge_unknown   { background: var(--color-hover); color: var(--color-text-muted); }
 
 /* ── Progress ── */
+/* 寬度跟著欄寬（fixed layout），不用 min-width 跟欄位搶寬度 */
 .progressWrap {
   display: flex;
   align-items: center;
   gap: $spacing-8;
-  min-width: 140px;
+}
+
+/* 窄版收進狀態欄時接在徽章底下 */
+.progressFolded {
+  margin-top: 6px;
 }
 
 .progressBar {
   flex: 1;
   height: 6px;
   border-radius: $radius-pill;
-  background: var(--color-hover);
+  background: var(--color-track);
   overflow: hidden;
 }
 

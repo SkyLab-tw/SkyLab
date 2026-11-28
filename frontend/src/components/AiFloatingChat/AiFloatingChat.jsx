@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../contexts/AuthContext";
@@ -17,9 +17,10 @@ import MIcon from "../MIcon";
 import OctoPet from "../OctoPet/OctoPet";
 import OctoAvatar from "../OctoPet/OctoAvatar";
 import PageHelpHint from "./PageHelpHint";
-import { getRouteGuide } from "../UserGuide/routeGuides";
+import { getRouteGuide, USER_GUIDE_START_EVENT } from "../UserGuide/routeGuides";
 import { formatDate } from "../../utils/formatDate";
 import { joinList } from "../../utils/joinList";
+import useAutoGrowTextarea from "../../hooks/useAutoGrowTextarea";
 import useDialogPresence from "../../hooks/useDialogPresence";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import { useUnsavedChanges } from "../../contexts/UnsavedChangesContext";
@@ -138,6 +139,13 @@ const PAGE_GUIDE_PATTERN =
   /(介紹|導覽|使用說明|怎麼用|如何使用|怎麼操作|教我|有哪些功能|有什麼功能|可以做什麼|能做什麼|什麼時候用|何時用|什麼時候需要)/i;
 const DIALOG_PATTERN = /(視窗|彈窗|對話框|跳出來|跳出的)/i;
 
+/** 只問這一頁整體怎麼用：直接開前端的頁面導覽，不用文字說明。
+ *  問跳出來的視窗屬於具體問題，留給 AI 回答。 */
+export function isPageTour(text) {
+  if (FLOW_PATTERN.test(text) || DIALOG_PATTERN.test(text)) return false;
+  return SCREEN_SCOPE_PATTERN.test(text) && PAGE_GUIDE_PATTERN.test(text);
+}
+
 /** 要眼前這一頁的導覽，或問這一頁跳出來的視窗。要排在教學與導覽判斷之前：
  *  在班級頁問「這頁怎麼用」，要的是這頁的說明，不是被帶去建立班級。 */
 export function isPageGuide(text) {
@@ -163,6 +171,7 @@ export function routeQuestion(text, task = newTask(), flowId = null, hasForm = f
   const contextual = taskRoute(text, task, flowId, hasForm);
   if (contextual) return contextual;
   if (isFeatureIndex(text)) return "index";
+  if (isPageTour(text)) return "tour";
   if (isPageGuide(text)) return "help";
   // Teaching questions need the relationship between screens, not a machine recommendation.
   if (TEACHING_PATTERN.test(text)) return "navigate";
@@ -499,14 +508,9 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
   }
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
-  // 輸入框從兩行開始，隨內容長高；到上限（.composer textarea 的 max-height）就停，之後框內捲動
-  const resizeComposer = useCallback(() => {
-    const textarea = inputRef.current;
-    // 看不見的時候（助手還沒打開）量到的高度是 0，等看得到再量
-    if (!textarea || textarea.offsetParent === null) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, []);
+  // 輸入框從兩行開始，隨內容長高；到上限（.composer textarea 的 max-height）就停，之後框內捲動。
+  // 助手打開、輸入框出現後才量
+  useAutoGrowTextarea(inputRef, input, presence.open);
   // 配置模式：{ answered, total }，null 代表沒在配置模式
   const [intake, updateIntake] = useState(null);
   const intakeRef = useRef(null);
@@ -532,6 +536,8 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
   /* 頁名優先用畫面定義的標題：它涵蓋每一頁，PAGE_CONTEXTS 只列了一部分，
      沒列到的會落到「SkyLab」，等於沒講。 */
   const currentPageName = activeSurface?.title ?? t(pageContext.titleKey);
+  const pageTourId = getRouteGuide(location.pathname)?.id ?? null;
+  const hasPageTour = Boolean(pageTourId);
 
   useEffect(() => {
     const flow = flowRef.current;
@@ -603,25 +609,6 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
   useEffect(() => {
     if (open) window.setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
-
-  // 打開助手（輸入框出現）或內容改變時重新量高度
-  useLayoutEffect(() => {
-    resizeComposer();
-  }, [input, presence.open, resizeComposer]);
-
-  // 縮放視窗會改變換行；從隱藏變成看得到也算寬度改變。寬度變了就重新量
-  useEffect(() => {
-    const textarea = inputRef.current;
-    if (!presence.open || !textarea || typeof ResizeObserver === "undefined") return undefined;
-    let width = textarea.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (textarea.clientWidth === width) return;
-      width = textarea.clientWidth;
-      resizeComposer();
-    });
-    observer.observe(textarea);
-    return () => observer.disconnect();
-  }, [presence.open, resizeComposer]);
 
   /* 自己送出的訊息與「回覆中」捲到底；助手回覆出來時，改把「剛問的那句＋回覆開頭」對齊到
      訊息區上緣——長回答（頁面導覽、流程步驟）要從第一行讀起，不是停在結尾。
@@ -757,7 +744,9 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
     const steps = data.steps ?? [];
 
     if (data.action === "answer" && data.answer) {
-      appendAssistant(data.answer);
+      /* 已在目標頁時後端改回說明；其他相關頁面仍附成按鈕（後端已排除目前頁） */
+      const targets = (data.suggestions ?? []).filter((target) => target?.path && target?.title);
+      appendAssistant(data.answer, targets.length ? { targets } : {});
       return true;
     }
 
@@ -1004,9 +993,10 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
     return true;
   }
 
-  /* 頁面導覽按鈕與建議晶片：一定走畫面說明，不經過問句分類 */
-  function sendPageGuide() {
-    send(t("AiFloatingChat.pageGuideQuestion"), "help");
+  /* 頁面導覽按鈕、建議晶片與提示泡泡：關掉助手，改由前端導覽一步步帶 */
+  function startPageTour() {
+    onOpenChange(false);
+    window.dispatchEvent(new CustomEvent(USER_GUIDE_START_EVENT));
   }
 
   async function sendChat(text, nextHistory) {
@@ -1032,10 +1022,23 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
     setHistory((previous) => [...previous, assistantMessage]);
   }
 
-  /* forcedRoute：按鈕已經知道要哪個能力時直接指定，不靠問句分類猜 */
-  async function send(value = input, forcedRoute = null) {
+  async function send(value = input) {
     const text = value.trim();
     if (!text || loading) return;
+
+    // 每個能力答不出來就往下一個退，最後一定有一般問答接住。
+    let route = text === t("AiFloatingChat.checkRequestProgress") ? "continueTask"
+      : text === t("AiFloatingChat.hasMachineChoice") ? "continueTask"
+      : text === t("AiFloatingChat.noMachineChoice") ? "recommend"
+      : routeQuestion(text, taskRef.current, flowRef.current?.id, Boolean(requestFormRef.current));
+    if (route === "tour") {
+      if (hasPageTour) {
+        setInput("");
+        startPageTour();
+        return;
+      }
+      route = "help";
+    }
 
     const userMessage = { role: "user", content: text };
     const nextHistory = [...history, userMessage];
@@ -1045,12 +1048,6 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
     setLoading(true);
 
     try {
-      // 每個能力答不出來就往下一個退，最後一定有一般問答接住。
-      const route = forcedRoute ? forcedRoute
-        : text === t("AiFloatingChat.checkRequestProgress") ? "continueTask"
-        : text === t("AiFloatingChat.hasMachineChoice") ? "continueTask"
-        : text === t("AiFloatingChat.noMachineChoice") ? "recommend"
-        : routeQuestion(text, taskRef.current, flowRef.current?.id, Boolean(requestFormRef.current));
       if (["recommend", "navigate", "planNow"].includes(route) && (!taskRef.current.goal || (taskRef.current.stage === "idle" && !flowRef.current))) {
         taskRef.current.goal = text.slice(0, 2000);
       }
@@ -1140,9 +1137,9 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
                 </>
               )}
             </div>
-            {/* 隨時可以叫出這一頁的完整導覽：用途、時機、功能、會跳出的視窗與相關頁面 */}
-            {!intake && activeSurfaceId && (
-              <button type="button" className={styles.pageGuideBtn} onClick={sendPageGuide} disabled={loading}>
+            {/* 隨時可以叫出這一頁的前端導覽 */}
+            {!intake && hasPageTour && (
+              <button type="button" className={styles.pageGuideBtn} onClick={startPageTour} disabled={loading}>
                 <MIcon name="tour" size={16} />
                 {t("AiFloatingChat.pageGuideButton")}
               </button>
@@ -1177,12 +1174,12 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
                     <li key={item.titleKey}>{t(item.titleKey)}</li>
                   ))}
                 </ul>
-                {(activeSurfaceId || pageContext.suggestionKeys.length > 0) && (
+                {(hasPageTour || pageContext.suggestionKeys.length > 0) && (
                   <p className={styles.suggestionsLead}>{t("AiFloatingChat.suggestionsLead")}</p>
                 )}
                 <div className={styles.suggestions}>
-                  {activeSurfaceId && (
-                    <button type="button" onClick={sendPageGuide}>
+                  {hasPageTour && (
+                    <button type="button" onClick={startPageTour}>
                       {t("AiFloatingChat.pageGuideQuestion")}
                     </button>
                   )}
@@ -1236,13 +1233,10 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
       )}
 
       <PageHelpHint
-        enabled={!presence.open && !loading && !fabNotice}
-        pageKey={getRouteGuide(location.pathname)?.id ?? activeSurfaceId}
+        enabled={hasPageTour && !presence.open && !loading && !fabNotice}
+        pageKey={pageTourId}
         userId={user?.id}
-        onActivate={() => {
-          setInput(t("AiFloatingChat.pageGuideQuestion"));
-          onOpenChange(true);
-        }}
+        onActivate={startPageTour}
       />
 
       {!presence.open && (

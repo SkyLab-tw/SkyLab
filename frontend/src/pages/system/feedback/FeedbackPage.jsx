@@ -12,7 +12,7 @@ import { useLoadFailureMessage, useQueryView } from "../../../hooks/useQueryLoad
 import { useFeedbackCacheUpdater, useFeedbackListQuery } from "../../../queries/feedback";
 import { FEEDBACK_CATEGORIES, FeedbackService, feedbackCategoryMeta } from "../../../services/feedback";
 import { formatDateTime } from "../../../utils/formatDate";
-import Pagination from "../shared/Pagination";
+import Pagination from "../../../components/Pagination/Pagination";
 
 const PAGE_SIZE = 20;
 const EMPTY = Object.freeze([]);
@@ -257,9 +257,7 @@ export default function FeedbackPage() {
             <Pagination
               page={page}
               totalPages={totalPages}
-              info={t("FeedbackPage.paginationInfo", { count, page: page + 1, totalPages })}
-              prevLabel={t("FeedbackPage.prevPage")}
-              nextLabel={t("FeedbackPage.nextPage")}
+              info={t("FeedbackPage.paginationInfo", { count })}
               onChange={setPage}
             />
           </>

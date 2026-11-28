@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.ai.teacher_judge import chat_transport
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.template_command_service import (
     GENERAL_COMMAND,
@@ -52,7 +53,7 @@ async def test_proposal_canonicalizes_executor_and_peer_p_labels(
             reply_message("已整理成提案。請確認後套用。", "ready"),
         ]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -108,7 +109,7 @@ async def test_uncatalogued_tool_with_complete_argv_still_forms_proposal(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -157,7 +158,7 @@ async def test_tool_loop_requests_drop_json_response_format(
             reply_message("已整理成提案。請確認後套用。", "ready"),
         ]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -182,7 +183,7 @@ async def test_no_rubric_chat_keeps_json_response_format(
     calls, fake_call_vllm = scripted_vllm(
         [reply_message("請先選擇檢查表來源。", "none")]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -238,7 +239,7 @@ async def test_partial_success_reply_summarizes_rejected_items(
             reply_message("兩個提案都已建立完成。", "ready"),
         ]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     result = await teacher_judge_service.chat_with_rubric(
@@ -298,7 +299,7 @@ async def test_partial_failure_note_skips_titles_staged_after_retry(
             reply_message("提案已建立完成。", "ready"),
         ]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     result = await teacher_judge_service.chat_with_rubric(
@@ -344,7 +345,7 @@ async def test_missing_success_criteria_no_longer_rejects_auto_proposal(
             reply_message("提案已建立完成。", "ready"),
         ]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     result = await teacher_judge_service.chat_with_rubric(
@@ -385,7 +386,7 @@ async def test_teacher_information_gap_rejection_still_defers_to_reply(
             reply_message("還需要服務名稱與 Port 號。", "needs_information"),
         ]
     )
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     result = await teacher_judge_service.chat_with_rubric(
@@ -404,7 +405,8 @@ async def test_teacher_information_gap_rejection_still_defers_to_reply(
     assert len(rejected) == 1
     reason = str(rejected[0]["reason"])
     assert "目前無法形成可套用的提案" in reason
-    assert "請改在 reply 中說明缺少的內容" in reason
+    assert "不要猜測" in reason
+    assert "請在 reply 詢問老師" in reason
     assert "可由你自行補齊" not in reason
 
 
@@ -446,7 +448,7 @@ async def test_explicit_env_assignment_forms_proposal_when_model_claims_missing_
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -524,7 +526,7 @@ async def test_chat_with_rubric_validates_returned_check_steps(
         captured_payload.update(payload)
         return await fake_call_vllm(payload, timeout=timeout)
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", capture_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", capture_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, updated_items, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -591,7 +593,7 @@ async def test_new_item_proposal_does_not_load_current_rubric(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -646,7 +648,7 @@ async def test_existing_item_update_loads_current_rubric_tool(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
     current = {
         "items": [
@@ -747,7 +749,7 @@ async def test_existing_item_proposal_without_tool_is_retried_with_forced_read(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(
@@ -803,7 +805,7 @@ async def test_boolean_detectable_and_typed_command_form_proposal(
         ],
     )
 
-    monkeypatch.setattr(teacher_judge_service, "_call_vllm_message", fake_call_vllm)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake_call_vllm)
     patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, proposal, _metrics = await teacher_judge_service.chat_with_rubric(

@@ -1,0 +1,36 @@
+/* 開發預覽用的畫面切換列（不是設計的一部分，只在 /dev/login 出現） */
+.switcher {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  border: 1px dashed var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  font-size: $font-size-12;
+
+  span {
+    margin-right: 4px;
+    color: var(--color-text-muted);
+  }
+
+  a {
+    padding: 2px 8px;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--color-text-primary);
+    }
+
+    &[aria-current="page"] {
+      color: var(--color-text-on-primary);
+      background: var(--color-primary);
+    }
+  }
+}

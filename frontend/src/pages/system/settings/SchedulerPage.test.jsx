@@ -51,17 +51,17 @@ async function flush() {
   });
 }
 
-test("三個 LoadAvg 欄位都註明以實體核計", async () => {
+test("三個 LoadAvg 欄位同一組，「以實體核計」說明掛在組上、只出現一次", async () => {
   await act(async () => root.render(withQueryClient(<SchedulerPage />)));
   await flush();
 
-  const fields = [...host.querySelectorAll("label")].filter((label) =>
-    label.textContent.includes("SettingsPage.placementLoadavg"),
-  );
-  expect(fields).toHaveLength(3);
-  for (const field of fields) {
-    expect(field.querySelector("em")?.textContent).toBe(
-      "SettingsPage.placementLoadavgPerPhysicalCoreHint",
-    );
-  }
+  /* 畫面只顯示短名，完整名稱在 aria-label */
+  const inputs = [...host.querySelectorAll('input[aria-label^="SettingsPage.placementLoadavg"]')];
+  expect(inputs).toHaveLength(3);
+  const group = inputs[0].closest('[role="group"]');
+  for (const input of inputs) expect(input.closest('[role="group"]')).toBe(group);
+
+  const hint = document.getElementById(group.getAttribute("aria-describedby"));
+  expect(hint?.textContent).toBe("SettingsPage.placementLoadavgPerPhysicalCoreHint");
+  expect(host.textContent.split("SettingsPage.placementLoadavgPerPhysicalCoreHint")).toHaveLength(2);
 });

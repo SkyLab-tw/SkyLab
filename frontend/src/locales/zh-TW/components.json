@@ -500,6 +500,12 @@
   "ColorPicker.custom": "自訂顏色",
   "ColorPicker.pick": "選擇顏色",
   "ColorPicker.hexLabel": "色碼",
-  "AiFloatingChat.pageHelpHint": "不知道這頁能做什麼？可以問我。",
-  "AiFloatingChat.dismissPageHelpHint": "關閉提示"
+  "AiFloatingChat.pageHelpHint": "不知道這頁能做什麼？點我看導覽。",
+  "AiFloatingChat.dismissPageHelpHint": "關閉提示",
+  "Pagination.navLabel": "分頁",
+  "Pagination.prev": "上一頁",
+  "Pagination.next": "下一頁",
+  "Pagination.page": "第 {{page}} 頁",
+  "Pagination.jump": "前往 <input/> 頁",
+  "Pagination.jumpLabel": "前往頁數（共 {{totalPages}} 頁）"
 }

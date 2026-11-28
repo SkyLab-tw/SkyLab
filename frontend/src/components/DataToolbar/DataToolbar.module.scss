@@ -44,10 +44,15 @@
   }
 }
 
-/* ── 搜尋框：外框在 label（上下 1px），輸入框 34px，整體跟按鈕、分段切換同為 36px ── */
+/* ── 搜尋框：外框在 label（上下 1px），輸入框 34px，整體跟按鈕、分段切換同為 36px ──
+   窄螢幕（< md）改成可長寬：跟標題同一列就補滿剩下的寬度，換到下一列就撐滿整列，不會只佔 300px 留一截空白 */
 .search {
   display: flex;
   flex: 0 1 300px;
+
+  @include respond-below(md) {
+    flex: 1 1 240px;
+  }
   align-items: center;
   gap: $spacing-8;
   min-width: 180px;
@@ -76,6 +81,32 @@
     &::placeholder {
       color: var(--color-text-muted);
     }
+  }
+}
+
+/* 清除鈕（clearable）：24px，往右吃掉一半內距，貼近框的右緣 */
+.searchClear {
+  @include flex-center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: $radius-8;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background $transition-base, color $transition-base;
+
+  &:hover {
+    color: var(--color-text-primary);
+    background: var(--color-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
   }
 }
 
@@ -152,7 +183,7 @@
   height: 6px;
   overflow: hidden;
   border-radius: $radius-pill;
-  background: var(--color-hover);
+  background: var(--color-track);
 
   > span {
     position: absolute;

@@ -44,55 +44,6 @@
   @include btn-secondary;
 }
 
-/* ── Tabs ── */
-/* 分段切換器與搜尋擺同一排，省下的垂直空間留給右側詳情表單與審核按鈕 */
-.tabsRow {
-  display: flex;
-  align-items: center;
-  gap: $spacing-16;
-  flex-wrap: wrap;
-}
-
-/* 窄螢幕選項放不下時讓切換器自己橫向捲動；高度鎖 38px 與搜尋框對齊 */
-.tabsControl {
-  height: 38px;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-.search {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 $spacing-8 0 10px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  flex: 0 1 280px;
-  min-width: 200px;
-  box-shadow: var(--shadow-sm);
-}
-
-.searchInput {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: $font-size-14;
-  color: var(--color-text-primary);
-
-  &::placeholder {
-    color: var(--color-text-muted);
-  }
-}
-
 /* ── Content ── */
 .content {
   flex: 1;
@@ -379,7 +330,7 @@
   display: flex;
   height: 6px;
   border-radius: $radius-pill;
-  background: var(--color-hover);
+  background: var(--color-track);
   overflow: hidden;
 }
 
@@ -445,29 +396,6 @@
   transition: background $transition-base;
 
   &:hover { background: color-mix(in srgb, var(--color-primary-on-surface) 20%, transparent); }
-}
-
-/* 收合動畫：grid-template-rows 0fr↔1fr 讓高度平滑過渡；
-   收合時以負 margin 抵掉 reasonBox 的 gap，避免留一條空隙 */
-.recurCollapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  margin-top: -$spacing-8;
-  transition: grid-template-rows 0.22s cubic-bezier(0.25, 0.8, 0.25, 1), margin-top 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.recurCollapseOpen {
-  grid-template-rows: 1fr;
-  margin-top: 0;
-}
-
-.recurCollapseInner {
-  overflow: hidden;
-  min-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .recurCollapse { transition: none; }
 }
 
 .recurWindows {

@@ -65,7 +65,7 @@
 }
 
 .latestMessage:hover { background: var(--color-hover); }
-.latestMessage:focus-visible, .toolHistory summary:focus-visible {
+.latestMessage:focus-visible {
   outline: 2px solid var(--color-primary-on-surface);
   outline-offset: 2px;
 }
@@ -302,7 +302,7 @@
   height: 6px;
   min-width: 48px;
   border-radius: $radius-pill;
-  background: var(--color-hover);
+  background: var(--color-track);
   overflow: hidden;
 }
 
@@ -340,26 +340,12 @@
   font-size: $font-size-12;
 }
 
-.toolHistory summary {
-  display: inline-flex;
-  align-items: center;
-  gap: $spacing-4;
-  min-height: 32px;
-  border-radius: $radius-8;
-  cursor: pointer;
-  list-style: none;
-}
-
-.toolHistory summary::-webkit-details-marker { display: none; }
-.toolHistory summary:hover { color: var(--color-primary-on-surface); }
-.toolChevron { transition: transform $transition-base; }
-.toolHistory[open] .toolChevron { transform: rotate(90deg); }
 
 .toolHistory ul {
   @include flex-column;
   gap: $spacing-8;
   margin: $spacing-8 0;
-  padding: 0 0 0 20px;
+  padding: 0;
   list-style: none;
 }
 
@@ -474,7 +460,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .msg, .pulse { animation: none; }
-  .toolChevron { transition: none; }
 }
 
 .composer textarea::placeholder { color: var(--color-text-muted); }

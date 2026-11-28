@@ -5,8 +5,10 @@ import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import styles from "./ResourceMgmtPage.module.scss";
 import MIcon from "../../../components/MIcon";
-import { DataTableCells, DataTableHead } from "../../../components/DataTable/DataTable";
+import { DataTableCells, DataTableHead, DataTableShell } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import MachineKindBadge from "../../../components/MachineKindBadge/MachineKindBadge";
 import PowerMenu from "../../../components/PowerMenu/PowerMenu";
 import TemplateFormDialog from "../templates/TemplateFormDialog";
@@ -85,10 +87,54 @@ function useColumns() {
   ];
 }
 
+/* ── 窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起節點、到期日、環境、來源、IP（順序同「我的資源」，兩張資源表同寬時長得一樣），
+   勾選、名稱、狀態、操作永遠在；收起的內容改畫在名稱欄（節點、環境、來源）與狀態欄（IP、到期日）裡的小字行。
+   欄寬只寫在這裡：名稱欄沒有類型圖示，190px 跟「我的資源」扣掉圖示後的字寬相當；
+   狀態欄 150px 是為了收進來的 IP 與「到期日 2026/12/31」一行放得下（英文的欄名較長，日期換到第二行）；
+   操作欄的主控台／終端機鈕加 ⋮ 與右側留白約 175px（同「我的資源」），日文的「ターミナル」較寬，只吃掉一點右側留白。
+   全部欄 1291px，1920 桌機不用收；1366／1440 筆電（表格區約 929～1018px）收掉節點、到期日、環境後 896px；
+   收到只剩勾選、名稱、狀態、操作合計 556px，1100 寬視窗（約 678px）、1440 開著 AI 助手（約 567px）都放得下；
+   手機（約 448px）才橫捲並固定首尾欄（勾選、操作） */
+const RESOURCE_MGMT_FIT_COLUMNS = Object.freeze([
+  { id: "select", width: 36, pinNext: true },
+  { id: "name", width: 190 },
+  { id: "kind", width: 190, fold: 4 },
+  { id: "env", width: 160, fold: 3 },
+  { id: "status", width: 150 },
+  { id: "ip", width: 150, fold: 5 },
+  { id: "expiry", width: 150, fold: 2 },
+  { id: "node", width: 85, fold: 1 },
+  { id: "actions", width: 180 },
+]);
+
+/* 收起的欄在主欄裡的一行小字；label 給「光看值看不出是什麼」的欄（到期日） */
+function FoldedLine({ label, children }) {
+  return (
+    <div className={styles.foldedLine}>
+      {label && <span className={styles.foldedLabel}>{label}</span>}
+      {children}
+    </div>
+  );
+}
+
+/* 收起來源欄時，來源徽章接在名稱後面同一行（放不下才換行），不另起一行把名稱欄疊高；沒收起就只有名稱 */
+function NameLine({ badge, children }) {
+  if (!badge) return children;
+  return <div className={styles.nameLine}>{children}{badge}</div>;
+}
+
+/* 名稱欄第二行：類型等原本的說明，後面接收起的節點、環境 */
+function joinMeta(...parts) {
+  return parts.filter(Boolean).join(" · ");
+}
+
 /* ── Primitive sub-components ── */
-function ExpiryDateValue({ value }) {
+/* compact：收進狀態欄的那一行只寫日期，實際截止時刻放 title */
+function ExpiryDateValue({ value, compact = false }) {
   const expiry = formatExpiryDate(value);
   if (!expiry) return "—";
+  if (compact) return <span title={expiry.title ?? undefined}>{expiry.date}</span>;
   return (
     <>
       {expiry.date}
@@ -107,10 +153,25 @@ function StatusBadge({ status }) {
   );
 }
 
+/* 環境內機器的連線資訊：IP 與對外網址（IP 欄，窄版時收進狀態欄） */
+function MachineIpValue({ machine }) {
+  return <>
+    <span className={styles.mono}>{machine.ip}</span>
+    {machine.publicUrl && (
+      <div className={styles.publicUrlList}>
+        <a className={styles.publicUrlLink} href={machine.publicUrl} target="_blank" rel="noreferrer" title={machine.publicUrl}>
+          <MIcon name="open_in_new" size={13} /><span className={styles.publicUrlText}>{machine.publicUrl.replace(/^https?:\/\//, "")}</span>
+        </a>
+      </div>
+    )}
+  </>;
+}
+
 function EnvironmentMachineRow({ machine, onUpdated }) {
   const { t } = useTranslation("resource");
   const toast = useToast();
   const navigate = useNavigate();
+  const fit = useTableFitContext();
   const typeMap = useTypeMap();
   const type = typeMap[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
@@ -146,39 +207,40 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
     navigate(`/resource-mgmt/${resource.vmid}`);
   };
 
+  /* 窄版收欄：來源（佔位）與到期日（依環境統一管理）收起就不畫；節點、環境收進名稱欄，IP 收進狀態欄。
+     environmentGroups 缺值時填「—」「N/A」佔位，收進主欄時不寫這些（狀態徽章已經看得出還沒有 IP） */
+  const foldedNode = fit.isFolded("node") && machine.node !== "—" && machine.node;
+  const foldedOs = fit.isFolded("env") && machine.os !== "—" && machine.os !== machine.name && machine.os;
+  const hasConnection = (machine.ip && machine.ip !== "N/A") || machine.publicUrl;
   return <>
     <tr
       className={`${styles.tr} ${styles.environmentMachineRow} ${canOpenDetail ? styles.trClickable : ""}`}
       onClick={canOpenDetail ? openDetail : undefined}
     >
-      <td className={`${styles.td} ${styles.checkCell}`} />
+      <td className={styles.td} />
       <td className={styles.td}>
         <div className={`${styles.nameCell} ${styles.environmentMachineName}`}>
           <span className={styles.machineBranch} aria-hidden="true">└</span>
           <div>
             <div className={styles.namePrimary}>{machine.name}</div>
-            <div className={styles.nameSub}>{machine.role} · {type.label}{specLabel ? ` · ${specLabel}` : ""}</div>
+            <div className={styles.nameSub}>{joinMeta(machine.role, type.label, specLabel, foldedNode)}</div>
+            {/* 課程機器的名稱本來就取自 os 欄（老師取的機器名），跟名稱一樣就不再寫一行 */}
+            {foldedOs && <div className={styles.nameSub}>{foldedOs}</div>}
           </div>
         </div>
       </td>
-      <td className={styles.td}><span className={styles.noAction}>—</span></td>
-      <td className={styles.td}>
+      {!fit.isFolded("kind") && <td className={styles.td}><span className={styles.noAction}>—</span></td>}
+      {!fit.isFolded("env") && <td className={styles.td}>
         <div className={styles.envPrimary}>{machine.os}</div>
         <div className={styles.envSub}>{machine.resource ? t("ResourceMgmtPage.envConnected") : t("ResourceMgmtPage.envProvisioning")}</div>
-      </td>
-      <td className={styles.td}><StatusBadge status={machine.status} /></td>
+      </td>}
       <td className={styles.td}>
-        <span className={styles.mono}>{machine.ip}</span>
-        {machine.publicUrl && (
-          <div className={styles.publicUrlList}>
-            <a className={styles.publicUrlLink} href={machine.publicUrl} target="_blank" rel="noreferrer" title={machine.publicUrl}>
-              <MIcon name="open_in_new" size={13} /><span className={styles.publicUrlText}>{machine.publicUrl.replace(/^https?:\/\//, "")}</span>
-            </a>
-          </div>
-        )}
+        <StatusBadge status={machine.status} />
+        {fit.isFolded("ip") && hasConnection && <FoldedLine><MachineIpValue machine={machine} /></FoldedLine>}
       </td>
-      <td className={styles.td}><span className={styles.noAction}>{t("ResourceMgmtPage.unifiedManagement")}</span></td>
-      <td className={styles.td}>{machine.node}</td>
+      {!fit.isFolded("ip") && <td className={styles.td}><MachineIpValue machine={machine} /></td>}
+      {!fit.isFolded("expiry") && <td className={styles.td}><span className={styles.noAction}>{t("ResourceMgmtPage.unifiedManagement")}</span></td>}
+      {!fit.isFolded("node") && <td className={styles.td}>{machine.node}</td>}
       <td className={styles.td}><div className={styles.actions}>
         <button type="button" className={styles.consoleBtn} disabled={!canOpen} title={canOpen ? (isLxc ? t("ResourceMgmtPage.terminalTitle") : t("ResourceMgmtPage.consoleTitle")) : resource?.status === "starting" ? t("ResourceMgmtPage.consoleBootingTitle") : t("ResourceMgmtPage.machineNotReadyTitle")} onClick={() => setConsoleOpen(true)}>
           <MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />
@@ -207,11 +269,18 @@ function EnvironmentGroupRows({ group, machines = group.machines, onUpdated, onR
   const [menuOpen, setMenuOpen] = useState(false);
   const menu = useDialogPresence(menuOpen, 130);
   const menuBtnRef = useRef(null);
+  const fit = useTableFitContext();
   const running = group.machines.filter((machine) => machine.status === "running").length;
   const allRunning = running === group.machines.length;
   const controllableVmids = group.machines
     .filter((machine) => machine.resource?.vmid && machine.resource.can_control !== false)
     .map((machine) => machine.resource.vmid);
+  /* 窄版收欄時這幾樣改畫在名稱欄（來源、環境、節點）與狀態欄（時限），欄裡與收起後共用同一份 */
+  const kindBadge = <MachineKindBadge kind={group.kind === "quick_practice" ? "quick_practice" : "teaching_class"} classRelation={group.classRelation} title={group.title} />;
+  const envLabel = group.kind === "course" ? t("ResourceMgmtPage.courseEnvironment") : t("ResourceMgmtPage.quickPracticeEnvironment");
+  const countLabel = machines.length < group.machines.length
+    ? t("ResourceMgmtPage.groupMatchCount", { shown: machines.length, count: group.machines.length })
+    : t("ResourceMgmtPage.machineCountLabel", { count: group.machines.length });
 
   async function runGroupAction(action) {
     if (!controllableVmids.length || groupAction) return;
@@ -246,7 +315,7 @@ function EnvironmentGroupRows({ group, machines = group.machines, onUpdated, onR
           toggleExpanded();
         }}
       >
-        <td className={`${styles.td} ${styles.checkCell}`}>
+        <td className={styles.td}>
           <button
             type="button"
             className={styles.environmentToggle}
@@ -260,28 +329,28 @@ function EnvironmentGroupRows({ group, machines = group.machines, onUpdated, onR
         <td className={styles.td}>
           <div className={styles.nameCell}>
             <div>
-              <div className={styles.namePrimary}>{group.title}</div>
+              <NameLine badge={fit.isFolded("kind") && kindBadge}>
+                <div className={styles.namePrimary}>{group.title}</div>
+              </NameLine>
               <div className={styles.nameSub}>
-                {machines.length < group.machines.length
-                  ? t("ResourceMgmtPage.groupMatchCount", { shown: machines.length, count: group.machines.length })
-                  : t("ResourceMgmtPage.machineCountLabel", { count: group.machines.length })}
+                {joinMeta(countLabel, fit.isFolded("env") && envLabel, fit.isFolded("node") && group.nodeLabel)}
               </div>
             </div>
           </div>
         </td>
-        <td className={styles.td}>
-          <MachineKindBadge kind={group.kind === "quick_practice" ? "quick_practice" : "teaching_class"} classRelation={group.classRelation} title={group.title} />
-        </td>
-        <td className={styles.td}>
-          <div className={styles.envPrimary}>{group.kind === "course" ? t("ResourceMgmtPage.courseEnvironment") : t("ResourceMgmtPage.quickPracticeEnvironment")}</div>
+        {!fit.isFolded("kind") && <td className={styles.td}>{kindBadge}</td>}
+        {!fit.isFolded("env") && <td className={styles.td}>
+          <div className={styles.envPrimary}>{envLabel}</div>
           <div className={styles.envSub}>{t("ResourceMgmtPage.groupView")}</div>
-        </td>
+        </td>}
         <td className={styles.td}>
           <span className={`${styles.badge} ${styles[`badge_${allRunning ? "success" : "info"}`]}`}>{t("ResourceMgmtPage.runningCount", { running, total: group.machines.length })}</span>
+          {fit.isFolded("expiry") && group.timingLabel && <FoldedLine><strong className={styles.environmentTiming}>{group.timingLabel}</strong></FoldedLine>}
         </td>
-        <td className={styles.td}><span className={styles.noAction}>—</span></td>
-        <td className={styles.td}><strong className={styles.environmentTiming}>{group.timingLabel}</strong></td>
-        <td className={styles.td}>{group.nodeLabel}</td>
+        {/* IP 欄在群組列沒有內容，收起就不畫 */}
+        {!fit.isFolded("ip") && <td className={styles.td}><span className={styles.noAction}>—</span></td>}
+        {!fit.isFolded("expiry") && <td className={styles.td}><strong className={styles.environmentTiming}>{group.timingLabel}</strong></td>}
+        {!fit.isFolded("node") && <td className={styles.td}>{group.nodeLabel}</td>}
         <td className={styles.td}>{controllableVmids.length > 0
           ? <div className={styles.actions}>
               {groupAction && <MIcon name="hourglass_empty" size={16} spin />}
@@ -348,29 +417,77 @@ function RowSelectCell({ resource, selected, canSelect, onToggleSelect }) {
   );
 }
 
+/* 窄版收欄時名稱欄多畫：來源徽章接在名稱後面、節點接在第二行後面、環境另起一行 */
 function ResourceNameCell({ resource }) {
   const { t } = useTranslation("resource");
+  const fit = useTableFitContext();
   const typeMap = useTypeMap();
   const type = typeMap[resource.type] ?? { label: resource.type, icon: "computer" };
+  const typeLabel = `${type.label}${resource.vmid > 0 ? t("ResourceMgmtPage.vmidSuffix", { vmid: resource.vmid }) : ""}`;
   return (
     <div className={styles.nameCell}>
       <div>
-        <div className={styles.namePrimary}>{resource.name}</div>
-        <div className={styles.nameSub}>
-          {type.label}
-          {resource.vmid > 0 && t("ResourceMgmtPage.vmidSuffix", { vmid: resource.vmid })}
-        </div>
+        <NameLine badge={fit.isFolded("kind") && <ResourceKindBadge resource={resource} />}>
+          <div className={styles.namePrimary}>{resource.name}</div>
+        </NameLine>
+        <div className={styles.nameSub}>{joinMeta(typeLabel, fit.isFolded("node") && resource.node)}</div>
+        {fit.isFolded("env") && (resource.environment_type || resource.os_info) && (
+          <div className={styles.nameSub}>{joinMeta(resource.environment_type, resource.os_info)}</div>
+        )}
       </div>
     </div>
   );
 }
 
-/* 到期日與核准時段取較早者（同「我的資源」與生命週期卡）：個人申請的機器多半只有時段 */
-function ResourceExpiryCell({ resource }) {
+/* 來源：管理員清單每台都標擁有者 */
+function ResourceKindBadge({ resource }) {
+  return (
+    <MachineKindBadge
+      kind={resource.machine_kind}
+      classRelation={resource.class_relation}
+      ownerName={resource.owner_name}
+      teachingClassName={resource.teaching_class_name}
+      showOwner
+    />
+  );
+}
+
+/* 窄版收欄時狀態欄多畫：IP（連線用，沒有就不放）、到期日 */
+function ResourceStatusCell({ resource }) {
   const { t } = useTranslation("resource");
-  if (isExpiryFromWindow(resource)) return <ExpiryDateValue value={resource.window_end_at} />;
+  const fit = useTableFitContext();
+  const hasConnection = resource.ip_address || (resource.public_urls ?? []).length > 0;
+  return <>
+    <StatusBadge status={resource.status} />
+    {fit.isFolded("ip") && hasConnection && <FoldedLine><ResourceIpValue resource={resource} /></FoldedLine>}
+    {fit.isFolded("expiry") && (
+      <FoldedLine label={t("ResourceMgmtPage.columnExpiry")}><ResourceExpiryCell resource={resource} compact /></FoldedLine>
+    )}
+  </>;
+}
+
+/* IP；底下列出反向代理發布的對外網址，管理員不必進詳情頁就能點 */
+function ResourceIpValue({ resource }) {
+  return <>
+    <span className={styles.mono}>{resource.ip_address ?? "N/A"}</span>
+    {(resource.public_urls ?? []).length > 0 && (
+      <div className={styles.publicUrlList}>
+        {resource.public_urls.map((url) => (
+          <a key={url} className={styles.publicUrlLink} href={url} target="_blank" rel="noreferrer" title={url}>
+            <MIcon name="open_in_new" size={13} /><span className={styles.publicUrlText}>{url.replace(/^https?:\/\//, "")}</span>
+          </a>
+        ))}
+      </div>
+    )}
+  </>;
+}
+
+/* 到期日與核准時段取較早者（同「我的資源」與生命週期卡）：個人申請的機器多半只有時段 */
+function ResourceExpiryCell({ resource, compact = false }) {
+  const { t } = useTranslation("resource");
+  if (isExpiryFromWindow(resource)) return <ExpiryDateValue value={resource.window_end_at} compact={compact} />;
   return resource.expiry_date
-    ? <ExpiryDateValue value={resource.expiry_date} />
+    ? <ExpiryDateValue value={resource.expiry_date} compact={compact} />
     : <span className={styles.noExpiry}>{t("ResourceMgmtPage.noExpiry")}</span>;
 }
 
@@ -455,30 +572,22 @@ const resourceColumns = columnHelper.columns([
       />
     ),
     meta: {
-      thClassName: `${styles.th} ${styles.checkCell}`,
-      tdClassName: `${styles.td} ${styles.checkCell}`,
+      thClassName: styles.th,
+      tdClassName: styles.td,
       tdProps: { "data-guide": "resource-mgmt-row-select" },
     },
   }),
-  /* 名稱 */
+  /* 名稱（窄版時收起的來源、環境、節點畫在這裡） */
   columnHelper.accessor("name", {
     header: () => <ColumnTitle index={0} />,
     cell: ({ row }) => <ResourceNameCell resource={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
-  /* 來源：管理員清單每台都標擁有者 */
+  /* 來源 */
   columnHelper.display({
     id: "kind",
     header: () => <ColumnTitle index={1} />,
-    cell: ({ row }) => (
-      <MachineKindBadge
-        kind={row.original.machine_kind}
-        classRelation={row.original.class_relation}
-        ownerName={row.original.owner_name}
-        teachingClassName={row.original.teaching_class_name}
-        showOwner
-      />
-    ),
+    cell: ({ row }) => <ResourceKindBadge resource={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   /* 環境 / 系統 */
@@ -493,30 +602,17 @@ const resourceColumns = columnHelper.columns([
     ),
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
-  /* 狀態 */
+  /* 狀態（窄版時收起的 IP、到期日畫在這裡） */
   columnHelper.accessor("status", {
     header: () => <ColumnTitle index={3} />,
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => <ResourceStatusCell resource={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
-  /* IP；底下列出反向代理發布的對外網址，管理員不必進詳情頁就能點 */
+  /* IP */
   columnHelper.display({
     id: "ip",
     header: () => <ColumnTitle index={4} />,
-    cell: ({ row }) => (
-      <>
-        <span className={styles.mono}>{row.original.ip_address ?? "N/A"}</span>
-        {(row.original.public_urls ?? []).length > 0 && (
-          <div className={styles.publicUrlList}>
-            {row.original.public_urls.map((url) => (
-              <a key={url} className={styles.publicUrlLink} href={url} target="_blank" rel="noreferrer" title={url}>
-                <MIcon name="open_in_new" size={13} /><span className={styles.publicUrlText}>{url.replace(/^https?:\/\//, "")}</span>
-              </a>
-            ))}
-          </div>
-        )}
-      </>
-    ),
+    cell: ({ row }) => <ResourceIpValue resource={row.original} />,
     meta: { thClassName: styles.th, tdClassName: styles.td },
   }),
   /* 到期日：日期照字面，小字附本地時間的實際截止時刻（後端以到期日 00:00 UTC 為界） */
@@ -758,6 +854,8 @@ export default function ResourceMgmtPage() {
     paddingTop: virtualPadTop,
     paddingBottom: virtualPadBottom,
   } = useVirtualRows({ count: shownResources.length });
+  /* 窄版收欄：量 .tableWrap 的寬度決定收哪些欄（RESOURCE_MGMT_FIT_COLUMNS） */
+  const tableFit = useTableFit(RESOURCE_MGMT_FIT_COLUMNS);
 
   return (
     <div className={styles.page}>
@@ -830,19 +928,8 @@ export default function ResourceMgmtPage() {
               )}
             />
           ) : (
-          <div className={styles.tableWrap} data-guide="resource-mgmt-table">
-            <table className={styles.table}>
-              <colgroup>
-                <col className={styles.colCheck} />
-                <col className={styles.colName} />
-                <col className={styles.colKind} />
-                <col className={styles.colEnv} />
-                <col className={styles.colStatus} />
-                <col className={styles.colIp} />
-                <col className={styles.colExpiry} />
-                <col className={styles.colNode} />
-                <col className={styles.colActions} />
-              </colgroup>
+          <div ref={tableFit.ref} className={styles.tableWrap} data-guide="resource-mgmt-table">
+            <DataTableShell table={table} fit={tableFit} className={styles.table}>
               <DataTableHead table={table} />
               {/* 兩個 tbody 自己組：環境群組列不屬於散機那份資料，放第一個；
                   散機列的 tbody 要掛虛擬化的 ref，它量的是這個 tbody 距頁頂的位置，不能跟群組列混在一起 */}
@@ -874,7 +961,7 @@ export default function ResourceMgmtPage() {
                 })}
                 {virtualPadBottom > 0 && <tr aria-hidden="true" style={{ height: virtualPadBottom }} />}
               </tbody>
-            </table>
+            </DataTableShell>
           </div>
           )}
           </>

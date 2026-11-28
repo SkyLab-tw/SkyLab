@@ -11,8 +11,8 @@ let host;
 let root;
 let latest;
 
-function Probe({ scope = "test", groupId }) {
-  latest = usePersistedGroupExpansion(scope, groupId);
+function Probe({ scope = "test", groupId, options }) {
+  latest = usePersistedGroupExpansion(scope, groupId, options);
   return null;
 }
 
@@ -48,6 +48,27 @@ test("重新掛載時沿用收起狀態；數字 id 也認得", async () => {
   window.localStorage.setItem(KEY, JSON.stringify(["42"]));
   await act(async () => root.render(<Probe groupId={42} />));
   expect(latest[0]).toBe(false);
+});
+
+test("defaultExpanded=false：預設收起，展開才記進本機，重新掛載沿用", async () => {
+  const EXPANDED_KEY = "skylab:expanded-groups:test";
+  /* 舊版留下的「收起」紀錄不影響預設收起的群組 */
+  window.localStorage.setItem(KEY, JSON.stringify(["pending"]));
+  await act(async () => root.render(<Probe groupId="pending" options={{ defaultExpanded: false }} />));
+  expect(latest[0]).toBe(false);
+
+  await act(async () => latest[1]());
+  expect(latest[0]).toBe(true);
+  expect(JSON.parse(window.localStorage.getItem(EXPANDED_KEY))).toEqual(["pending"]);
+
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await act(async () => root.render(<Probe groupId="pending" options={{ defaultExpanded: false }} />));
+  expect(latest[0]).toBe(true);
+
+  await act(async () => latest[1]());
+  expect(latest[0]).toBe(false);
+  expect(JSON.parse(window.localStorage.getItem(EXPANDED_KEY))).toEqual([]);
 });
 
 test("各頁面（scope）各記各的", async () => {

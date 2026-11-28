@@ -363,6 +363,8 @@ _ALLOWED_TOOL_NAMES = frozenset(
     for tool in _TOOLS
     if isinstance(tool.get("function"), dict)
 )
+# 只讀取狀態的工具；ssh_exec 可執行任意指令，不算唯讀。
+READ_ONLY_TOOL_NAMES = _ALLOWED_TOOL_NAMES - {"ssh_exec"}
 _SCOPE_PROMPT = (
     "本次對話僅可讀取與操作指定範圍內的 VM/LXC，不得查詢或操作範圍外的 VMID。"
 )

@@ -20,12 +20,14 @@ export default function EnvironmentChoice({ candidate, selected, suggested, onSe
       <strong><span>{candidate.name}</span><i>v{candidate.version}</i></strong>
       <p>{candidate.description || t("ClassWorkspacePage.noDescriptionFallback")}</p>
     </div>
+    {/* 規格是挑環境時真正要比的：一行 12px 文字，「每人幾台」帶圖示、深一點當重點 */}
     <div className={styles.envChoiceSpecs}>
-      <span><MIcon name="dns" size={13} />{t("ClassWorkspacePage.perStudentUnit", { count: candidate.nodes.length })}</span>
+      <span className={styles.envChoiceUnit}><MIcon name="dns" size={14} />{t("ClassWorkspacePage.perStudentUnit", { count: candidate.nodes.length })}</span>
       <span>{specs.cpu} CPU</span>
       <span>{specs.memory} GB RAM</span>
       <span>{specs.disk} GB</span>
     </div>
-    <em>{selected ? <><MIcon name="check" size={14} />{t("ClassWorkspacePage.selectedLabel")}</> : t("ClassWorkspacePage.selectLabel")}</em>
+    {/* 整列就是按鈕：沒選的列不放「選擇」，靠滑過的淡底表示可以點；選中的列標主色「✓ 已選擇」 */}
+    {selected ? <em><MIcon name="check" size={16} />{t("ClassWorkspacePage.selectedLabel")}</em> : null}
   </button>;
 }

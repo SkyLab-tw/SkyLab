@@ -35,6 +35,7 @@ import fwStyles from "../../network/firewall/FirewallPage.module.scss";
 import { ThemeContext } from "../../../contexts/ThemeContext";
 import NodeHandles from "../../network/firewall/nodes/NodeHandles";
 import { routeEdges } from "../../network/firewall/utils/buildFlow";
+import { applyMoves, settleDraggedNodes } from "../../network/firewall/utils/nodeSpacing";
 import ConnectionDialog, { INTERNET_KEY } from "../../../components/ConnectionDialog/ConnectionDialog";
 import { INTENT } from "../../../components/ConnectionDialog/intents";
 import { frozenTopologyLayout, peerDetailPort, peerEdgeLabel, publicationDetailPort, publicationLabel } from "../courseTopology";
@@ -387,22 +388,26 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
         return {
           id: String(node.id),
           type: "courseMachine",
-          // 已發布的版本不能拖，一律從存的座標重算（下面再推開）；可編輯時沿用畫布上的當下位置
-          position: frozen ? saved : (placed.get(String(node.id)) ?? saved),
+          // 沿用畫布上的當下位置；已發布的版本第一次畫時從存的座標算（下面再推開）
+          position: saved,
           data: { node, exposedCount: exposure.get(node.id) ?? 0, frozen },
           selected: selectedNode?.id === node.id,
         };
       });
-      /* 已發布的版本拖不動：機器靠太近、連線標籤被隔壁那台蓋住時，顯示時推開
-         （跟班級上課環境的唯讀圖同一套，只影響畫面，不改存的座標） */
+      /* 已發布的版本不能改，但節點仍可拖開來看（只影響畫面，不改存的座標）。
+         起始位置：機器靠太近、連線標籤被隔壁那台蓋住時先推開（跟班級上課環境的唯讀圖同一套）；
+         拖過的沿用畫布上的當下位置 */
       const layout = frozen ? frozenTopologyLayout(machines) : null;
-      const shown = layout ? machines.map((node) => ({ ...node, position: layout.positions.get(node.id) })) : machines;
+      const shown = machines.map((node) => ({
+        ...node,
+        position: placed.get(node.id) ?? layout?.positions.get(node.id) ?? node.position,
+      }));
       /* 網際網路節點跟防火牆頁一樣常駐：拖線到它就是「開放服務給外部」，
          也讓拓撲圖一眼看得出哪幾台對外 */
       return [...shown, {
         id: INTERNET_KEY,
         type: "gateway",
-        position: layout ? layout.internet : (placed.get(INTERNET_KEY) ?? internetPosition),
+        position: placed.get(INTERNET_KEY) ?? layout?.internet ?? internetPosition,
         data: {},
         selected: false,
       }];
@@ -410,7 +415,12 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
   }, [value, publications, selectedNode?.id, setFlowNodes, internetPosition, frozen]);
 
   // 位置只在放開滑鼠時回寫，一次拖曳只產生一筆變更。
-  const commitNodePositions = useCallback((_event, _node, draggedNodes) => {
+  const commitNodePositions = useCallback((_event, _node, droppedNodes) => {
+    /* 放得離別台太近（徽章互壓、連線短到放不下標籤）就推開到最近的空處，存推開後的位置（跟防火牆頁同一套） */
+    const { moves, dragged: draggedNodes } = settleDraggedNodes(flowNodes, droppedNodes);
+    setFlowNodes((previous) => applyMoves(previous, moves));
+    /* 已發布的版本：拖曳只是挪開來看，不回寫座標 */
+    if (frozen) return;
     const moved = new Map(draggedNodes.map((item) => [item.id, item.position]));
     const internet = moved.get(INTERNET_KEY);
     if (internet) setInternetPosition({ x: Math.round(internet.x), y: Math.round(internet.y) });
@@ -421,7 +431,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
         ? { ...node, positionX: Math.round(position.x), positionY: Math.round(position.y) }
         : node;
     }));
-  }, [onChange, value]);
+  }, [onChange, value, flowNodes, setFlowNodes, frozen]);
 
   const graphEdges = useMemo(() => {
     const peerEdges = edges.map((edge) => ({
@@ -503,7 +513,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
             onPaneClick={() => selectNode("")}
             isValidConnection={(connection) => Boolean(connection?.source && connection?.target && connection.source !== connection.target)}
             connectionRadius={36}
-            nodesDraggable={!locked}
+            nodesDraggable={!locked || frozen}
             nodesConnectable={!locked}
             elementsSelectable
             deleteKeyCode={null}
@@ -955,7 +965,7 @@ export default function CourseTemplateEditorPage() {
       activeKey={tab}
       onSelect={changeTab}
     />
-    {tab === "basic" && <section className={styles.card}><div className={styles.formGrid}><label className={styles.field} data-guide="course-tpl-editor-name"><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input ref={nameRef} className={invalidField === "name" ? styles.fieldInvalid : undefined} aria-invalid={invalidField === "name"} aria-errormessage={invalidField === "name" ? "env-name-error" : undefined} disabled={saving} value={template.name} onChange={(event) => { updateBasics({ name: event.target.value }); if (invalidField === "name") setInvalidField(""); }} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} />{invalidField === "name" && <em id="env-name-error" className={styles.fieldError}>{t("CourseTemplateEditorPage.nameRequiredError")}</em>}</label><label className={styles.field} data-guide="course-tpl-editor-usage"><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={saving} value={template.usageScope ?? "course"} onChange={(event) => updateBasics({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label><label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={saving} rows={3} value={template.description ?? ""} onChange={(event) => updateBasics({ description: event.target.value })} /></label>
+    {tab === "basic" && <section className={styles.card}><div className={styles.formGrid}><label className={styles.field} data-guide="course-tpl-editor-name"><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input ref={nameRef} className={invalidField === "name" ? styles.fieldInvalid : undefined} aria-invalid={invalidField === "name"} aria-errormessage={invalidField === "name" ? "env-name-error" : undefined} disabled={saving} value={template.name} onChange={(event) => { updateBasics({ name: event.target.value }); if (invalidField === "name") setInvalidField(""); }} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} />{invalidField === "name" && <em id="env-name-error" className={styles.fieldError}>{t("CourseTemplateEditorPage.nameRequiredError")}</em>}</label><label className={styles.field} data-guide="course-tpl-editor-usage"><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={saving} value={template.usageScope ?? "course"} onChange={(event) => updateBasics({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label><label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={saving} rows={6} value={template.description ?? ""} onChange={(event) => updateBasics({ description: event.target.value })} /></label>
 
       {/* 說明文件是基本資訊的一個滿寬欄位：放在 formGrid 裡才吃得到卡片內距、跟上面的欄位對齊 */}
       <div className={`${styles.fileSection} ${styles.fieldFull}`} data-guide="course-tpl-editor-files">
@@ -968,9 +978,11 @@ export default function CourseTemplateEditorPage() {
             <button type="button" className={styles.fileRemove} disabled={saving} aria-label={t("CourseTemplateEditorPage.removeFileAria", { name: file.filename })} onClick={() => removeFile(file)}><MIcon name="close" size={15} /></button>
           </li>)}
         </ul>}
-        {/* 環境還沒建立時整塊停用，說明直接寫在上傳區塊裡 */}
+        {/* 環境還沒建立時整塊停用，說明直接寫在上傳區塊裡。
+            用單行精簡版：說明文件是選填附件，不該比上面的環境用途還搶版面 */}
         <FileDropzone
           multiple
+          compact
           disabled={saving || !hasEnvironmentId}
           uploading={uploadProgress !== null}
           progress={uploadProgress}

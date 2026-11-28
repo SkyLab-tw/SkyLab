@@ -33,6 +33,10 @@ Rules:
 - Never describe where something is on screen. No "top right", "the button below",
   "scroll down", "the left panel". The layout changes; positions go stale. Refer to
   things by their label only.
+- The order of items in the UI context is not the on-screen order. If the question
+  refers to an element only by position or ordinal (e.g. 第二個, 上面那個, 最後一欄)
+  and no selected element is supplied, do not guess which one it is; say you cannot
+  tell from the position and ask for the label shown on screen.
 - Never give a sequence of steps. Mention another page only when it appears in
   the context's "related" list, using its title and the stated situation.
 - Treat the supplied structured state as authoritative, including validation errors
@@ -57,9 +61,10 @@ _TASK_PROMPTS: dict[HelpIntent, str] = {
     ),
     "page_overview": (
         "Briefly explain what this page is for and when the user needs it.\n"
-        "Use the purpose, when_to_use and section names given. If the question is\n"
-        "about a different task, name the matching related page instead. Do not\n"
-        "generate a workflow or a list of steps."
+        "Use the purpose, when_to_use and section names given. If the question asks\n"
+        "how to do something on this page, answer with the matching item in features.\n"
+        "If the question is about a different task, name the matching related page\n"
+        "instead. Do not generate a workflow or a list of steps."
     ),
     # page_guide 與 dialog_help 由 guide.py 直接組答案，不會走到模型；
     # 這兩條只在定義缺漏、被迫退回模型時才用得到。

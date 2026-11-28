@@ -4,6 +4,7 @@ import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
+import Disclosure from "../Disclosure/Disclosure";
 import OctoAvatar from "../OctoPet/OctoAvatar";
 import { useToast } from "../../hooks/useToast";
 import { AiPveLogService } from "../../services/aiPveLog";
@@ -136,11 +137,7 @@ const TOOL_LABELS = {
 
 export function AiPveToolHistory({ tools, t }) {
   if (!tools?.length) return null;
-  return <details className={styles.toolHistory}>
-    <summary>
-      <MIcon name="chevron_right" size={16} className={styles.toolChevron} />
-      {t("AiPveChat.toolHistory", { count: tools.length })}
-    </summary>
+  return <Disclosure variant="inline" className={styles.toolHistory} label={t("AiPveChat.toolHistory", { count: tools.length })}>
     <ul>
       {tools.map((tool, index) => <li key={tool.tool_call_id || `${tool.name}-${index}`}>
         <span>{t(TOOL_LABELS[tool.name] ?? "AiPveChat.toolOther")}</span>
@@ -148,7 +145,7 @@ export function AiPveToolHistory({ tools, t }) {
         {tool.args?.node && <small>{String(tool.args.node)}</small>}
       </li>)}
     </ul>
-  </details>;
+  </Disclosure>;
 }
 
 /** 將 AI 回覆以安全的 Markdown 呈現，避免格式標記以原始文字顯示。

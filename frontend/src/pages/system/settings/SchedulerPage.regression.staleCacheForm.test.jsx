@@ -57,10 +57,9 @@ async function flush() {
   });
 }
 
+/* 閾值欄位畫面只顯示短名，完整名稱在 aria-label */
 function warnInput() {
-  const label = [...host.querySelectorAll("label")]
-    .find((el) => el.textContent.includes("SettingsPage.placementLoadavgWarnPerCore"));
-  return label?.querySelector("input");
+  return host.querySelector('input[aria-label="SettingsPage.placementLoadavgWarnPerCore"]');
 }
 
 test("coming back to the page shows the freshly fetched scheduler settings, not the cached ones", async () => {

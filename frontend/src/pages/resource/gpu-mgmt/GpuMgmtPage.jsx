@@ -5,6 +5,8 @@ import styles from "./GpuMgmtPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { GpuService } from "../../../services/gpu";
 import { useGpuCacheUpdater, useGpuMappingsQuery } from "../../../queries/gpu";
@@ -123,12 +125,20 @@ function groupByNode(mapEntries) {
   return groups;
 }
 
-/* MB → 人類可讀（512 MB / 4 GB / 1.5 GB） */
+/* 每個節點有幾個位址（保留首次出現的順序），供收合摘要只列節點時用 */
+function summarizeNodes(mapEntries) {
+  const counts = new Map();
+  for (const entry of mapEntries) counts.set(entry.node, (counts.get(entry.node) ?? 0) + 1);
+  return [...counts].map(([node, count]) => ({ node, count }));
+}
+
+/* MB → 人類可讀（512 MB / 4 GB / 1.5 GB）。
+   數字與單位之間用不換行空格：欄位變窄時 VRAM 那行會換行，不會拆成「12」「GB」兩行 */
 function formatVram(mb) {
   if (!mb || mb <= 0) return "";
-  if (mb < 1024) return `${mb} MB`;
+  if (mb < 1024) return `${mb} MB`;
   const gb = mb / 1024;
-  return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} GB`;
+  return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} GB`;
 }
 
 /* 有搜尋條件時（onClearSearch）是「沒有符合的」，不是「還沒偵測到 GPU」 */
@@ -186,14 +196,34 @@ function ColumnTitle({ index }) {
   return useColumns()[index];
 }
 
-function GpuNameCell({ item }) {
+/* ── 窄版收欄（useTableFit，樣式規範「表格」規則四） ──
+   表格區不夠寬時依序收起描述、節點 / PCI、可用 / 總數、使用中 VM；Mapping、狀態、操作永遠在。
+   收起的內容改畫在名稱欄（描述、節點 / PCI：這張卡是什麼、裝在哪裡）與狀態欄（可用量、哪些 VM 在用）。
+   欄寬只寫在這裡：節點 / PCI 一筆是節點名＋「0000:41:00.0」，要 200px；
+   可用 / 總數底下的 VRAM 行（VRAM 使用中 12 GB / 48 GB）要 180px；英文的 Actions 表頭要 80px。
+   全部欄 1150px：1440 寬（表格區約 1003px）只收描述、1366 筆電（約 929～944px）再收節點 / PCI，
+   1100 寬視窗（約 678px）再收可用 / 總數；收到只剩三欄 440px，1440 開著 AI 助手（約 567px）、
+   手機（約 448px）都還放得下 */
+const GPU_FIT_COLUMNS = Object.freeze([
+  { id: "mapping", width: 210 },
+  { id: "description", width: 160, fold: 1 },
+  { id: "pci", width: 200, fold: 2 },
+  { id: "capacity", width: 180, fold: 3 },
+  { id: "usage", width: 170, fold: 4 },
+  { id: "status", width: 150 },
+  { id: "actions", width: 80 },
+]);
+
+/* 窄版收欄時名稱欄多畫：描述（型號）一行、節點 / PCI 整塊（位址多時的展開鈕照樣能按） */
+function GpuNameCell({ item, rowState }) {
   const { t } = useTranslation("resource");
+  const fit = useTableFitContext();
   return (
     <div className={styles.nameCell}>
       <div className={styles.nameIcon}>
         <MIcon name="memory" size={18} />
       </div>
-      <div>
+      <div className={styles.nameText}>
         <div className={styles.namePrimary}>{item.mapping}</div>
         <div className={styles.nameSub}>
           {item.is_sriov ? t("GpuMgmtPage.typeSriov") : t("GpuMgmtPage.typePassthrough")}
@@ -202,22 +232,42 @@ function GpuNameCell({ item }) {
             ? t("GpuMgmtPage.perInstanceVram", { vram: formatVram(item.per_instance_vram_mb) })
             : ""}
         </div>
+        {fit.isFolded("description") && item.description && (
+          <div className={styles.foldedLine}>{item.description}</div>
+        )}
+        {fit.isFolded("pci") && item.mapEntries.length > 0 && (
+          <div className={styles.foldedBlock} data-guide="gpu-mgmt-pci">
+            <GpuPciCell item={item} rowState={rowState} />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function GpuPciCell({ item, collapsible, expanded, unitLabel, onToggleExpanded }) {
+/* rowState 由 GpuMappingRow 給：位址多時收合（collapsible）、目前是否展開、VF／裝置的單位、展開鈕 */
+function GpuPciCell({ item, rowState }) {
+  const { collapsible, expanded, unitLabel, onToggleExpanded } = rowState;
   if (item.mapEntries.length === 0) return <span className={styles.muted}>—</span>;
   if (collapsible) {
+    /* 位址不連續時壓不成區段（整張卡直通的 8 張卡就是 8 段），摘要只留節點，
+       位址交給展開列；多個節點時各自帶數量 */
+    const segments = compressEntries(item.mapEntries);
+    const nodeCounts = summarizeNodes(item.mapEntries);
     return (
       <div className={styles.mapSummary}>
-        {compressEntries(item.mapEntries).map((seg) => (
-          <span key={`${seg.node}-${seg.start}`} className={styles.mapEntry}>
-            <span className={styles.mapNode}>{seg.node}</span>
-            <code className={styles.code}>{formatSegment(seg)}</code>
-          </span>
-        ))}
+        {segments.length <= PCI_COLLAPSE_THRESHOLD
+          ? segments.map((seg) => (
+              <span key={`${seg.node}-${seg.start}`} className={styles.mapEntry}>
+                <span className={styles.mapNode}>{seg.node}</span>
+                <code className={styles.code}>{formatSegment(seg)}</code>
+              </span>
+            ))
+          : nodeCounts.map(({ node, count }) => (
+              <span key={node} className={styles.mapNodeOnly}>
+                {nodeCounts.length > 1 ? `${node} × ${count}` : node}
+              </span>
+            ))}
         <button
           type="button"
           className={`${styles.vfChip} ${expanded ? styles.vfChipOpen : ""}`}
@@ -242,11 +292,20 @@ function GpuPciCell({ item, collapsible, expanded, unitLabel, onToggleExpanded }
   );
 }
 
-function GpuCapacityCell({ item }) {
+/* folded：收進狀態欄時，可用數改成帶欄名的小字行——狀態徽章已寫「2/4 使用中」，
+   光寫「2 / 4」分不出是可用還是已用；數字整段一起換行，不拆成「2 /」「4」 */
+function GpuCapacityCell({ item, folded = false }) {
   const { t } = useTranslation("resource");
+  const count = `${item.available_count} / ${item.capacity_count}`;
   return (
     <>
-      <div>{item.available_count} / {item.capacity_count}</div>
+      {folded ? (
+        <div className={styles.foldedLine}>
+          {t("GpuMgmtPage.columnAvailableTotal")} <span className={styles.foldedValue}>{count}</span>
+        </div>
+      ) : (
+        <div>{count}</div>
+      )}
       {item.is_sriov && item.capacity_count !== item.device_count && (
         <div className={styles.cellSub}>{item.device_count} VF</div>
       )}
@@ -255,6 +314,27 @@ function GpuCapacityCell({ item }) {
           {item.used_vram_known
             ? t("GpuMgmtPage.vramInUse", { used: formatVram(item.used_vram_mb) || "0", total: formatVram(item.total_vram_mb) })
             : t("GpuMgmtPage.vramUnknown", { total: formatVram(item.total_vram_mb) })}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* 窄版收欄時狀態欄多畫：可用 / 總數（含 VF、VRAM），再來是哪些 VM 在用（沒有就不放）。
+   導覽錨點跟著內容搬過來，收欄後導覽照樣指得到 */
+function GpuStatusCell({ item }) {
+  const fit = useTableFitContext();
+  return (
+    <>
+      <StatusBadge used={item.used_count} total={item.capacity_count} />
+      {fit.isFolded("capacity") && (
+        <div className={styles.foldedBlock} data-guide="gpu-mgmt-capacity">
+          <GpuCapacityCell item={item} folded />
+        </div>
+      )}
+      {fit.isFolded("usage") && item.vms.length > 0 && (
+        <div className={styles.foldedBlock} data-guide="gpu-mgmt-usage">
+          <VmChips vms={item.vms} />
         </div>
       )}
     </>
@@ -289,7 +369,7 @@ const tdMeta = (tdProps) => ({
 const gpuColumns = columnHelper.columns([
   columnHelper.accessor("mapping", {
     header: () => <ColumnTitle index={0} />,
-    cell: ({ row }) => <GpuNameCell item={row.original} />,
+    cell: ({ row, rowState }) => <GpuNameCell item={row.original} rowState={rowState} />,
     meta: tdMeta(),
   }),
   columnHelper.accessor("description", {
@@ -300,15 +380,7 @@ const gpuColumns = columnHelper.columns([
   columnHelper.display({
     id: "pci",
     header: () => <ColumnTitle index={2} />,
-    cell: ({ row, rowState }) => (
-      <GpuPciCell
-        item={row.original}
-        collapsible={rowState.collapsible}
-        expanded={rowState.expanded}
-        unitLabel={rowState.unitLabel}
-        onToggleExpanded={rowState.onToggleExpanded}
-      />
-    ),
+    cell: ({ row, rowState }) => <GpuPciCell item={row.original} rowState={rowState} />,
     meta: tdMeta({ "data-guide": "gpu-mgmt-pci" }),
   }),
   columnHelper.display({
@@ -326,7 +398,7 @@ const gpuColumns = columnHelper.columns([
   columnHelper.display({
     id: "status",
     header: () => <ColumnTitle index={5} />,
-    cell: ({ row }) => <StatusBadge used={row.original.used_count} total={row.original.capacity_count} />,
+    cell: ({ row }) => <GpuStatusCell item={row.original} />,
     meta: tdMeta(),
   }),
   columnHelper.display({
@@ -338,9 +410,12 @@ const gpuColumns = columnHelper.columns([
 ]);
 
 /* 一個對應一列；PCI 位址多的可以展開，下面多一列列出全部位址。
-   inExpandedSet：頁面記著這筆展開了（位址不多的列沒有展開這回事） */
+   inExpandedSet：頁面記著這筆展開了（位址不多的列沒有展開這回事）。
+   展開列橫跨目前顯示中的欄（窄版收起的欄不畫，colSpan 跟著少） */
 function GpuMappingRow({ row, item, inExpandedSet, deleting, onToggleExpanded, onDelete }) {
   const { t } = useTranslation("resource");
+  const fit = useTableFitContext();
+  const shownColumnCount = row.getAllCells().filter((cell) => !fit.isFolded(cell.column.id)).length;
   const collapsible = item.mapEntries.length > PCI_COLLAPSE_THRESHOLD;
   const expanded = collapsible && inExpandedSet;
   const unitLabel = item.is_sriov ? t("GpuMgmtPage.unitVf") : t("GpuMgmtPage.unitDevice");
@@ -362,7 +437,7 @@ function GpuMappingRow({ row, item, inExpandedSet, deleting, onToggleExpanded, o
 
       {expanded && (
         <tr className={styles.detailTr}>
-          <td className={styles.detailTd} colSpan={gpuColumns.length}>
+          <td className={styles.detailTd} colSpan={shownColumnCount}>
             <div className={styles.detailBody}>
               {groupByNode(item.mapEntries).map((group) => (
                 <div key={group.node}>
@@ -464,6 +539,7 @@ export default function GpuMgmtPage() {
     data: visible,
     getRowId: (item) => String(item.id),
   });
+  const fit = useTableFit(GPU_FIT_COLUMNS);
 
   return (
     <div className={styles.page}>
@@ -488,9 +564,10 @@ export default function GpuMgmtPage() {
         ) : visible.length === 0 ? (
           <EmptyState onClearSearch={filter.trim() ? () => setFilter("") : undefined} />
         ) : (
-          <div className={styles.tableWrap} data-guide="gpu-mgmt-table">
+          <div ref={fit.ref} className={styles.tableWrap} data-guide="gpu-mgmt-table">
             <DataTable
               table={table}
+              fit={fit}
               className={styles.table}
               renderRow={(row) => (
                 <GpuMappingRow

@@ -304,6 +304,85 @@ describe("AiApiReviewPage", () => {
     expect(mocks.toast.error).toHaveBeenCalledTimes(1);
   });
 
+  describe("narrow table (useTableFit)", () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    let tableWidth;
+
+    beforeEach(() => {
+      /* happy-dom 沒有版面：表格區（data-guide="ai-review-table"）的寬度由測試指定 */
+      Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+        configurable: true,
+        get() { return this.getAttribute("data-guide") === "ai-review-table" ? tableWidth : 0; },
+      });
+    });
+
+    afterEach(() => {
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+    });
+
+    const headers = () => [...host.querySelectorAll("thead th")].map((th) => th.textContent);
+    const firstRowCells = () => [...host.querySelector("tbody tr").children];
+
+    async function renderAt(width, rows, tab = "pending") {
+      tableWidth = width;
+      mocks.listAllRequests.mockImplementation(async ({ status } = {}) => {
+        const data = rows.filter((r) => !status || r.status === status);
+        return { data, count: data.length };
+      });
+      await act(async () => { renderPage(); });
+      await act(settle);
+      if (tab !== "pending") {
+        await act(async () => { host.querySelector(`[data-tab="${tab}"]`).click(); });
+        await act(settle);
+      }
+    }
+
+    test("at 1440 with the AI assistant open (567px) only key, status and actions stay; the rest folds into them", async () => {
+      const pending = { ...request("p1", "pending", "2026-09-02T00:00:00Z"), user_full_name: "王小明" };
+      await renderAt(567, [pending]);
+
+      expect(headers()).toEqual(["", "AiApiReviewPage.colKeyName", "AiApiReviewPage.colStatus", "AiApiReviewPage.colActions"]);
+      expect(host.querySelector("table").hasAttribute("data-overflow")).toBe(false);
+      const [selectCell, keyCell, statusCell, actionsCell] = firstRowCells();
+      expect(selectCell.querySelector('input[type="checkbox"]')).not.toBeNull();
+      /* 申請者、用途收進金鑰名稱底下，用途的導覽錨點跟著搬 */
+      expect(keyCell.textContent).toContain("key-p1");
+      expect(keyCell.textContent).toContain("王小明 · p1@example.edu");
+      expect(keyCell.querySelector('[data-guide="ai-review-purpose"]').textContent).toBe("課堂作業");
+      /* 時間收進狀態底下；還沒審核就不寫審核時間 */
+      expect(statusCell.textContent).toContain("AiApiReviewPage.colAppliedAt");
+      expect(statusCell.textContent).not.toContain("AiApiReviewPage.colReviewedAt");
+      expect(actionsCell.querySelector('[data-guide="ai-review-actions"]')).not.toBeNull();
+    });
+
+    test("times stay together: reviewed time goes under the applied time first, then both under the status", async () => {
+      const approved = { ...request("a1", "approved", "2026-09-01T00:00:00Z"), reviewed_at: "2026-09-03T00:00:00Z" };
+
+      /* 沒有待審的分頁不畫勾選欄：全部 1210px，只收審核時間剩 1040px */
+      await renderAt(1100, [approved], "approved");
+      expect(headers()).not.toContain("AiApiReviewPage.colReviewedAt");
+      expect(headers()).toContain("AiApiReviewPage.colAppliedAt");
+      const createdCell = firstRowCells()[headers().indexOf("AiApiReviewPage.colAppliedAt")];
+      expect(createdCell.textContent).toContain("AiApiReviewPage.colReviewedAt");
+
+      act(() => root.unmount());
+      root = createRoot(host);
+      await renderAt(1000, [approved], "approved");
+      expect(headers()).not.toContain("AiApiReviewPage.colAppliedAt");
+      const statusText = firstRowCells()[headers().indexOf("AiApiReviewPage.colStatus")].textContent;
+      expect(statusText.indexOf("AiApiReviewPage.colAppliedAt")).toBeGreaterThan(-1);
+      expect(statusText.indexOf("AiApiReviewPage.colReviewedAt")).toBeGreaterThan(statusText.indexOf("AiApiReviewPage.colAppliedAt"));
+    });
+
+    test("on a phone (448px) it scrolls with the checkbox and the key name pinned together", async () => {
+      await renderAt(448, [request("p1", "pending", "2026-09-02T00:00:00Z")]);
+      expect(headers()).toHaveLength(4);
+      /* 勾選框＋金鑰名稱一起固定；兩欄加操作欄後中間不到 160px，操作欄跟著捲 */
+      expect(host.querySelector("table").getAttribute("data-overflow")).toBe("start");
+      expect(host.querySelector("table").getAttribute("data-pin-lead")).toBe("2");
+    });
+  });
+
   test("after a tab switch fails, a background retry keeps the error instead of flashing back to loading", async () => {
     /* 換分頁後新 key 失敗：TanStack v5 沒資料時重抓會把 status 改回 pending，還會把上一個 key 的
        佔位資料放回來；錯誤畫面要維持到這次的結果，不能閃成載入中，也不重複提醒 */

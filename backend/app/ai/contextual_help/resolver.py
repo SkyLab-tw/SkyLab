@@ -160,6 +160,9 @@ def resolve_context(
         surface_context["elements"] = labels
     if surface.when_to_use:
         surface_context["when_to_use"] = surface.when_to_use
+    # 「這頁怎麼開 port」要靠功能用法回答，只有用途與時機答不到
+    if surface.features:
+        surface_context["features"] = list(surface.features)
     # 這裡不知道使用者身分（導覽助手也會呼叫），只放每個人都看得到的視窗
     public_dialogs = [
         {"title": dialog.title, "opened_by": dialog.opened_by, "purpose": dialog.purpose}
@@ -173,4 +176,6 @@ def resolve_context(
         grounded.append(f"{surface.id}.sections")
     if surface.when_to_use:
         grounded.append(f"{surface.id}.when_to_use")
+    if surface.features:
+        grounded.append(f"{surface.id}.features")
     return ({"surface": surface_context}, grounded, LEVEL_SURFACE)

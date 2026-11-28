@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import AuditPage from "./AuditPage";
 import { withQueryClient } from "../../../queries/testing";
 
@@ -47,6 +47,15 @@ function statsWith(total) {
 
 let host;
 let root;
+const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+
+/* happy-dom 沒有版面：指定表格區（data-guide="audit-table"）的寬度，useTableFit 才會收欄 */
+function setTableWidth(width) {
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get() { return this.getAttribute("data-guide") === "audit-table" ? width : 0; },
+  });
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -62,6 +71,8 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+  else delete HTMLElement.prototype.clientWidth;
 });
 
 /* TanStack Query 以 macrotask 批次通知，先等一個 timer tick 再看畫面 */
@@ -162,4 +173,49 @@ test("換篩選時保留上一組清單（半透明）直到新資料回來，�
   expect(host.textContent).toContain("detail-newer");
   expect(host.textContent).not.toContain("detail-older");
   expect(host.querySelector('[aria-busy="true"]')).toBeNull();
+});
+
+describe("窄版收欄", () => {
+  const log = {
+    id: "l1",
+    created_at: "2026-09-01T00:00:00Z",
+    user_full_name: "王小明",
+    user_email: "a@campus.edu.tw",
+    action: "resource_start",
+    details: "Started VM",
+    vmid: 101,
+    ip_address: "10.0.0.8",
+  };
+  const headers = () => [...host.querySelectorAll("thead th")].map((th) => th.textContent);
+  const cells = () => [...host.querySelectorAll("tbody td")].map((td) => td.textContent);
+
+  async function renderAt(width) {
+    mocks.stats.mockResolvedValue(statsWith(1));
+    mocks.list.mockResolvedValue({ data: [log], count: 1 });
+    setTableWidth(width);
+    await act(async () => root.render(withQueryClient(<AuditPage />)));
+    await flush();
+  }
+
+  test("約 800px：VMID 收進內容欄（加欄名），IP 收到使用者底下", async () => {
+    await renderAt(800);
+
+    expect(headers()).toEqual(["AuditPage.colTime", "AuditPage.colUser", "AuditPage.colAction", "AuditPage.colContent"]);
+    const [, user, , details] = cells();
+    expect(user).toContain("10.0.0.8");
+    expect(details).toContain("VMID 101");
+  });
+
+  test("約 400px：只剩時間、內容；操作徽章在內容上方，使用者連同 IP 接在時間底下", async () => {
+    await renderAt(400);
+
+    expect(headers()).toEqual(["AuditPage.colTime", "AuditPage.colContent"]);
+    const [time, details] = cells();
+    expect(time).toContain("王小明");
+    expect(time).toContain("a@campus.edu.tw");
+    expect(time).toContain("10.0.0.8");
+    expect(details.indexOf("resource_start")).toBe(0);
+    expect(details).toContain("Started VM");
+    expect(host.querySelector("table").hasAttribute("data-overflow")).toBe(false);
+  });
 });

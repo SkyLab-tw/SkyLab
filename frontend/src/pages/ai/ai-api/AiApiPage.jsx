@@ -4,13 +4,19 @@ import { useTranslation } from "react-i18next";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import styles from "./AiApiPage.module.scss";
 import MIcon from "../../../components/MIcon";
+import Disclosure from "../../../components/Disclosure/Disclosure";
+import DisclosureToggle from "../../../components/Disclosure/DisclosureToggle";
+import Pagination from "../../../components/Pagination/Pagination";
 import Modal from "../../../components/Modal/Modal";
 import DataTable, { DataTableCells } from "../../../components/DataTable/DataTable";
 import { baseFeatures } from "../../../components/DataTable/features";
+import { useTableFitContext } from "../../../components/DataTable/TableFitContext";
+import useTableFit from "../../../hooks/useTableFit";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import ErrorState from "../../../components/ErrorState/ErrorState";
 import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
 import { AiApiService } from "../../../services/aiApi";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
@@ -23,7 +29,7 @@ import {
   useMyAiCredentialsQuery,
   useMyAiRequestsQuery,
   useMyAiUsageQuery,
-  useMyAiUsageRecordsInfiniteQuery,
+  useMyAiUsageRecordsQuery,
 } from "../../../queries/aiApi";
 import { LIST_REFRESH_INTERVAL } from "../../../queries/queryClient";
 import { focusInvalidField } from "../../../utils/focusField";
@@ -391,6 +397,29 @@ function columnMeta(headerKey, extra) {
   return { headerKey, thClassName: styles.th, tdClassName: styles.td, ...extra };
 }
 
+/* ── 金鑰表窄版收欄（useTableFit） ──
+   表格區不夠寬時先收建立時間、再收到期時間，兩個時間一律排在一起：
+   只收建立時間時，它接在到期時間欄底下；兩個都收時，依先後（建立→到期）排在狀態徽章底下。
+   收起後只寫日期，完整時間在 title。全部欄 830px，1366 筆電（約 896～944px）不用收；
+   收到只剩金鑰、狀態、操作 440px，1440 開著 AI 助手（約 567px）、約 500 寬的手機（表格區 448px）都放得下。
+   狀態欄 150px 是為了收進來的「到期時間 2027/01/18」一行放得下 */
+const KEY_FIT_COLUMNS = Object.freeze([
+  { id: "key", width: 210 },
+  { id: "status", width: 150 },
+  { id: "created_at", width: 190, fold: 1 },
+  { id: "expiry", width: 200, fold: 2 },
+  { id: "actions", width: 80 },
+]);
+
+/* 到期欄的文字：永不過期／已過期（日期）／日期。
+   compact（收進狀態底下的那一行）只寫日期：上面的狀態徽章已經寫了「已過期」，過期再用紅字標 */
+function credentialExpiryText(value, t, compact = false) {
+  if (!value) return t("AiApiPage.durationOptionNever");
+  if (compact) return formatDate(value);
+  const label = formatDateTime(value);
+  return isExpired(value) ? t("AiApiPage.expiredFormat", { date: label }) : label;
+}
+
 /* 金鑰列的各欄：改名、選單、操作中等狀態由 CredentialRow 擁有，經 rowState 傳進來 */
 function CredentialNameCell({ row, rowState }) {
   const { t } = useTranslation("ai");
@@ -441,30 +470,56 @@ function CredentialNameCell({ row, rowState }) {
   );
 }
 
-function CredentialStatusCell({ rowState }) {
+/* 收進其他欄的時間：欄名＋日期，完整時間在 title（金鑰表的建立時間、申請紀錄表的申請／審核時間） */
+function FoldedDateLine({ labelKey, value }) {
   const { t } = useTranslation("ai");
+  return (
+    <div className={styles.cellSubline} title={formatDateTime(value)}>
+      {t(labelKey)} {formatDate(value)}
+    </div>
+  );
+}
+
+function FoldedCreatedLine({ item }) {
+  return <FoldedDateLine labelKey="AiApiPage.colCreated" value={item.created_at} />;
+}
+
+function CredentialStatusCell({ row, rowState }) {
+  const { t } = useTranslation("ai");
+  const fit = useTableFitContext();
+  const item = row.original;
   const { state, deprecated } = rowState;
   return (
-    <span className={`${styles.badge} ${deprecated ? styles.badge_muted : styles.badge_active}`}>
-      <span className={styles.dot} />
-      {t(CREDENTIAL_STATE_LABEL_KEYS[state])}
-    </span>
+    <>
+      <span className={`${styles.badge} ${deprecated ? styles.badge_muted : styles.badge_active}`}>
+        <span className={styles.dot} />
+        {t(CREDENTIAL_STATE_LABEL_KEYS[state])}
+      </span>
+      {fit.isFolded("expiry") && fit.isFolded("created_at") && <FoldedCreatedLine item={item} />}
+      {fit.isFolded("expiry") && (
+        <div
+          className={`${styles.cellSubline} ${state === "expired" ? styles.cellSublineDanger : ""}`}
+          title={item.expires_at ? formatDateTime(item.expires_at) : undefined}
+        >
+          {t("AiApiPage.colExpiry")} {credentialExpiryText(item.expires_at, t, true)}
+        </div>
+      )}
+      {fit.isFolded("expiry") && item.revoked_at && (
+        <div className={styles.cellSubline}>{t("AiApiPage.metaRevoked", { value: formatDate(item.revoked_at) })}</div>
+      )}
+    </>
   );
 }
 
 function CredentialExpiryCell({ row, rowState }) {
   const { t } = useTranslation("ai");
+  const fit = useTableFitContext();
   const item = row.original;
-
-  function fmtExpiry(value) {
-    if (!value) return t("AiApiPage.durationOptionNever");
-    const label = formatDateTime(value);
-    return isExpired(value) ? t("AiApiPage.expiredFormat", { date: label }) : label;
-  }
 
   return (
     <>
-      <span className={rowState.state === "expired" ? styles.textDanger : ""}>{fmtExpiry(item.expires_at)}</span>
+      <span className={rowState.state === "expired" ? styles.textDanger : ""}>{credentialExpiryText(item.expires_at, t)}</span>
+      {fit.isFolded("created_at") && <FoldedCreatedLine item={item} />}
       {item.revoked_at && (
         <div className={styles.cellSubline}>{t("AiApiPage.metaRevoked", { value: formatDateTime(item.revoked_at) })}</div>
       )}
@@ -779,11 +834,7 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
       </section>
 
       {/* 出錯時才需要看，預設收合，不佔主流程的版面 */}
-      <details className={styles.docsErrors}>
-        <summary>
-          {t("AiApiPage.docsLimitsTitle")}
-          <MIcon name="expand_more" size={18} className={styles.docsErrorsChevron} />
-        </summary>
+      <Disclosure variant="inline" className={styles.docsErrors} label={t("AiApiPage.docsLimitsTitle")}>
         <div className={styles.docsErrorList}>
           <div><span className={styles.statusCode}>401</span><span>{t("AiApiPage.docsErr401")}</span></div>
           <div>
@@ -797,7 +848,7 @@ function ApiDocsContent({ credentials, publicBaseUrl }) {
           <div><span className={styles.statusCode}>413</span><span>{t("AiApiPage.docsErr413")}</span></div>
           <div><span className={styles.statusCode}>502</span><span>{t("AiApiPage.docsErr502")}</span></div>
         </div>
-      </details>
+      </Disclosure>
 
     </div>
   );
@@ -815,10 +866,34 @@ function QuickStartModal({ closing = false, credentials, publicBaseUrl, onClose 
   );
 }
 
-/* ── 申請紀錄表格的各欄 ── */
+/* ── 申請紀錄表窄版收欄（useTableFit） ──
+   表格區不夠寬時依序收起申請時間、審核時間、申請用途、審核意見；金鑰名稱、狀態永遠在。
+   兩個時間比照金鑰表排在一起：只收申請時間時接在審核時間底下，兩個都收時依先後排在狀態徽章底下；
+   申請用途收到名稱底下（最多兩行），審核意見收到狀態底下（整段顯示，被拒絕的原因是下一步的依據）。
+   全部欄 1090px：1440（約 1003px）只收申請時間（920px），1366 筆電（約 929px）也是；
+   收到只剩名稱、狀態、審核意見 540px，1440 開著 AI 助手（約 567px）還留著審核意見，
+   再收掉審核意見 330px，約 500 寬的手機（表格區 448px）也放得下 */
+const RECORD_FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 170 },
+  { id: "purpose", width: 210, fold: 3 },
+  { id: "status", width: 160 },
+  { id: "created_at", width: 170, fold: 1 },
+  { id: "reviewed", width: 170, fold: 2 },
+  { id: "comment", width: 210, fold: 4 },
+]);
+
+/* 窄版收起申請用途時，改寫在名稱底下（最多兩行，全文在 title） */
 function RequestNameCell({ row }) {
+  const fit = useTableFitContext();
   const item = row.original;
-  return <span className={styles.rowName} title={item.api_key_name || undefined}>{item.api_key_name || "—"}</span>;
+  return (
+    <div className={styles.rowMain}>
+      <span className={styles.rowName} title={item.api_key_name || undefined}>{item.api_key_name || "—"}</span>
+      {fit.isFolded("purpose") && item.purpose && (
+        <span className={`${styles.cellSubline} ${styles.cellSublineClamp}`} title={item.purpose}>{item.purpose}</span>
+      )}
+    </div>
+  );
 }
 
 function RequestPurposeCell({ row }) {
@@ -826,9 +901,12 @@ function RequestPurposeCell({ row }) {
   return <span className={styles.cellClamp} title={item.purpose || undefined}>{item.purpose || "—"}</span>;
 }
 
+/* 窄版收欄時狀態欄多畫：審核意見（緊接狀態，是這個狀態的原因）、申請時間、審核時間（依先後） */
 function RequestStatusCell({ row }) {
   const { t } = useTranslation("ai");
-  const status = row.original.status;
+  const fit = useTableFitContext();
+  const item = row.original;
+  const status = item.status;
 
   function statusLabel() {
     if (status === "approved") return t("AiApiPage.statusApproved");
@@ -837,19 +915,41 @@ function RequestStatusCell({ row }) {
   }
 
   return (
-    <span className={`${styles.badge} ${styles[`badge_${statusStyle(status)}`]}`}>
-      <span className={styles.dot} />
-      {statusLabel()}
-    </span>
+    <>
+      <span className={`${styles.badge} ${styles[`badge_${statusStyle(status)}`]}`}>
+        <span className={styles.dot} />
+        {statusLabel()}
+      </span>
+      {fit.isFolded("comment") && item.review_comment && (
+        <div className={`${styles.cellSubline} ${styles.cellSublineWrap} ${statusStyle(status) === "rejected" ? styles.cellSublineDanger : ""}`}>
+          {t("AiApiPage.colComment")} {item.review_comment}
+        </div>
+      )}
+      {fit.isFolded("created_at") && fit.isFolded("reviewed") && (
+        <FoldedDateLine labelKey="AiApiPage.colAppliedAt" value={item.created_at} />
+      )}
+      {/* 還沒審核時不寫審核時間：上面的「待審核」徽章已經說了 */}
+      {fit.isFolded("reviewed") && item.reviewed_at && (
+        <FoldedDateLine labelKey="AiApiPage.colReviewedAt" value={item.reviewed_at} />
+      )}
+    </>
   );
 }
 
+/* 只收起申請時間時，它接在審核時間底下 */
 function RequestReviewedCell({ row }) {
   const { t } = useTranslation("ai");
-  const reviewedAt = row.original.reviewed_at;
-  return reviewedAt
-    ? formatDateTime(reviewedAt)
-    : <span className={styles.cellMuted}>{t("AiApiPage.requestNotReviewed")}</span>;
+  const fit = useTableFitContext();
+  const item = row.original;
+  const reviewedAt = item.reviewed_at;
+  return (
+    <>
+      {reviewedAt
+        ? formatDateTime(reviewedAt)
+        : <span className={styles.cellMuted}>{t("AiApiPage.requestNotReviewed")}</span>}
+      {fit.isFolded("created_at") && <FoldedDateLine labelKey="AiApiPage.colAppliedAt" value={item.created_at} />}
+    </>
+  );
 }
 
 function RequestCommentCell({ row }) {
@@ -965,15 +1065,28 @@ function UsageRecordRow({ item }) {
         })}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span className={styles.usageRecordPrimary}>{createdAt}</span>
-        <span className={`${styles.usageRecordPrimary} ${styles.usageRecordModel}`} title={model}>{model}</span>
+        {/* 容器變窄時依序收欄（見 .usageRecordScroll 的 @container）：收起的欄改畫在主欄底下（.usageRecordFold*） */}
         <span className={styles.usageRecordCell}>
+          <span className={styles.usageRecordPrimary}>{createdAt}</span>
+          <span className={`${styles.usageRecordMeta} ${styles.usageRecordFoldModel}`} title={model}>{model}</span>
+          <span className={`${styles.usageRecordSub} ${styles.usageRecordFoldKey}`} title={item.api_key_name || undefined}>
+            {item.api_key_name || "—"}{item.api_key_prefix ? ` · ${item.api_key_prefix}…` : ""}
+          </span>
+          <span className={`${styles.usageRecordSub} ${styles.usageRecordFoldTokens}`}>
+            {formatTokens(item.input_tokens)} / {formatTokens(item.output_tokens)} Tokens
+          </span>
+        </span>
+        <span className={`${styles.usageRecordPrimary} ${styles.usageRecordModel} ${styles.usageRecordColModel}`} title={model}>{model}</span>
+        <span className={`${styles.usageRecordCell} ${styles.usageRecordColKey}`}>
           <span className={styles.usageRecordPrimary} title={item.api_key_name || undefined}>{item.api_key_name || "—"}</span>
           {item.api_key_prefix && <span className={styles.usageRecordMeta}>{item.api_key_prefix}…</span>}
         </span>
-        <span className={styles.usageRecordToken}>{formatTokens(item.input_tokens)}</span>
-        <span className={styles.usageRecordToken}>{formatTokens(item.output_tokens)}</span>
-        <span>
+        <span className={`${styles.usageRecordCell} ${styles.usageRecordColInput}`}>
+          <span className={styles.usageRecordToken}>{formatTokens(item.input_tokens)}</span>
+          <span className={`${styles.usageRecordSub} ${styles.usageRecordFoldOutput}`}>{t("AiApiPage.recordOutputTokens")} {formatTokens(item.output_tokens)}</span>
+        </span>
+        <span className={`${styles.usageRecordToken} ${styles.usageRecordColOutput}`}>{formatTokens(item.output_tokens)}</span>
+        <span className={`${styles.usageRecordCell} ${styles.usageRecordStatusCell}`}>
           <span className={`${styles.badge} ${succeeded ? styles.badge_success : styles.badge_danger}`}>
             <span className={styles.dot} />
             {succeeded ? t("AiApiPage.recordStatusSuccess") : t("AiApiPage.recordStatusError")}
@@ -1019,22 +1132,27 @@ function UsageRecordRow({ item }) {
 }
 
 /* ── My Usage Tab ── */
-const USAGE_RECORD_PAGE_SIZE = 20;
+/* 細項紀錄分頁：每頁 50 筆，跟稽核日誌等管理清單一樣（表格規則五） */
+const USAGE_RECORD_PAGE_SIZE = 50;
+const NO_RECORDS = Object.freeze([]);
 
 function MyUsageTab() {
   const { t } = useTranslation("ai");
-  const toast = useToast();
   const [preset, setPreset] = useState("30d");
+  const [recordPage, setRecordPage] = useState(0);
+  const recordsPanelRef = useRef(null);
 
   const { startDate: start, endDate: end } = useMemo(() => presetToRange(preset), [preset]);
 
-  /* 統計與明細走 TanStack Query，以區間為 key：快速切換區間時較慢的舊區間回應只會進舊 key，
-     不會蓋掉新區間；明細的「載入更多」是 infinite query，換區間後舊區間的下一頁也不會接到新清單後面。
-     換區間時先沿用上一個區間的資料（不閃回載入動畫），背景刷新失敗保留畫面上的資料。 */
+  /* 統計與明細走 TanStack Query，以區間（明細再加頁碼）為 key：快速切換時較慢的舊回應只會進舊 key，
+     不會蓋掉新的。換區間或換頁時先沿用上一份資料（不閃回載入動畫），背景刷新失敗保留畫面上的資料。 */
   const range = useMemo(() => ({ start_date: start, end_date: end }), [start, end]);
-  const recordParams = useMemo(() => ({ ...range, limit: USAGE_RECORD_PAGE_SIZE }), [range]);
+  const recordParams = useMemo(
+    () => ({ ...range, skip: recordPage * USAGE_RECORD_PAGE_SIZE, limit: USAGE_RECORD_PAGE_SIZE }),
+    [range, recordPage],
+  );
   const usageQuery = useMyAiUsageQuery(range);
-  const recordsQuery = useMyAiUsageRecordsInfiniteQuery(recordParams);
+  const recordsQuery = useMyAiUsageRecordsQuery(recordParams);
 
   const usageData = usageQuery.data;
   /* 錯誤畫面在背景重試期間不閃回載入動畫，按重試才回到載入中（見 useLoadError）。
@@ -1043,14 +1161,14 @@ function MyUsageTab() {
   const usageLoad = useLoadError(usageQuery);
   const usageError = Boolean(usageLoad.error);
   const usageLoading = usageData === undefined && !usageError && (usageQuery.isPending || usageQuery.isFetching);
-  const recordPages = recordsQuery.data?.pages;
+  const recordsData = recordsQuery.data;
   const recordsLoad = useLoadError(recordsQuery);
   const recordsError = Boolean(recordsLoad.error);
-  const recordsLoading = recordPages === undefined && !recordsError && (recordsQuery.isPending || recordsQuery.isFetching);
-  const records = useMemo(() => (recordPages ?? []).flatMap((page) => page?.data ?? []), [recordPages]);
-  const recordsCount = recordPages?.length ? recordPages[recordPages.length - 1]?.count ?? 0 : 0;
+  const recordsLoading = recordsData === undefined && !recordsError && (recordsQuery.isPending || recordsQuery.isFetching);
+  const records = recordsData?.data ?? NO_RECORDS;
+  const recordsCount = recordsData?.count ?? 0;
+  const recordTotalPages = Math.max(Math.ceil(recordsCount / USAGE_RECORD_PAGE_SIZE), 1);
   const loading = usageLoading || recordsLoading;
-  const loadingMore = recordsQuery.isFetchingNextPage;
 
   /* 重試：兩份一起重抓（與原本相同），沒資料的回到載入中 */
   function retryLoad() {
@@ -1058,13 +1176,17 @@ function MyUsageTab() {
     recordsLoad.retry();
   }
 
-  const hasMoreRecords = !recordsError && records.length > 0 && records.length < recordsCount;
+  /* 換頁：清單捲回細項紀錄的開頭（分頁列在清單底下，不捲回去會停在下一頁的最後面） */
+  function changeRecordPage(next) {
+    setRecordPage(next);
+    recordsPanelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
 
-  const loadMore = async () => {
-    const result = await recordsQuery.fetchNextPage();
-    /* 維持現有清單，不覆蓋成功資料；但要讓使用者知道沒載到 */
-    if (result.isFetchNextPageError) toast.error(result.error?.message ?? t("AiApiPage.recordsLoadMoreError"));
-  };
+  /* 換區間回到第一頁：新區間的筆數不同，舊頁碼可能已經超出範圍 */
+  function changePreset(next) {
+    setPreset(next);
+    setRecordPage(0);
+  }
 
   const PRESETS = [
     { value: "7d", label: t("AiApiPage.preset7d") },
@@ -1078,7 +1200,7 @@ function MyUsageTab() {
         <SegmentedControl
           options={PRESETS}
           value={preset}
-          onChange={setPreset}
+          onChange={changePreset}
           ariaLabel={t("AiApiPage.usageRangeLabel")}
         />
         {/* 用本地日期顯示；toISOString 是 UTC，台灣凌晨會差一天 */}
@@ -1113,7 +1235,7 @@ function MyUsageTab() {
           </div>
 
           {/* ── 細項呼叫紀錄：沒有資料時只在這裡說一次 ── */}
-          <div className={styles.usagePanel} data-guide="ai-usage-records">
+          <div ref={recordsPanelRef} className={styles.usagePanel} data-guide="ai-usage-records">
             <div className={styles.usagePanelHeader}>
               <h3 className={styles.usagePanelTitle}>{t("AiApiPage.usageRecordsTitle")}</h3>
             </div>
@@ -1127,15 +1249,15 @@ function MyUsageTab() {
               />
             ) : (
               <>
-                {/* 窄螢幕維持表格、容器橫向捲動（表格規範不轉卡片） */}
+                {/* 窄版先收次要欄進主欄（輸出→輸入、模型與金鑰→日期，最窄時 Tokens 也→日期），不橫捲（表格規則四） */}
                 <div className={styles.usageRecordScroll}>
                   <div className={styles.usageRecordList}>
                     <div className={styles.usageRecordHeader} aria-hidden="true">
                       <span>{t("AiApiPage.recordDate")}</span>
-                      <span>{t("AiApiPage.recordModel")}</span>
-                      <span>{t("AiApiPage.recordKey")}</span>
-                      <span>{t("AiApiPage.recordInputTokens")}</span>
-                      <span>{t("AiApiPage.recordOutputTokens")}</span>
+                      <span className={styles.usageRecordColModel}>{t("AiApiPage.recordModel")}</span>
+                      <span className={styles.usageRecordColKey}>{t("AiApiPage.recordKey")}</span>
+                      <span className={styles.usageRecordColInput}>{t("AiApiPage.recordInputTokens")}</span>
+                      <span className={styles.usageRecordColOutput}>{t("AiApiPage.recordOutputTokens")}</span>
                       <span>{t("AiApiPage.recordStatus")}</span>
                       <span />
                     </div>
@@ -1144,28 +1266,14 @@ function MyUsageTab() {
                     ))}
                   </div>
                 </div>
-                {hasMoreRecords && (
-                  <div className={styles.usageRecordsMoreRow}>
-                    <button type="button" className={styles.btnSecondary} onClick={loadMore} disabled={loadingMore || recordsQuery.isPlaceholderData}>
-                      {loadingMore ? (
-                        <>
-                          <MIcon name="hourglass_empty" size={16} spin />
-                          {t("AiApiPage.recordsLoadingMore")}
-                        </>
-                      ) : (
-                        <>
-                          <MIcon name="expand_more" size={16} />
-                          {t("AiApiPage.recordsLoadMore")}
-                        </>
-                      )}
-                    </button>
-                    <span className={styles.usageDateRange}>
-                      {t("AiApiPage.recordsShownCount", {
-                        shown: records.length,
-                        total: recordsCount,
-                      })}
-                    </span>
-                  </div>
+                {/* 共用分頁列（表格規則五）；只有一頁時不畫 */}
+                {recordTotalPages > 1 && (
+                  <Pagination
+                    page={recordPage}
+                    totalPages={recordTotalPages}
+                    info={t("AiApiPage.recordsPaginationInfo", { total: recordsCount })}
+                    onChange={changeRecordPage}
+                  />
                 )}
               </>
             )}
@@ -1303,10 +1411,11 @@ export default function AiApiPage() {
   /* 「API 聊天」用登入者自己核准的金鑰（只在需要時向擁有者專用端點取回、留在記憶體），
      不再打包共用金鑰；絕不能改回讀 VITE_* 環境變數，那會公開在前端 bundle 裡 */
   const TABS = [
-    { key: "keys", label: t("AiApiPage.tabKeys") },
-    { key: "chat", label: t("AiApiPage.tabChat") },
-    { key: "records", label: t("AiApiPage.tabRecords") },
-    { key: "usage", label: t("AiApiPage.tabUsage") },
+    /* 圖示沿用各分頁空狀態的圖示（金鑰 vpn_key、申請紀錄 history） */
+    { key: "keys", label: t("AiApiPage.tabKeys"), icon: "vpn_key" },
+    { key: "chat", label: t("AiApiPage.tabChat"), icon: "forum" },
+    { key: "records", label: t("AiApiPage.tabRecords"), icon: "history" },
+    { key: "usage", label: t("AiApiPage.tabUsage"), icon: "insights" },
   ];
 
   /* ── Form state ── */
@@ -1401,12 +1510,14 @@ export default function AiApiPage() {
     data: visibleCredentials,
     getRowId: (item) => String(item.id),
   });
+  const keysFit = useTableFit(KEY_FIT_COLUMNS);
   const requestsTable = useTable({
     features: baseFeatures,
     columns: requestColumns,
     data: requests,
     getRowId: (item) => String(item.id),
   });
+  const recordsFit = useTableFit(RECORD_FIT_COLUMNS);
   /* 目前分頁正顯示帶「新增金鑰」的空狀態時，頁首那顆先藏起來，不要上下兩顆一樣的鈕；
      導覽的 ai-add-key 標記改掛在空狀態那顆上。金鑰／紀錄分頁載入中也先不放，免得閃一下 */
   const listTab = activeTab === "keys" || activeTab === "records";
@@ -1462,53 +1573,50 @@ export default function AiApiPage() {
 
   return (
     <div className={styles.page}>
-      {/* ── Header ── */}
-      <PageHeader title={t("AiApiPage.pageTitle")} />
-
-      {/* ── 控制列：左側分頁切換、右側動作（排版比照 AI 金鑰管理） ── */}
-      <div className={styles.controlsRow}>
-        <div data-guide="ai-tabs">
-          <SegmentedControl
-            className={styles.pageTabs}
-            ariaLabel={t("AiApiPage.tabsAriaLabel")}
-            value={activeTab}
-            onChange={setActiveTab}
-            options={TABS.map((tab) => ({
-              value: tab.key,
-              label: tab.label,
-              // 金鑰數跟清單一致（只算使用中）；申請紀錄只標待審的，0 就不顯示
-              badge: tab.key === "keys"
-                ? activeCredentials.length
-                : tab.key === "records" && pendingCount > 0 ? pendingCount : undefined,
-              buttonProps: {
-                "data-guide-tab": tab.key,
-                "data-guide-has-content": tab.key !== "keys" || credentials.length > 0 ? "true" : "false",
-              },
-            }))}
-          />
-        </div>
-        <div className={styles.headerActions}>
+      {/* ── Header：頁面層級的動作放標題右邊（同我的資源、機器範本），分頁自己一列 ── */}
+      <PageHeader title={t("AiApiPage.pageTitle")}>
+        <button
+          type="button"
+          className={styles.btnSecondary}
+          onClick={() => setShowQuickStart(true)}
+          data-guide="ai-quick-start"
+        >
+          <MIcon name="rocket_launch" size={16} />
+          {t("AiApiPage.quickStartButton")}
+        </button>
+        {showHeaderAddKey && (
           <button
             type="button"
-            className={styles.btnSecondary}
-            onClick={() => setShowQuickStart(true)}
-            data-guide="ai-quick-start"
+            className={styles.btnPrimary}
+            onClick={() => setShowApplyModal(true)}
+            data-guide="ai-add-key"
           >
-            <MIcon name="rocket_launch" size={16} />
-            {t("AiApiPage.quickStartButton")}
+            <MIcon name="add" size={16} />
+            {t("AiApiPage.addKeyButton")}
           </button>
-          {showHeaderAddKey && (
-            <button
-              type="button"
-              className={styles.btnPrimary}
-              onClick={() => setShowApplyModal(true)}
-              data-guide="ai-add-key"
-            >
-              <MIcon name="add" size={16} />
-              {t("AiApiPage.addKeyButton")}
-            </button>
-          )}
-        </div>
+        )}
+      </PageHeader>
+
+      {/* ── 分頁切換 ── */}
+      <div className={styles.tabsBar} data-guide="ai-tabs">
+        <Tabs
+          ariaLabel={t("AiApiPage.tabsAriaLabel")}
+          value={activeTab}
+          onChange={setActiveTab}
+          options={TABS.map((tab) => ({
+            value: tab.key,
+            label: tab.label,
+            icon: tab.icon,
+            // 金鑰數跟清單一致（只算使用中）；申請紀錄只標待審的，0 就不顯示
+            badge: tab.key === "keys"
+              ? activeCredentials.length
+              : tab.key === "records" && pendingCount > 0 ? pendingCount : undefined,
+            buttonProps: {
+              "data-guide-tab": tab.key,
+              "data-guide-has-content": tab.key !== "keys" || credentials.length > 0 ? "true" : "false",
+            },
+          }))}
+        />
       </div>
 
       {/* ── Content ── */}
@@ -1559,10 +1667,11 @@ export default function AiApiPage() {
                 )}
                 />
               ) : (
-                <div className={styles.tableWrap}>
+                <div ref={keysFit.ref} className={styles.tableWrap}>
                   <DataTable
                     table={credentialsTable}
-                    className={styles.table}
+                    className={`${styles.table} ${styles.tableKeys}`}
+                    fit={keysFit}
                     renderRow={(row) => (
                       <CredentialRow
                         key={row.id}
@@ -1581,18 +1690,17 @@ export default function AiApiPage() {
                   />
                 </div>
               )}
+              {/* 失效的金鑰併進上方表格，不是接在下面，所以用行內收合的按鈕版（樣子同 Disclosure inline） */}
               {inactiveCredentials.length > 0 && (
-                <button
-                  type="button"
-                  className={styles.btnGhost}
-                  onClick={() => setShowInactive((value) => !value)}
-                  aria-expanded={showInactive}
+                <DisclosureToggle
+                  className={styles.inactiveToggle}
+                  open={showInactive}
+                  onToggle={() => setShowInactive((value) => !value)}
                 >
-                  <MIcon name={showInactive ? "expand_less" : "expand_more"} size={16} />
                   {showInactive
                     ? t("AiApiPage.hideInactive")
                     : t("AiApiPage.showInactive", { count: inactiveCredentials.length })}
-                </button>
+                </DisclosureToggle>
               )}
             </div>
           )
@@ -1617,8 +1725,13 @@ export default function AiApiPage() {
               guideId="ai-records-content"
             />
           ) : (
-            <div className={styles.tableWrap} data-guide="ai-records-content">
-              <DataTable table={requestsTable} className={`${styles.table} ${styles.tableRecords}`} rowClassName={requestRowClassName} />
+            <div ref={recordsFit.ref} className={styles.tableWrap} data-guide="ai-records-content">
+              <DataTable
+                table={requestsTable}
+                className={`${styles.table} ${styles.tableRecords}`}
+                fit={recordsFit}
+                rowClassName={requestRowClassName}
+              />
             </div>
           )
         )}

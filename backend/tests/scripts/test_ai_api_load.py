@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "test_ai_api_load.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "AI_live_test" / "ai_api_load_live.py"
 SPEC = importlib.util.spec_from_file_location("ai_api_load_script", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 ai_api_load = importlib.util.module_from_spec(SPEC)

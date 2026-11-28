@@ -9,6 +9,7 @@ import MIcon from "../../../components/MIcon";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import { useAiCredentialQuery } from "../../../queries/aiApi";
 import { useAiModelsQuery } from "../../../queries/aiApiChat";
+import useAutoGrowTextarea from "../../../hooks/useAutoGrowTextarea";
 import { useQueryView } from "../../../hooks/useQueryLoadState";
 import { AiApiChatService, stripThinkingContent } from "../../../services/aiApiChat";
 import { formatShortDateTime } from "../../../utils/formatDate";
@@ -159,12 +160,8 @@ function ChatWorkspace({ userId, credentials, credentialsLoading }) {
     if (log) log.scrollTop = log.scrollHeight;
   }, [activeId, conversation?.messages.length, pending, streamedReply]);
 
-  useEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
-  }, [draft]);
+  // 輸入框隨內容長高，到上限（.composer textarea 的 max-height）就停，之後框內捲動
+  useAutoGrowTextarea(inputRef, draft);
 
   function chooseModel(value) {
     setSelectedModel(value);

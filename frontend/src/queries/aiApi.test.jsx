@@ -6,13 +6,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createTestQueryClient, withQueryClient } from "./testing";
 import {
   aiApiKeys,
-  nextUsageRecordsSkip,
   useAiApiCacheUpdater,
   useAiCredentialQuery,
   useAllAiCredentialsQuery,
   useMyAiCredentialsQuery,
   useMyAiRequestsQuery,
-  useMyAiUsageRecordsInfiniteQuery,
+  useMyAiUsageRecordsQuery,
 } from "./aiApi";
 
 const mocks = vi.hoisted(() => ({
@@ -226,37 +225,35 @@ describe("useAllAiCredentialsQuery", () => {
   });
 });
 
-describe("useMyAiUsageRecordsInfiniteQuery", () => {
-  test("nextUsageRecordsSkip continues until every record is loaded", () => {
-    expect(nextUsageRecordsSkip({ data: [1, 2], count: 5 }, [{ data: [1, 2] }])).toBe(2);
-    expect(nextUsageRecordsSkip({ data: [3], count: 3 }, [{ data: [1, 2] }, { data: [3] }])).toBeUndefined();
-    expect(nextUsageRecordsSkip({ data: [], count: 9 }, [{ data: [1] }, { data: [] }])).toBeUndefined();
-  });
-
+describe("useMyAiUsageRecordsQuery", () => {
   function RecordsProbe({ params }) {
-    const query = useMyAiUsageRecordsInfiniteQuery(params);
-    seen = {
-      pages: query.data?.pages,
-      hasNextPage: query.hasNextPage,
-      fetchNextPage: query.fetchNextPage,
-    };
+    const query = useMyAiUsageRecordsQuery(params);
+    seen = { data: query.data, isPlaceholderData: query.isPlaceholderData };
     return null;
   }
 
-  test("load more asks for the next page by skip and appends it", async () => {
-    const params = { start_date: "s", end_date: "e", limit: 2 };
+  test("asks for the page by skip／limit; switching pages keeps the previous page on screen until the new one arrives", async () => {
+    const first = { start_date: "s", end_date: "e", skip: 0, limit: 2 };
+    let resolveSecond;
     mocks.getMyUsageRecords
       .mockResolvedValueOnce({ data: [{ id: 1 }, { id: 2 }], count: 3 })
-      .mockResolvedValueOnce({ data: [{ id: 3 }], count: 3 });
-    await render(<RecordsProbe params={params} />);
+      .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+    await render(<RecordsProbe params={first} />);
     await flush();
-    expect(mocks.getMyUsageRecords).toHaveBeenLastCalledWith({ ...params, skip: 0 });
-    expect(seen.hasNextPage).toBe(true);
+    expect(mocks.getMyUsageRecords).toHaveBeenLastCalledWith(first);
+    expect(seen.data.data.map((item) => item.id)).toEqual([1, 2]);
 
-    await act(async () => { await seen.fetchNextPage(); });
+    const second = { ...first, skip: 2 };
+    await render(<RecordsProbe params={second} />);
     await flush();
-    expect(mocks.getMyUsageRecords).toHaveBeenLastCalledWith({ ...params, skip: 2 });
-    expect(seen.pages.flatMap((page) => page.data).map((item) => item.id)).toEqual([1, 2, 3]);
-    expect(seen.hasNextPage).toBe(false);
+    expect(mocks.getMyUsageRecords).toHaveBeenLastCalledWith(second);
+    /* 新頁還沒回來：沿用上一頁的資料，不閃回載入中 */
+    expect(seen.isPlaceholderData).toBe(true);
+    expect(seen.data.data.map((item) => item.id)).toEqual([1, 2]);
+
+    await act(async () => { resolveSecond({ data: [{ id: 3 }], count: 3 }); });
+    await flush();
+    expect(seen.isPlaceholderData).toBe(false);
+    expect(seen.data.data.map((item) => item.id)).toEqual([3]);
   });
 });

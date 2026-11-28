@@ -7,7 +7,7 @@ import { baseFeatures } from "../../../components/DataTable/features";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import ErrorState from "../../../components/ErrorState/ErrorState";
-import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
 import { useUnsavedChanges } from "../../../contexts/UnsavedChangesContext";
 import { useLoadError, useQueryView } from "../../../hooks/useQueryLoadState";
 import { AuthStorage } from "../../../services/auth";
@@ -245,17 +245,19 @@ export default function CourseCmsPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={t("CourseCmsPage.pageTitle")}>
-        <SegmentedControl
-          options={[
-            { value: "editor", label: t("CourseCmsPage.tabContentEditor"), icon: "edit_note", buttonProps: { "data-guide-tab": "course-cms-tab-editor" } },
-            { value: "progress", label: t("CourseCmsPage.tabStudentProgress"), icon: "insights", buttonProps: { "data-guide-tab": "course-cms-tab-progress" } },
-          ]}
-          value={tab}
-          onChange={changeTab}
-          ariaLabel={t("CourseCmsPage.pageTitle")}
-        />
-      </PageHeader>
+      <PageHeader title={t("CourseCmsPage.pageTitle")} />
+
+      {/* 頁面分頁放標題下方（全站頁面分頁同一個位置） */}
+      <Tabs
+        className={styles.pageTabs}
+        options={[
+          { value: "editor", label: t("CourseCmsPage.tabContentEditor"), icon: "edit_note", buttonProps: { "data-guide-tab": "course-cms-tab-editor" } },
+          { value: "progress", label: t("CourseCmsPage.tabStudentProgress"), icon: "insights", buttonProps: { "data-guide-tab": "course-cms-tab-progress" } },
+        ]}
+        value={tab}
+        onChange={changeTab}
+        ariaLabel={t("CourseCmsPage.pageTitle")}
+      />
 
       {pathsLoading ? (
         <LoadingState fullPage />

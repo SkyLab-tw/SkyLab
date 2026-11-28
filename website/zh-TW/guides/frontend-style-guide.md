@@ -99,7 +99,8 @@ src/pages/personal/resources/
 | `--color-divider` | 分隔線 |
 | `--color-hover` | Hover 背景 |
 | `--color-row-hover` | 表格列 hover 背景（比 `--color-hover` 深，避免與表頭同色） |
-| `--color-overlay` | Modal 遮罩 |
+| `--color-track` | 進度條、量表的軌道（還沒填滿的部分）：muted 文字色 28%，亮暗與自訂主色都看得到。不要用 `--color-hover` 當軌道：自訂主色的淺色 hover 會等於頁面底色，軌道在卡片上幾乎看不見 |
+| `--color-overlay` | Modal 遮罩：淺色模式從深陰影色衍生（壓暗後取 25%），自訂主色時跟著換色調；深色模式固定黑 60%。不要寫死帶色相的遮罩，暖色主題下毛玻璃對話框會透出藍色 |
 
 #### 陰影
 | 變數 | 用途 |
@@ -247,7 +248,7 @@ $z-ai-assistant: 2000   $z-screen-dialog: 2100   // 見 z-index 層級
 @include glass-surface($shadow: var(--shadow-sm));    // 換陰影
 @include glass-surface($shadow: none);                // 不輸出 box-shadow
 @include glass-surface(8px, 1.2);                     // 固定濾鏡參數（不跟隨風格切換，特殊情況才用）
-@include popover-glass;                               // 側欄延伸出來的彈出：glass-surface＋shadow-lg，液態／深色液態加重
+@include popover-glass;                               // 浮層選單與側欄彈出：glass-surface＋shadow-lg，液態／深色液態加重
 ```
 
 玻璃表面的 backdrop-filter 一律走 `var(--glass-backdrop-filter)`
@@ -355,9 +356,10 @@ import MIcon from "../components/MIcon";
 
 - 可點卡片的 hover 只給淡底（`background: var(--color-hover)`）或陰影／上浮，並保留 `transition` 淡入淡出；**不改邊框色**，藍框只留給「選中／目前」狀態（如分頁 active、流程目前步驟）
 - 「選中／目前」分兩層，不要混用：
-  - **導覽層級**（側欄、班級分頁、`SegmentedControl`）：實心主色＋白字。每一層只有一個，標籤短
+  - **導覽層級**（側欄、`SegmentedControl` 的選中段）：實心主色＋白字。每一層只有一個，標籤短
+  - **分頁**（`Tabs`）：選中的圖示方塊換主色實心、字加粗，不鋪整段底色。刻意跟整段填滿的分段切換長得不一樣，同一列並排也分得出「換內容」與「篩選」
   - **內容清單的目前項目**（主從版面左側清單裡、右側正在顯示的那一列，例如 AI 導師檢查的週次清單、申請審核清單、建班時選的教學環境）：`@include item-current;`，8% 主色淡底＋左側 3px 主色條，**不圍框**。淡底單獨跟 hover 的淺藍分不開，主色條才是記號；刻意比導覽輕一階，才不會跟同頁的主要按鈕搶。列本身是白底卡片時傳 `item-current(var(--color-surface))`
-- 兩三個字的短選項並排二選一／多選一，一律用 `SegmentedControl`（例如申請表的預約／立即、課堂監看切換機器），不要手寫一排按鈕
+- 兩三個字的短選項並排二選一／多選一，一律用 `SegmentedControl`（例如申請表的預約／立即、課堂監看切換機器），不要手寫一排按鈕；切換整塊內容的分頁改用 `Tabs`（見「分頁（Tabs）」）。寬度跟著內容走，放進直排容器也不會被拉滿（軌道後面空一大截）；要撐滿用 `fullWidth`，頁面不用再補 `align-self: flex-start`。放不下時自動收成下拉（一顆顯示目前選項的按鈕，點開是共用的 `ListboxPopover`），外層變寬、放得下再展開回分段，字不會被切掉；頁面不用再加 `overflow-x`
 - 帶色票、說明或自己有框的選項鈕（外觀設定、機器範本可見範圍）：選中用 `@include option-selected;`，主色框＋8% 淡底＋主色字。這是「選項」，跟清單的目前項目不同，可以有框
 - 展開不是選中：展開的卡片只加深陰影（`var(--shadow-md)`），框色不變；只有一項、沒得選的資訊列不要掛選中樣式
 - 淡底不要用 `linear-gradient` 疊層：漸層無法 transition，hover 會瞬間跳色
@@ -441,6 +443,24 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
   但危險修飾類**未 hover 前文字就要是紅色**，且 hover 同樣必加 `:not(:disabled)`
 - 下拉選單裡的危險項（PowerMenu、頁首的 ⋮ ActionMenu）屬選單樣式，不在此六款之列
 
+#### 滑過才浮出的控制項
+
+列尾的刪除鈕、側邊欄的釘選鈕、拓撲節點的連接點這類「平常隱形、滑到那一列才出現」的控制項，
+隱形一律用 `@include reveal-on-hover`，浮出條件照舊寫在呼叫端（父層 `:hover`／`:focus-within` 時 `opacity: 1`）：
+
+```scss
+.removeBtn { @include btn-icon($danger: true); @include reveal-on-hover; }
+.row:hover .removeBtn,
+.row:focus-within .removeBtn { opacity: 1; }
+```
+
+- mixin 只在能滑過的裝置（滑鼠、觸控板，`(hover: hover)`）把它藏起來；觸控裝置沒有滑過，一律常駐顯示
+- **不要直接寫 `opacity: 0` 再用 `:hover` 拉回 1**：iOS（iPhone／iPad）點下去時，若 hover 會讓隱藏的東西浮出來，
+  第一下只會被當成 hover，要再點一下才算點擊——整列、整個節點、整個側邊欄項目都會變成要點兩下
+- 用 JS 狀態做的滑過效果同理（例如拓撲連線滑過才出現標籤）：用 `onPointerEnter`，`pointerType` 是 `touch` 時不設 hover 狀態
+- 觸控裝置上不需要的控制項可以整顆收掉（`@media (hover: none) { display: none; }`），例如側邊欄未釘選的釘子：
+  新增釘選留給有滑鼠的裝置，已釘選的照常顯示、點了取消
+
 #### 聊天面板（AI 助手、檢查表助理）
 
 兩個聊天面板的標頭圖示鈕、圓角輸入框與送出／附件鈕共用同一組 mixin，不要各自手抄：
@@ -476,6 +496,12 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
 > 高度的算法跟按鈕相同：全站行高 1.6（14px 字 → 22.4）＋上下內距 6×2＋框 1×2 ≈ 36px。
 > 內距寫成 8px 就會變 40px；外框在容器上的搜尋框用 `min-height: 36px`，不要寫 38px。
 > 共用的 SegmentedControl 也固定 36px，跟欄位、按鈕放同一列不用另外鎖高度。
+
+- 表單底部可以不填的設定（進階設定）收進共用 `components/Disclosure`：整行可點的白底細框列、14px／500，左邊選填圖示（主色）、右邊選填淡色說明（如「選填」）＋箭頭（展開轉半圈），內容接在列下方 16px、跟上方欄位對齊（不包進框裡），展開收合時高度與淡入淡出動畫由內建的 `Collapse` 負責。不要用瀏覽器原生 ▶ 三角形或手寫 `<details>`（內容會直接出現／消失、沒有動畫）；排版用 `className`（例如 `grid-column: 1 / -1`），欄位 grid 用 `bodyClassName`。建班精靈、首次設定精靈在用
+- 補充資訊的行內收合（執行證據、錯誤詳情、工具紀錄、限制與錯誤代碼）用同一個元件的 `variant="inline"`：只有「文字＋向下箭頭」、沒有框，粗細 500、字級跟著外框（頁面用 `className` 設 12／14px），平常淡色、滑過或展開變主色，箭頭轉半圈；內容緊接在下面，間距由內容自己決定。AI 導師檢查、AI API 文件、AI 對話工具紀錄、當機畫面在用。卡片本身的收合標題（班級資訊卡、檢查項群組）結構不同，不套這個元件
+- 展開的內容不接在收合列下面時（例如「顯示已失效的金鑰」把列併進上方表格，包不進收合元件裡），用按鈕版 `components/Disclosure/DisclosureToggle`（`open`＋`onToggle`），樣子同行內收合。「顯示更多／已失效」這類切換放在頁面底上，不要用淡底鈕：淡底鈕的色階是給白色卡片用的，低飽和主題（奶茶等）的頁面背景跟它的 hover 色幾乎一樣，滑過去按鈕會像消失
+- 自己控制開合的區塊（卡片標題列收合、「預覽」晶片展開的清單）一律包 `components/Collapse/Collapse`（`open`），高度用 grid 0fr↔1fr 過渡、內容同時淡入淡出，收合後內容仍掛著但 `inert`；不要寫 `{open && …}` 直接掛載／卸載，那樣沒有動畫。放在有 gap 的 flex 欄裡要傳 `gap`（px），收合時才不會多留一段空白
+- 成對的起訖時間（`input type="time"`）每格要約 130px 才放得下「下午 01:10」＋時鐘圖示；半欄放不下時讓那一列各佔整列（用卡片的 `@container`，不要讓時間欄縮到字被切掉）
 > 放進 240px 以下的窄容器（側邊欄分頁）時用它的 `compact`（各段內距 8px）與 `fullWidth`（撐滿、各段平分）prop，
 > 不要在頁面 SCSS 覆寫元件內部的按鈕。
 
@@ -520,7 +546,7 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
 ```
 
 - 欄寬、對齊、特殊儲存格（`.thRight`、`.tdNowrap`…）等頁面差異寫在 `@include` 之後
-- RWD 行為統一為 **容器橫向卷動**（`table-wrap` 內建 `overflow-x: auto`），不做表格轉卡片
+- RWD：表格區變窄時**先收次要欄位，收到底仍放不下才容器橫向卷動**（見規則四）；不做表格轉卡片
 - 表格嵌在既有卡片內時可只用 `table-base` / `table-th` / `table-tr` / `table-td`，省略外層 `table-wrap`
 - `<table>` 本身由 `components/DataTable`（TanStack Table，見[開發指南](/zh-TW/guides/development)）輸出，class 仍來自頁面自己的 SCSS Module：表格用 `className`、列用 `rowClassName(row)`、各欄在欄位定義的 `meta.thClassName`／`meta.tdClassName`
 
@@ -561,6 +587,91 @@ if (!(await confirm({ title, message, confirmText, danger: true }))) return;
 `MIcon` 一律 `aria-hidden`，螢幕閱讀器讀不到。若圖示編碼的資訊
 就寫在緊鄰的文字裡（型別、分類），它只是版面慣性，拿掉讓文字說話即可。
 
+#### 規則四：窄版先收欄，收到底才橫捲並固定首尾欄
+
+筆電（1366 寬）的表格區約 944px，1440 寬開著 AI 助手時只剩約 567px。欄位多的表格整張橫捲時，
+第一欄（這一列是誰）會被捲出畫面。所以表格區變窄時：
+
+1. **依重要度收欄**：次要欄位收起，內容改畫在主欄裡的小字行（名稱欄第二行、狀態徽章底下）
+2. **收到底仍放不下才橫捲**，並固定第一欄（捲到哪都看得到是哪一列）；中間還留得下 160px 捲動空間時連最後一欄（操作）也固定
+
+```jsx
+// 欄寬與收合順序只寫在這裡（模組層級常數）；fold 小的先收，沒有 fold 的欄永遠顯示
+const FIT_COLUMNS = Object.freeze([
+  { id: "name", width: 230 },
+  { id: "node", width: 85, fold: 1 },
+  { id: "status", width: 150 },
+  { id: "actions", width: 180 },
+]);
+
+const fit = useTableFit(FIT_COLUMNS);             // hooks/useTableFit
+<div ref={fit.ref} className={styles.tableWrap}>  // 量會橫捲的那一層
+  <DataTable table={table} fit={fit} className={styles.table} />
+</div>
+
+// 主欄（或自己畫 <td> 的列）用 context 判斷哪些欄收起了
+const fit = useTableFitContext();                 // components/DataTable/TableFitContext
+{fit.isFolded("node") && <small>{resource.node}</small>}
+```
+
+- `DataTable` 收到 `fit` 時自己畫 `<colgroup>` 與 `min-width`，跳過收起欄的表頭與儲存格；SCSS 只留 `table-layout: fixed`，**不再寫欄寬 class 與 min-width**
+- 自己畫 `<td>` 的列（群組列、建立中的列）要用 `useTableFitContext()` 跳過收起的欄，欄數才會對齊
+- 收起的內容放進「意思最近」的主欄：身分類（節點、環境、來源、VMID）進名稱欄，狀態類（IP、到期日、可見範圍）進狀態欄；光看值看不出是什麼的加欄名（「到期日 2026/12/31」）
+- 至少算到兩個寬度：1366 筆電（944px）不用捲；1440 開著 AI 助手（567px）收到只剩主要欄也放得下
+- 固定欄由 `table-base` 內建（`data-overflow="start|both"` 時才生效）。有自己底色的列（群組列、hover）用 `@include table-row-bg(色)` 設底色，固定欄才會跟同一列同色
+- 第一欄是勾選框時，在它的欄位設 `pinNext: true`：橫捲時勾選框和後面的名稱欄一起固定。表身要自己組（例如群組列和虛擬化的列各一個 tbody）時用 `DataTableShell`，收欄的 colgroup、min-width 與 context 由它處理
+- 目前用在：我的資源、資源管理、機器範本、GPU 管理、我的申請、AI API 金鑰與申請紀錄、AI 金鑰申請審核、AI 金鑰管理、AI 監控、課程環境範本管理、IP 管理、背景任務、稽核日誌、系統監控
+
+#### 規則五：資料多時依性質挑分頁、虛擬捲動或載入更多
+
+| 做法 | 什麼時候用 | 用在哪裡 |
+|---|---|---|
+| 分頁：`components/Pagination`（每頁 50 筆，「共 N 筆」＋箭頭、頁碼、前往 __ 頁） | 動輒上百上千筆、會往前翻，搭配搜尋與篩選 | 使用者管理、稽核日誌、IP 管理、回饋、AI 金鑰管理、AI API 我的用量明細 |
+| 虛擬捲動：`hooks/useVirtualRows`（滿 60 列才啟動） | 要一次看全部、上下捲著比較，不想切頁 | 資源管理 |
+| 載入更多（每次 20 筆） | 依時間排序、幾乎只看最近幾筆的紀錄 | 目前沒有（AI API 我的用量明細原本是，近 90 天動輒上百筆、要往前翻，2026-11 改成分頁） |
+
+- 使用者自己的少量資料（自己的金鑰、機器）全部列出就好，次要的（已失效）摺疊起來
+- 分頁列一律用 `components/Pagination`，不要在頁面裡手抄。頁面只傳「共 N 筆」（`info`），目前頁由頁碼標示，不再寫「第 x / y 頁」；箭頭與頁碼的文字由元件自己翻譯
+- 頁碼固定 7 格（頭尾各一、目前頁前後各一，靠近頭尾改連續五格），換頁時寬度不跳；目前頁主色實心白字，其他頁碼沒底沒框、hover 淡底
+- 超過 7 頁才出現「前往 __ 頁」：只收數字，Enter 或離開欄位就跳，超出範圍夾到第一頁／最後一頁
+- 容器窄於 520px（開著 AI 助手、手機）頁碼收成「5 / 16」，前往欄一律出現；只有一頁時只剩「共 N 筆」
+
+### 分頁（Tabs）
+
+**切換整塊內容一律用 `components/Tabs`；篩選與選項用 `SegmentedControl`**，兩者不要互換：
+
+| 用途 | 元件 | 例子 |
+| --- | --- | --- |
+| 分頁：換整頁或整塊內容 | `Tabs` | 頁面標題下方：AI API、帳號設定、資源詳情、班級頁（已啟用）、Gateway、課程內容；卡片裡：AI 用量監控明細、資源監控警告／挖礦 |
+| 窄側欄裡的分頁（240px 以下） | `SegmentedControl compact fullWidth` | AI 導師檢查側欄的任務設定／導師核查 |
+| 清單篩選：縮小同一份清單（多半帶數量） | `SegmentedControl` | 各審核頁的狀態、資源管理、班級管理、教學環境管理、金鑰管理、背景任務、使用者回饋、儲存 |
+| 檢視選項：資料不變，只換呈現 | `SegmentedControl` | 時間區間（AI API 用量、AI 用量監控、資源監控）、圖表指標（AI 用量趨勢、課堂監看、資源監控）、API 文件的端點種類／程式語言 |
+| 表單選值：選一個值，送出或儲存才算數 | `SegmentedControl` | 登入方式、申請模式、外觀背景色、回饋分類、題目難度／題型、連線發布方式／方向 |
+
+分不清是分頁還是篩選時，看切過去之後的畫面：同一份清單變少是篩選（徽章數字加起來等於「全部」）；換成版型、欄位不同的另一塊是分頁。
+
+兩個元件各只有一種樣子：`Tabs` 是圖示方塊款（沒有區塊／頁面之分）；`SegmentedControl` 是實心款，只多一組窄容器變體（`compact`＋`fullWidth`）和放不下自動收成下拉，沒有輕量版。
+
+```jsx
+<Tabs
+  ariaLabel={t("…tabsAriaLabel")}
+  value={tab}
+  onChange={setTab}
+  options={[
+    { value: "models", label: t("…tabModels"), icon: "model_training", badge: count, buttonProps: { "data-guide-tab": "…" } },
+    …
+  ]}
+/>
+```
+
+- 樣式：每個分頁都要給 `icon`，圖示放進 28px 圓角方塊，選中的方塊換主色實心白圖示、字變深色並加粗到 600（標籤先依粗體預留寬度，切換時後面的分頁不會左右跳；徽章固定 500），不畫字下指示條；hover 淡底。字 16px、列高 44px，份量壓得過旁邊的篩選。整列往左拉一個內距，第一個方塊對齊容器左緣（頁面標題、卡片內容）
+- 放在頁面標題下方時，一律放在 `PageHeader` 下方（不放進頁首右側），分頁列用 `@include page-tabs-row` 把到內容的間距收成 12px（標題到分頁維持頁面的 24px），分頁才貼著它控制的內容
+- 240px 以下的窄側欄放不下分頁，改用 `SegmentedControl compact fullWidth`（AI 導師檢查側欄）
+- `badge` 是數量徽章（0 也顯示、`null`／`undefined` 不畫），選中的分頁換主色淡底主色字；載入失敗時傳「—」
+- 放不下時（窄螢幕）：排得下的分頁照常排、一律帶字，其餘收進最右邊的「更多 ▾」，點開是共用 `ListboxPopover`（小一號圖示方塊＋名稱＋徽章）；選中的分頁一定排在外面，從「更多」選了收起來的那個，它會換到外面最後一格。外層變寬一個個排回來，全部放得下「更多」就消失；連一個加「更多」都放不下才橫向捲動（不顯示捲軸）。不要只留圖示（猜不出意思）。頁面不用再包 `overflow-x`；收進「更多」的分頁不在畫面上，掛在它身上的導覽錨點也一樣。頁面的 `className` 只管排版（`align-self` 之類），不要覆寫 `.tab`
+- 無障礙：`role="tablist"`／`"tab"`＋`aria-selected`；只有選中的分頁在 Tab 鍵順序裡，左右鍵（頭尾相接）、Home／End 移動並直接切換。導覽錨點用 `buttonProps` 掛 `data-guide-tab`，找目前分頁用 `[aria-selected="true"]`
+- 分頁右側可以放工具列（篩選＋搜尋）：分頁靠左、工具列靠右，放不下時工具列換到下一行（AI 用量監控明細）
+
 ### 清單工具列與批量操作（DataToolbar）
 
 清單或表格上方的「篩選＋搜尋」與「勾選後的批量操作」**一律用 `components/DataToolbar` 這一組**，不要在頁面裡另做浮動操作列或自己的勾選框：
@@ -596,19 +707,20 @@ const selected = shown.filter((r) => selection.isSelected(r.id));
 - **批量審核（核准／拒絕）**用共用的 `components/BatchReviewDialog`：列出這次會處理的項目（最多 5 筆）＋一段共用的審核備註（選填，寫進每一筆）；`tone="reject"` 是紅色警告圖示＋危險鈕，`tone="approve"` 是主色圖示＋主要鈕。核准放一般動作、拒絕放 `BatchDivider` 後面。核准會佔用資源的（申請審核由後端挑節點並預留）`runBatch` 傳 `concurrency: 1` 一筆一筆送，失敗的保留勾選並把原因帶進提示
 - 沒有後端批量 API 時用 `utils/runBatch` 逐筆呼叫單筆 API（預設同時 4 筆，一筆失敗不影響其他筆）
 - 勾選中的列底色用 `@include row-selected;`（自己就是卡片的清單列傳 `var(--color-surface)`）
-- 導覽用的 `data-guide` 等屬性可以直接傳給 `DataToolbar`（掛在工具列外框），讓導覽步驟框住整條「篩選＋搜尋」
+- 導覽用的 `data-guide` 等屬性可以直接傳給 `DataToolbar`（掛在工具列外框），讓導覽步驟框住整條「篩選＋搜尋」；只想框住搜尋框時傳給 `ToolbarSearch`
+- **搜尋框**一律用 `ToolbarSearch`（36px，Esc 清除），不要手寫；需要明顯的清除鈕時加 `clearable`，有字時右側出現 ✕，清完游標留在框裡
 - **加了勾選欄要重算寬度**：清單列用 grid 時，一行排完或分兩行要看**容器寬度**（`container-type: inline-size`＋`@container`），不要看視窗——側邊欄出現（≥1024）後內容比 992 時還窄，用視窗切會在 1024～1180 之間撐出橫向捲動
 - 目前用在：資源管理、使用者管理（批量啟用／停用、加入／移出群組、刪除）、申請審核與 AI API 審核（批量核准／拒絕）、班級管理（批量封存並回收）、班級工作頁學生名單（批量移除）
 
 ### Dropdown 選單
 
 - 浮在清單上方的選單 portal 到 `document.body`、用 `position: fixed`，由 `hooks/useAnchoredMenu` 定位：捲動與縮放時跟著錨點按鈕重算，依剩餘空間往下或往上展開，錨點捲出視窗就收起，點外面或按 Esc 也會關閉。`PowerMenu`、`ConnectionDialog` 的連接埠建議，以及 AI API 頁與範本頁的選單都用它
-- 選單底色用不透明的 `var(--color-surface)`，不要套 `glass-surface`：底下的清單列會透出來。唯一例外是側欄延伸出來的彈出（見下方）：用 `popover-glass`，跟側欄同一套玻璃，隨介面風格變化（白底／黑底是實色，玻璃／液態透光）
+- 選單底色一律用 `@include popover-glass`，跟側欄同一套玻璃，隨介面風格與主題色變化（白底／黑底是實色，玻璃／液態透光，液態另外加重模糊與塗層，底下的字不會干擾閱讀）。`ActionMenu`、`ListboxPopover`、`PowerMenu` 已內建，手寫的選單也要用它，不要寫 `background: var(--color-surface)`
 - 關閉動畫用 `useDialogPresence(open, 130)` + CSS `transition`，不用 `onAnimationEnd`
 - 這類選單的鍵盤操作（打開時移焦點、上下鍵、Esc／Tab 把焦點還給觸發鈕）共用 `hooks/useMenuKeyboard`；`ActionMenu`、`ListboxPopover`、`PowerMenu` 都用它，新選單也用它，不要自己寫按鍵處理
 - 從一串項目挑一個、每項要帶第二行說明（狀態、日期）時，用 `components/ListboxPopover`，例如 AI 導師檢查窄版的換週。觸發鈕帶 `aria-haspopup="listbox"`、`aria-expanded`，上下鍵直接展開。開啟時焦點在目前選中那項並捲到中間，上下鍵／Home／End 移動、Enter 選取，Esc 或 Tab 關閉並把焦點交回觸發鈕
 - 可捲動的長清單傳 `useAnchoredMenu` 的 `maxHeight`：下方放不下時把清單縮到剩下的空間，不往上推蓋住觸發鈕
-- 側欄底部的彈出（語言、帳號、背景任務）傳 `placement="side"`：貼著側欄外緣往右彈出、底緣對齊觸發鈕，側欄展開或收合都同一個位置。語言用 `ListboxPopover`，帳號用帶 `header`（頭像、姓名）的 `ActionMenu`，背景任務面板直接用 `useAnchoredMenu`。三個都傳 `glass`（或 `@include popover-glass`），保留側欄的玻璃
+- 側欄底部的彈出（語言、帳號、背景任務）傳 `placement="side"`：貼著側欄外緣往右彈出、底緣對齊觸發鈕，側欄展開或收合都同一個位置。語言用 `ListboxPopover`，帳號用帶 `header`（頭像、姓名）的 `ActionMenu`，背景任務面板直接用 `useAnchoredMenu`。底色跟其他選單一樣是 `popover-glass`，不用另外傳參數
 - 「更多操作」選單用 `components/ActionMenu`，觸發鈕一律用直的 ⋮（`more_vert`），帶 `aria-haspopup="menu"`、`aria-expanded`。開啟時焦點在第一個可用的選項，上下鍵頭尾相接、Home／End 移動，Esc 或 Tab 關閉並把焦點交回觸發鈕；Esc 會標成已處理，同頁其他聽 Esc 的元件不會跟著動作。危險項放最後、加 `separatorBefore`，紅字用 `danger`，不要用 `!important` 壓顏色。選項上方不能點的說明（帳號選單的頭像、姓名）放 `header`，下面自動接分隔線
 
 ### 步驟列（Stepper）
@@ -731,4 +843,4 @@ function closeMenu() {
 
 > ⚠️ 注意：使用 `backdrop-filter` 或 `transform` 的元素會建立新的 stacking context，子元素的 `z-index` 無法穿透至外層。若發現 Dropdown 被其他卡片遮住，請確認父元素是否有這類屬性。
 >
-> 玻璃表面（`glass-surface`）搭配 `overflow: hidden` 的容器還會**裁掉**溢出的 absolute 選單。浮層若可能超出容器範圍，改用 `createPortal` 掛到 `document.body` 並以 `position: fixed` 定位（範例：`components/PowerMenu`），且背景要用不透明的 `var(--color-surface)`，否則會透出底下的列表內容。
+> 玻璃表面（`glass-surface`）搭配 `overflow: hidden` 的容器還會**裁掉**溢出的 absolute 選單。浮層若可能超出容器範圍，改用 `createPortal` 掛到 `document.body` 並以 `position: fixed` 定位（範例：`components/PowerMenu`），背景用 `popover-glass`（見上方 Dropdown 選單）。

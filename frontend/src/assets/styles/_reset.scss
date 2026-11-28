@@ -35,6 +35,12 @@ svg {
   max-width: 100%;
 }
 
+/* React Flow 畫布裡的連線、箭頭 svg 不受上面的 max-width 限制；
+   但左下角操作鈕的圖示要維持 React Flow 原本的 12px 上限，
+   不然扁長的「－」會被撐滿整顆按鈕，看起來比「＋」大 */
+.react-flow svg { max-width: none; }
+.react-flow .react-flow__controls-button svg { max-width: 12px; }
+
 button {
   cursor: pointer;
   border: none;
@@ -71,6 +77,19 @@ select {
   border: none;
   outline: none;
   background: none;
+}
+
+/* 下拉一律拿掉原生外觀、自己畫箭頭：Safari（iPad／Mac）的原生下拉高度是系統定的，
+   不理頁面寫的 min-height／padding，會比旁邊 36px 的按鈕、分段切換矮一截。
+   箭頭與右側留白用 !important：各頁的下拉樣式多半寫 background／padding 簡寫，會把這裡蓋掉 */
+select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 16px 16px !important;
+  padding-right: 30px !important;
 }
 
 /* textarea 一律固定高（高度由 rows 或頁面 CSS 決定），不開放拖拉；

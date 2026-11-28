@@ -1,32 +1,19 @@
 @use "../../assets/styles/variables" as *;
 @use "../../assets/styles/mixins" as *;
 
+/* 警示一律走共用警示提示塊：白底＋一般細框、紅色只在 warning 圖示、文字一般顏色
+   （橘色只給待審核語意，不鋪淡底、不加色框）。「前往設定」用全站文字連結 btn-link */
+/* 窄版左右 16px 跟各頁 .page 的左右內距一致，左緣才會跟頁面標題、卡片切齊 */
 .banner {
-  display: flex;
-  align-items: center;
-  gap: $spacing-8;
-  padding: 8px $spacing-16;
-  margin: $spacing-8 $spacing-8 0;
-  border-radius: $radius-12;
-  border: 1px solid color-mix(in srgb, var(--color-pending) 40%, transparent);
-  background: color-mix(in srgb, var(--color-pending) 12%, transparent);
-  color: var(--color-pending);
+  @include warn-notice;
+  margin: $spacing-8 $spacing-16 0;
 
   @include respond-to(md) {
     margin: 0 0 $spacing-16;
   }
 }
 
-.text {
-  font-size: $font-size-14;
-}
-
 .link {
+  @include btn-link;
   margin-left: $spacing-4;
-  color: inherit;
-  text-decoration: underline;
-
-  &:hover {
-    opacity: 0.8;
-  }
 }

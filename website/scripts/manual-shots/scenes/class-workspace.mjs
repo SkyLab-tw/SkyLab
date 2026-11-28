@@ -25,7 +25,7 @@ export default {
     async (s) => {
       await s.go(at("cloud", "overview"), { wait: 800 });
       await s.click(s.page.locator('[data-guide="class-overview-info"] summary'));
-      await s.shot(1, s.page.locator('[data-guide-tab="class-section"][aria-pressed="true"]'), { crop: UPPER });
+      await s.shot(1, s.page.locator('[data-guide-tab="class-section"][aria-selected="true"]'), { crop: UPPER });
       await s.shot(2, s.page.locator('[data-guide="class-overview-status"]'), { crop: UPPER });
       await s.shot(3, s.page.locator('[data-guide="class-overview-week"]'), { crop: UPPER });
       await s.shot(4, s.page.locator('[data-guide="class-overview-machines"]'), { crop: UPPER });

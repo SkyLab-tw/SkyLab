@@ -1,12 +1,6 @@
-/* 班級啟用後的分頁切換：依內容寬度靠左、不被直向 flex 撐滿；
-   六段在窄螢幕放不下時橫向捲動（隱藏捲軸） */
-.segment {
+/* 班級啟用後的頁面分頁（<Tabs page>）：依內容寬度靠左、不被直向 flex 撐滿；放不下時 Tabs 自己橫向捲動。
+   分頁到下方內容收成 12px（page-tabs-row）；啟用前的 Stepper 不受影響 */
+.tabs {
   align-self: flex-start;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
+  @include page-tabs-row;
 }

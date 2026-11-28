@@ -9,7 +9,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ai.teacher_judge import file_service, script_artifact_service, service
+from app.ai.teacher_judge import (
+    chat_transport,
+    file_service,
+    script_artifact_service,
+    service,
+)
 from app.ai.teacher_judge.automation_support import get_script_generation_blockers
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricAnalysis
 from app.ai.teacher_judge.session_service import apply_proposal_operations_to_analysis
@@ -64,7 +69,7 @@ async def run_finalizer(monkeypatch, items, edits, *, refine=True):
         (response, {"completion_tokens": 10, "prompt_tokens": 20, "usage_reported": True})
         for response in responses
     ])
-    monkeypatch.setattr(service, "_call_vllm_message", fake)
+    monkeypatch.setattr(chat_transport, "call_vllm_message", fake)
     patch_teacher_judge_vllm_settings(monkeypatch)
     result = await service.chat_with_rubric(
         messages=[SimpleNamespace(role="user", content="核對目前檢查表並製作脚本")],

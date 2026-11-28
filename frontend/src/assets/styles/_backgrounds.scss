@@ -1,3 +1,5 @@
+@use "sass:math";
+
 /* ============================================
    背景花色（Background Presets）集中管理
    由 body[data-bg] 屬性切換，與風格（data-style）完全無關，
@@ -8,7 +10,46 @@
    - 跟隨主色：--color-bg-primary-tint（淡階）/ -soft（最淡階）/ -deep（最深階）
    - 柔和雙色 / 對角三色：--color-bg-duo-light-* / -dark-*、
      --color-bg-tri-light-* / -dark-*，下方以別名依明暗模式切換。
+
+   背景層上下各比視窗多畫一段出血（--bg-bleed，原因見 global.scss），
+   花色的幾何一律用下面的函式寫：位置與大小換算回「視窗內」的座標，
+   視窗裡看到的跟沒出血時一模一樣，出血區是同一組漸層自然延伸下去。
+   出血只有上下，水平方向照舊寫百分比。
    ============================================ */
+
+/* ---- 幾何換算 ----
+   視窗高度用 dvh（跟 inset: 0 的 fixed 層一樣高，網址列伸縮時一起變），
+   不寫成 calc(100% - 2 * 出血)：Chromium 的 radial-gradient 尺寸不接受
+   百分比與長度混算的 calc，整條 background 會失效 */
+
+/* 視窗高度的 $pct → 長度（橢圓的垂直半徑） */
+@function view-h($pct) {
+  @return math.div($pct, 100%) * 100dvh;
+}
+
+/* 視窗內由上往下 $pct 處 → 背景層上的 y 座標（橢圓中心） */
+@function view-y($pct) {
+  @return calc(var(--bg-bleed) + view-h($pct));
+}
+
+/* 三色暈染：右上、左下偏下、右下三團光暈。預設背景與「對角三色」共用這組幾何 */
+@function glow-3($top-right, $bottom-left, $bottom-right) {
+  @return
+    radial-gradient(ellipse 100% view-h(60%) at 100% view-y(0%), $top-right 0%, transparent 100%),
+    radial-gradient(ellipse 100% view-h(80%) at 0% view-y(90%), $bottom-left 0%, transparent 100%),
+    radial-gradient(ellipse 150% view-h(70%) at 100% view-y(100%), $bottom-right 0%, transparent 100%);
+}
+
+/* 135° 斜漸層：出血讓漸層線兩端各多出 bleed × cos45°，
+   色標往內縮同樣距離，視窗的左上角與右下角才會剛好落在起訖色 */
+@function diagonal($from, $to) {
+  $k: math.cos(45deg);
+  @return linear-gradient(
+    135deg,
+    $from calc(var(--bg-bleed) * $k),
+    $to calc(100% - var(--bg-bleed) * $k)
+  );
+}
 
 /* 明暗模式別名：縮圖與花色規則共用同一組變數 */
 body {
@@ -31,33 +72,28 @@ body.dark {
 
 /* 柔和雙色：基準色色相 + 旋轉 -70° 的雙色斜漸層（別名已依明暗切換） */
 body[data-bg="preset-2"]::before {
-  background: linear-gradient(135deg, var(--color-bg-duo-1) 0%, var(--color-bg-duo-2) 100%);
+  background: diagonal(var(--color-bg-duo-1), var(--color-bg-duo-2));
 }
 
 /* 對角三色：基準色色相 ±120° 的三色暈染（沿用原三色暈染的幾何） */
 body[data-bg="preset-3"]::before {
-  background:
-    radial-gradient(ellipse 100% 60% at 100% 0%, var(--color-bg-tri-1) 0%, transparent 100%),
-    radial-gradient(ellipse 100% 80% at 0% 90%, var(--color-bg-tri-2) 0%, transparent 100%),
-    radial-gradient(ellipse 150% 70% at 100% 100%, var(--color-bg-tri-3) 0%, transparent 100%);
+  background: glow-3(var(--color-bg-tri-1), var(--color-bg-tri-2), var(--color-bg-tri-3));
 }
 
-/* ---- 自訂圖片（上傳）：data URL 由 ThemeContext 寫入 --bg-custom-image ---- */
+/* ---- 自訂圖片（上傳）：data URL 由 ThemeContext 寫入 --bg-custom-image ----
+   定位框用 content-box（背景層的 padding 扣掉出血後剛好是視窗），裁切跟沒出血時一樣；
+   繪製範圍用 border-box，圖片比視窗高的部分會畫進出血區，畫不到的地方仍是 body 底色 */
 
 body[data-bg="custom-image"]::before {
-  background: var(--bg-custom-image) center / cover no-repeat;
+  background: var(--bg-custom-image) center / cover no-repeat content-box border-box;
 }
 
 /* ---- 跟隨主色（只分明暗，不分風格） ---- */
 
 body[data-bg="auto-gradient"]::before {
-  background: linear-gradient(
-    135deg,
-    var(--color-bg-primary-soft) 0%,
-    var(--color-bg-primary-tint) 100%
-  );
+  background: diagonal(var(--color-bg-primary-soft), var(--color-bg-primary-tint));
 }
 
 body.dark[data-bg="auto-gradient"]::before {
-  background: linear-gradient(135deg, #0d1117 0%, var(--color-bg-primary-deep) 100%);
+  background: diagonal(#0d1117, var(--color-bg-primary-deep));
 }

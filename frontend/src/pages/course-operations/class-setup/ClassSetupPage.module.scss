@@ -56,13 +56,14 @@
   container: card / inline-size;
 }
 
+/* 標題下的分隔線用一般框線色：--color-divider 疊在玻璃卡上幾乎看不見，只剩背景亮處的一小段像髒污 */
 .sectionHeader {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: $spacing-16 $spacing-24;
-  border-bottom: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sectionHeader h2 {
@@ -78,11 +79,13 @@
   line-height: 1.5;
 }
 
+/* 標題右側的進度（例如「0/18 週已設定」）：12px 淡色，跟「準備加入 N 個 Email」同一級，不跟標題搶 */
 .sectionHeader>em {
-  color: var(--color-primary);
+  color: var(--color-text-muted);
   font-size: $font-size-12;
   font-style: normal;
-  font-weight: $font-weight-700;
+  font-weight: $font-weight-500;
+  white-space: nowrap;
 }
 
 /* ── 第一步：班級與課表 ── */
@@ -117,11 +120,17 @@
   @include form-control-invalid;
 }
 
+/* 起訖時間：兩格各需約 130px 才放得下「下午 01:10」＋時鐘圖示，半欄放不下時（卡片 640 以下）
+   「每週上課」「上課時間」各佔一整列（見下方 @container card）；格子本身仍可縮，不會撐出欄位 */
+/* 「至」佔的寬度＝欄位間距 16px：整列時第二格剛好對齊上方「結束日期」 */
 .timePair {
   display: grid;
-  grid-template-columns: 1fr 22px 1fr;
+  grid-template-columns: minmax(0, 1fr) $spacing-16 minmax(0, 1fr);
   align-items: center;
-  gap: 4px;
+}
+
+.timePair input {
+  min-width: 0;
 }
 
 .timePair i {
@@ -131,34 +140,15 @@
   text-align: center;
 }
 
-/* 玻璃卡內的區塊一律白底＋細框；淺藍只留給 hover */
+/* 進階設定：共用收合列（components/Disclosure）跨滿兩欄；展開的欄位接在列下方、跟上方欄位同樣間距 */
 .advanced {
   grid-column: 1 / -1;
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-}
-
-.advanced summary {
-  padding: 11px 13px;
-  color: var(--color-text-secondary);
-  font-size: $font-size-12;
-  font-weight: $font-weight-700;
-  cursor: pointer;
-  transition: background $transition-base;
-}
-
-.advanced summary:hover {
-  background: var(--color-hover);
 }
 
 .advancedGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: $spacing-16;
-  border-top: 1px solid var(--color-divider);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-16;
 }
 
 /* ── 第二步：學生名單 ── */
@@ -182,10 +172,11 @@
   gap: $spacing-8;
 }
 
+/* 標題右側的輔助資訊（例如「準備加入 N 個 Email」）：12px 淡色，不跟欄位標題搶 */
 .fieldLabelRow small {
-  color: var(--color-text-secondary);
-  font-size: inherit;
-  font-weight: $font-weight-500;
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  font-weight: $font-weight-400;
   white-space: nowrap;
 }
 
@@ -307,61 +298,34 @@
   grid-area: action;
 }
 
-.templatePauseCard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  margin: $spacing-16 $spacing-24 $spacing-24;
-  padding: $spacing-16;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
-  border-radius: $radius-12;
-  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
-}
-
-.templatePauseCard>div:first-child {
+/* 找不到合適模板的出口：清單下方一行（問句＋兩個文字連結），右側淡色註明不會遺失資料；
+   放不下時自然換行。不做成淡底卡片：玻璃卡裡的區塊一律白底，而且這只是例外出口 */
+.templatePause {
   display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.templatePauseCard strong {
-  color: var(--color-text-primary);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px $spacing-8;
+  padding: $spacing-16 $spacing-24 $spacing-24;
+  border-top: 1px solid var(--color-divider);
+  color: var(--color-text-secondary);
   font-size: $font-size-14;
 }
 
-.templatePauseCard p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: $font-size-12;
-  line-height: 1.55;
+.templatePauseDot {
+  color: var(--color-text-muted);
 }
 
-/* 狀態 badge 的標準寫法：成功色 12% 淡底＋成功色字；只包住文字，不撐滿整欄 */
-.templatePauseCard small {
+.templatePause small {
   display: inline-flex;
-  align-self: flex-start;
   align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-  padding: 3px 10px;
-  border-radius: $radius-pill;
-  color: var(--color-success);
-  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  gap: 4px;
+  margin-left: auto;
+  color: var(--color-text-muted);
   font-size: $font-size-12;
-  font-weight: $font-weight-700;
 }
 
-.templatePauseActions {
-  display: flex;
-  align-items: stretch;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.templatePauseActions button {
-  white-space: nowrap;
+.linkBtn {
+  @include btn-link;
 }
 
 /* ── 第四步：每週任務 ── */
@@ -391,9 +355,11 @@
   gap: 3px;
 }
 
+/* 勾選框的說明跟欄位標題同一級（14px／500），下面的補充 12px 淡色 */
 .publishToggle strong {
   color: var(--color-text-primary);
-  font-size: $font-size-12;
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
 }
 
 .publishToggle small {
@@ -408,28 +374,31 @@
   flex-direction: column;
 }
 
+/* 一週一列約 52px：18 週不拉得太長。列與列只靠間距分開（原本的 --color-divider 線在玻璃卡上看不見） */
 .weekList label {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
   align-items: center;
   gap: $spacing-16;
-  padding: 12px $spacing-24;
-  border-bottom: 1px solid var(--color-divider);
+  padding: $spacing-8 $spacing-24;
 }
 
 .weekList label:last-child {
-  border-bottom: 0;
+  padding-bottom: $spacing-16;
 }
 
 .weekList label>span {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
+  line-height: 1.4;
 }
 
+/* 「第 N 週」跟欄位標題同一級（14px／500），日期 12px 淡色 */
 .weekList label strong {
   color: var(--color-text-primary);
-  font-size: $font-size-12;
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
 }
 
 .weekList label small {
@@ -451,12 +420,21 @@
   background: var(--color-surface);
 }
 
+/* 容量狀態圖示：跟下方摘要列同一套圓底——可以送出是成功色淡底，
+   檢查中／還有步驟沒完成是灰色淡底（橘色只給待審核語意，這裡不用） */
 .readyIcon {
   display: grid;
   width: 42px;
   height: 42px;
   place-items: center;
-  color: var(--color-primary);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  background: var(--color-hover);
+}
+
+.readyIconOk {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
 }
 
 /* 容量預檢進行中：沙漏停一下再翻面，像在倒數；檢查完變成 ✓ 或提示就不動 */
@@ -479,6 +457,10 @@
 @media (prefers-reduced-motion: reduce) {
   .readyIconBusy>span {
     animation: none;
+  }
+
+  .cardFooter {
+    transition: none;
   }
 }
 
@@ -530,10 +512,10 @@
   border-left: 1px solid var(--color-divider);
 }
 
-/* 資料密集的統計格，標籤維持 10px */
+/* 送出前最後確認的關鍵數字：標籤 12px（原本 10px 太小，2026-11-17 使用者同意改） */
 .capacityFacts span {
   color: var(--color-text-muted);
-  font-size: $font-size-10;
+  font-size: $font-size-12;
 }
 
 .capacityFacts strong {
@@ -635,9 +617,11 @@
   gap: 3px;
 }
 
+/* 步驟名稱跟前幾步的欄位標題同一級（14px／500），說明 12px 淡色 */
 .summaryList strong {
   color: var(--color-text-primary);
-  font-size: $font-size-12;
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
 }
 
 .summaryList small {
@@ -646,23 +630,22 @@
   font-size: $font-size-12;
 }
 
+/* 只有「選填」「未完成」才有文字（完成的列只靠左邊綠勾）：12px 淡色中粗 */
 .summaryList em {
   font-size: $font-size-12;
   font-style: normal;
-  font-weight: $font-weight-700;
+  font-weight: $font-weight-500;
 }
 
+/* 箭頭固定在最後一欄：完成的列沒有狀態文字時，箭頭仍跟其他列對齊 */
 .summaryArrow {
+  grid-column: 4;
   color: var(--color-text-muted);
 }
 
 .summaryDone>span:first-child {
   color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 10%, transparent);
-}
-
-.summaryDone em {
-  color: var(--color-success);
 }
 
 .summaryPending>span:first-child {
@@ -686,10 +669,24 @@
   justify-content: space-between;
   gap: $spacing-16;
   padding: 12px $spacing-24;
-  border-top: 1px solid var(--color-divider);
+  /* 平常透明、跟卡片融成一塊；貼住畫面底部蓋著內容時（.cardFooterStuck）才換玻璃底＋分隔線 */
+  border-top: 1px solid transparent;
+  background: transparent;
+  transition: background $transition-base, border-color $transition-base;
+}
+
+.cardFooterStuck {
+  border-top-color: var(--color-divider);
   background: var(--color-surface-glass);
   -webkit-backdrop-filter: var(--glass-backdrop-filter);
   backdrop-filter: var(--glass-backdrop-filter);
+}
+
+/* 卡片最底下的 1px 哨兵（不佔高度）：看不到時表示按鈕列正貼著畫面底部 */
+.footerSentinel {
+  height: 1px;
+  margin-top: -1px;
+  pointer-events: none;
 }
 
 .cardFooterStatic {
@@ -717,6 +714,7 @@
   gap: 12px;
 }
 
+/* 右側主要動作的寬度：第五步「稍後再送出」與「完成設定並送出建機」並排時也套這個，兩顆一樣大 */
 .footerNext {
   flex: none;
   min-width: 190px;
@@ -859,10 +857,14 @@
   cursor: default;
 }
 
-/* 目前這一步：淡主色底標出來 */
-.draftList button[aria-current="step"],
-.draftList button[aria-current="step"]:hover:not(:disabled) {
+/* 目前這一步：只鋪 8% 主色淡底，不加左側主色條（使用者 2026-11-17 要求拿掉，上方步驟列已標出目前步驟）。
+   放在一般 hover 規則後面：兩條權重相同，靠順序讓目前這一步 hover 時是加深的 12% */
+.draftList button[aria-current="step"] {
   background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
 }
 
 .draftList button>span:first-child {
@@ -951,34 +953,16 @@
   @include btn-secondary;
 }
 
-.btnGhost {
-  @include btn-ghost;
-}
-
 .iconBtnDanger {
   @include btn-icon($danger: true);
 }
 
 /* 頁首返回鍵：與「申請虛擬機 / 容器」頁的 .backBtn 一致 */
+/* 頁首返回鍵：共用 btn-secondary（36.4px，跟卡片底部按鈕同高）＋淡陰影；不要手寫內距（8px 會撐到 40px） */
 .backBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px $spacing-16;
-  border-radius: $radius-8;
-  font-size: $font-size-14;
-  font-weight: $font-weight-500;
-  cursor: pointer;
-  white-space: nowrap;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  @include btn-secondary;
   box-shadow: var(--shadow-sm);
-  transition: background $transition-base;
-}
-
-.backBtn:hover {
-  background: var(--color-hover);
+  white-space: nowrap;
 }
 
 @include respond-below(md) {
@@ -988,6 +972,14 @@
 }
 
 /* ── 卡片變窄時（手機，或寬螢幕分兩欄後的內容欄）── */
+
+/* 卡片 640 以下半欄放不下起訖時間（每格要約 130px）：每週上課、上課時間各佔一整列，時間欄才看得到完整時間。
+   1366 筆電卡片約 647px 仍並排；954 寬（卡片約 610–620px）才換成整列 */
+@container card (max-width: 640px) {
+  .scheduleField {
+    grid-column: 1 / -1;
+  }
+}
 
 @container card (max-width: 700px) {
   .capacityFacts {

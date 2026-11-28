@@ -105,7 +105,7 @@ Keys that no longer work are hidden below the table. Click **Show inactive keys 
 2. Choose **7 days**, **30 days** or **90 days**. The dates covered are shown next to the switch.
 3. **API Usage** shows **Total Calls**, **Input Tokens** and **Output Tokens**, a daily token chart, and a breakdown by model.
 4. **Call Details** lists every call, newest first: **Date**, **Model**, **API Key source**, **Input Tokens**, **Output Tokens** and **Status**. Click a row to see the **Request ID**, **Request type**, **Total Tokens**, **Processing time** and any error message.
-5. Click **Load More** to load 20 more calls.
+5. Records show 50 per page; use **Previous** and **Next** below the list to page through them. Changing the time range goes back to the first page.
 
 Only calls made with your own keys are counted.
 

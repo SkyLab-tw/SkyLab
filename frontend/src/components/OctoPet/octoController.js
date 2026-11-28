@@ -26,7 +26,8 @@ function readTheme(el) {
   };
 }
 
-export function mountOctoPet(canvas, root, { scale = 3, activity = "idle", walkRange = 0, quiet = false } = {}) {
+/* bubble=false：不畫頭上的「…」對話泡泡（外層已經有自己的對話泡泡時用，不然會出現兩個） */
+export function mountOctoPet(canvas, root, { scale = 3, activity = "idle", walkRange = 0, quiet = false, bubble = true } = {}) {
   // 測試環境（jsdom）或不支援 canvas 時就靜靜地不畫
   if (!canvas || !root || typeof window.requestAnimationFrame !== "function") return NOOP;
   let ctx = null;
@@ -107,6 +108,7 @@ export function mountOctoPet(canvas, root, { scale = 3, activity = "idle", walkR
     last = now;
     stepBrain(brain, dt, now, { activity: current, reduced: Boolean(reducedMq?.matches), pointerLook: pointerLook(), walkRange, quiet });
     const pose = poseOf(brain);
+    if (!bubble) pose.bubble = false;
     if (pose.x !== lastX) {
       lastX = pose.x;
       root.style.transform = pose.x ? `translateX(${pose.x * scale}px)` : "";

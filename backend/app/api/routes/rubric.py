@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from app.ai.teacher_judge.export import export_to_excel
+from app.ai.teacher_judge.rubric_normalization import normalize_items_for_export
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricExportRequest
-from app.ai.teacher_judge.service import normalize_items_for_export
 from app.api.deps.auth import InstructorUser
 from app.core.i18n import t
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from app.ai.teacher_judge.rubric_normalization import normalize_items_for_export
 from app.ai.teacher_judge.schemas import TeacherJudgeRubricItem
-from app.ai.teacher_judge.service import normalize_items_for_export
 
 
 def test_teacher_judge_normalizes_ai_returned_items() -> None:

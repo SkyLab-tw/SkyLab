@@ -14,11 +14,13 @@ from sqlmodel import select
 
 from app.ai.teacher_judge import attachment_service, session_service
 from app.ai.teacher_judge import service as teacher_judge_service
+from app.ai.teacher_judge import session_chat_service as chat_flow
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionMessageCreateRequest,
     TeacherJudgeSessionScriptCreateRequest,
 )
+from app.ai.teacher_judge.service import TeacherJudgeChatResult
 from app.api.routes import teacher_judge_sessions
 from app.models.teacher_judge_attachment import TeacherJudgeMessageAttachment
 from app.models.teacher_judge_session import (
@@ -105,12 +107,12 @@ async def test_refine_auto_teacher_typed_plan_is_script_ready(
 
     async def fake_chat(*args, **kwargs):
         assert kwargs["is_refine"] is True
-        return "這項目會收集結果，交由導師查看。", None, {}
+        return TeacherJudgeChatResult("這項目會收集結果，交由導師查看。", None, {})
 
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -152,12 +154,12 @@ async def test_message_without_rubric_is_saved_and_uses_general_chat(
         assert rubric_context == "{}"
         assert kwargs["is_refine"] is False
         assert kwargs["template_key"] == "linux"
-        return "可以，先描述目標環境。", None, {}
+        return TeacherJudgeChatResult("可以，先描述目標環境。", None, {})
 
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -188,22 +190,18 @@ async def test_message_without_rubric_does_not_claim_proposal_was_created(
     db.refresh(item)
 
     async def fake_chat(*args, **kwargs):
-        return (
-            "檔案格式檢查：Ready，已放入提案。",
-            [
+        return TeacherJudgeChatResult("檔案格式檢查：Ready，已放入提案。", [
                 {
                     "id": "item-file-format",
                     "title": "檔案格式檢查",
                     "operation": "add",
                 }
-            ],
-            {},
-        )
+            ], {})
 
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -256,16 +254,12 @@ async def test_message_does_not_enable_script_creation_workflow(
     async def fake_chat(messages, rubric_context, **kwargs):
         assert "enable_workflow_tools" not in kwargs
         assert "ready_proposals_only" not in kwargs
-        return (
-            "請使用檢查表右下角的儲存並製作按鈕。",
-            None,
-            {},
-        )
+        return TeacherJudgeChatResult("請使用檢查表右下角的儲存並製作按鈕。", None, {})
 
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -475,7 +469,7 @@ async def test_message_can_send_parsed_attachment_without_text(
         teacher_judge_sessions, "analyze_attachments_itemwise", fake_itemwise
     )
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -533,12 +527,12 @@ async def test_attachment_proposal_is_recoverable_but_not_applied_automatically(
 
     async def fake_chat(*_args, **kwargs):
         captured_chat_kwargs.update(kwargs)
-        return "已建立一項可確認的提案。", proposal, {"total_tokens": 1}
+        return TeacherJudgeChatResult("已建立一項可確認的提案。", proposal, {"total_tokens": 1})
 
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -642,7 +636,7 @@ async def test_attachment_message_runs_itemwise_analysis_and_records_results(
         teacher_judge_sessions, "analyze_attachments_itemwise", fake_itemwise
     )
     monkeypatch.setattr(
-        teacher_judge_sessions, "get_enabled_template_commands", lambda *a, **k: []
+        chat_flow, "get_enabled_template_commands", lambda *a, **k: []
     )
 
     result = await teacher_judge_sessions.create_message(
@@ -695,12 +689,12 @@ async def test_refine_message_uses_the_rubric_polish_prompt_mode(
         assert '"items": []' in rubric_context
         assert kwargs["is_refine"] is True
         assert "ready_proposals_only" not in kwargs
-        return "檢查完畢，檢查表目前狀態良好。", None, {}
+        return TeacherJudgeChatResult("檢查完畢，檢查表目前狀態良好。", None, {})
 
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )
@@ -783,7 +777,7 @@ async def test_refine_message_uses_server_readiness_and_saves_resolved_chat(
 
     async def fake_chat(messages, rubric_context, **kwargs):
         assert kwargs["is_refine"] is True
-        return "模型回覆不作為安全閘門。", [], {}
+        return TeacherJudgeChatResult("模型回覆不作為安全閘門。", [], {})
 
     command = TeacherJudgeTemplateCommand(
         template_key="linux",
@@ -798,7 +792,7 @@ async def test_refine_message_uses_server_readiness_and_saves_resolved_chat(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [command],
     )
@@ -896,7 +890,7 @@ async def test_refine_message_preserves_ready_proposal_rows_alongside_blockers(
     ]
 
     async def fake_chat(*args, **kwargs):
-        return "模型回覆不作為安全閘門。", proposal, {}
+        return TeacherJudgeChatResult("模型回覆不作為安全閘門。", proposal, {})
 
     command = TeacherJudgeTemplateCommand(
         template_key="linux",
@@ -911,7 +905,7 @@ async def test_refine_message_preserves_ready_proposal_rows_alongside_blockers(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [command],
     )
@@ -958,7 +952,7 @@ async def test_message_failure_is_saved_as_visible_processing_outcome(
     monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
     monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fail_chat)
     monkeypatch.setattr(
-        teacher_judge_sessions,
+        chat_flow,
         "get_enabled_template_commands",
         lambda *args, **kwargs: [],
     )

@@ -189,6 +189,75 @@
   }
 }
 
+/* ── 資源排程：欄位全是數字，欄數跟著卡片寬走（容器查詢，側邊欄收合與否都對），
+   並依欄位數挑欄數，不讓最後剩一格落單 ── */
+.numberCard {
+  container-type: inline-size;
+}
+
+.numberGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-16;
+}
+
+/* 3 個欄位：一列三格；4 個欄位：2×2，夠寬時一列四格（數字欄位 190px 上下就夠） */
+@container (min-width: 480px) {
+  .numberGridThree {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .numberGridFour {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 800px) {
+  .numberGridFour {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* 資源評估閾值：一組一列。夠寬時組名在列首、三格在右；不夠寬時組名移到三格上方。
+   三格本身沒有說明文字，手機寬度也維持一列三格 */
+.thresholdMatrix {
+  @include flex-column;
+  gap: $spacing-16;
+}
+
+.thresholdRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-8 $spacing-16;
+
+  /* 手機卡片內容約 277px：每格 80px 上下，數字與短名都放得下 */
+  @container (min-width: 240px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @container (min-width: 680px) {
+    grid-template-columns: 160px repeat(3, minmax(0, 1fr));
+  }
+}
+
+.thresholdRowHead {
+  @include flex-column;
+  grid-column: 1 / -1;
+  gap: 2px;
+  min-width: 0;
+
+  @container (min-width: 680px) {
+    grid-column: auto;
+  }
+}
+
+/* 組名比欄位標籤（14px／500）重一階，跟欄位標籤同一條基線 */
+.thresholdRowTitle {
+  font-size: $font-size-14;
+  font-weight: $font-weight-700;
+  color: var(--color-text-primary);
+}
+
 /* 欄位一律走共用 form mixin（36px／14px），同 AdminPage 等對話框 */
 .field {
   @include form-field;

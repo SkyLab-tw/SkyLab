@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
+import Tabs from "../../../components/Tabs/Tabs";
 import Stepper from "../../../components/Stepper/Stepper";
 import { CLASS_WORKFLOW_TABS, POST_ACTIVE_TABS } from "./classWorkflowTabs";
 import styles from "./ClassWorkflowStepper.module.scss";
@@ -7,7 +7,7 @@ import styles from "./ClassWorkflowStepper.module.scss";
 /**
  * 班級頁的分頁切換，依班級狀態換樣式：
  * - 設定中（未啟用）：圓點連線的流程步驟列，打勾表示該步驟已設好
- * - 可以上課（已啟用）：設定已走完，不再需要「步驟」的暗示，改成一般的分段切換，
+ * - 可以上課（已啟用）：設定已走完，不再需要「步驟」的暗示，改成一般的分頁（Tabs），
  *   六個分頁（含上課進度、AI導師檢查）平行排開、純文字
  *
  * @param {object}   item      班級（status、students、weeks、course_environment、nodes）
@@ -20,15 +20,16 @@ export default function ClassWorkflowStepper({ item, activeKey, onSelect }) {
 
   if (item.status === "active") {
     return (
-      <SegmentedControl
-        className={styles.segment}
+      <Tabs
+        className={styles.tabs}
         ariaLabel={ariaLabel}
         value={activeKey}
         onChange={onSelect}
-        options={CLASS_WORKFLOW_TABS.map(([key, , labelKey]) => ({
+        options={CLASS_WORKFLOW_TABS.map(([key, icon, labelKey]) => ({
           value: key,
           label: t(labelKey),
-          /* 導覽錨點：目前所在的分頁用 [aria-pressed="true"] 再篩 */
+          icon,
+          /* 導覽錨點：目前所在的分頁用 [aria-selected="true"] 再篩 */
           buttonProps: { "data-guide-tab": "class-section" },
         }))}
       />
