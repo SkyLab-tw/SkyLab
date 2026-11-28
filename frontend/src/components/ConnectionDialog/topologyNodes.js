@@ -14,13 +14,25 @@ export function canManageNode(node) {
 }
 
 /**
- * 拉線碰到唯讀機器時要講的原因（network 命名空間的鍵）：學生的課堂機由班級老師管；
- * 快速練習機誰都不能改（老師、管理員最常碰到的就是這種）；其他（例如失去班級的課堂機）只說沒有管理權。
+ * 這台機器為什麼唯讀：學生的課堂機由班級老師管（class）；快速練習機誰都不能改
+ * （quick_practice，老師、管理員最常碰到的就是這種）；其他（例如失去班級的課堂機）
+ * 只知道沒有管理權（no_permission）。拉線被擋的提示與規則面板的唯讀說明共用這個判斷。
  */
+export function readOnlyNodeReason(node) {
+  if (node?.machine_kind === "quick_practice") return "quick_practice";
+  if (node?.teaching_class_name) return "class";
+  return "no_permission";
+}
+
+const READ_ONLY_NODE_MESSAGE_KEYS = {
+  quick_practice: "FirewallPage.readOnlyNodeQuickPractice",
+  class: "FirewallPage.readOnlyNode",
+  no_permission: "FirewallPage.readOnlyNodeNoPermission",
+};
+
+/** 拉線碰到唯讀機器時要講的原因（network 命名空間的鍵） */
 export function readOnlyNodeMessageKey(node) {
-  if (node?.machine_kind === "quick_practice") return "FirewallPage.readOnlyNodeQuickPractice";
-  if (node?.teaching_class_name) return "FirewallPage.readOnlyNode";
-  return "FirewallPage.readOnlyNodeNoPermission";
+  return READ_ONLY_NODE_MESSAGE_KEYS[readOnlyNodeReason(node)];
 }
 
 export function nodeLabel(node) {

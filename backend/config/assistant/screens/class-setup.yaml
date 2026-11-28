@@ -1,0 +1,158 @@
+# 建立班級（/class-setup）
+id: class-setup
+path: /class-setup
+title: 一鍵建立班級
+access: staff
+order: 200
+purpose: 一步步完成班級與課表、學生名單、教學環境與每週任務，每一步按「儲存並下一步」就會保存到班級草稿，最後做容量預檢並送出建機。
+when_to_use: 要開一個新班級，替每位學生準備好上課機器；或繼續一個還沒送出建機的班級。每一步存過之後就可以離開，之後從班級管理點這個班級回來繼續。
+sections:
+  - 班級與課表
+  - 學生名單
+  - 教學環境
+  - 每週任務
+  - 確認建立
+features:
+  - 五個步驟：班級與課表、學生名單、教學環境、每週任務、確認建立。每一步要按「儲存並下一步」才會保存；切換步驟或離開時還有沒存的修改，會先詢問是否捨棄。必要步驟（班級、學生、教學環境）還沒完成時，後面的步驟點不進去；每週任務是選填。
+  - 第 1 步「班級與固定課表」：填班級名稱、上課地點、開始與結束日期、每週上課星期與上課時間；學期、提前開機、下課後關機在「進階設定」裡，可以維持預設。第一次按「儲存並下一步」才會建立班級草稿。
+  - 第 2 步「加入學生名單」：在「學生 Email」貼上 Email（換行、逗號或分號分隔，貼上後會顯示「準備加入 N 個 Email」），或按「匯入 CSV」、「從群組匯入」；找不到或不是學生身分的帳號會留在輸入框，要修正或刪掉才能繼續。至少要有一位學生；「目前班級學生」可以逐一移除。
+  - 第 3 步「每位學生的教學環境」：點一個已發布的教學環境版本選用（選中的標「已選擇」），每位學生會拿到相同的一組機器；選了還沒存時，「班級草稿」的教學環境那一列會先寫「環境名稱（未儲存）」，按「儲存並下一步」才真的套用。找不到合適的，在「還沒有合適的上課模板？」那一行按「建立新的上課模板」，發布後會自動回到這一步並替你選好；按「稍後再繼續」會保存草稿並離開（前兩步的資料不會遺失）。
+  - 第 4 步「安排每週任務與 Checkpoint」：選填，課次日期由固定課表產生，每週填主題或 Checkpoint；勾「填好主題的週次直接發布給學生」（預設勾選）時，填了主題的週次會直接讓學生看得到。教材檔案之後可以在班級內補。
+  - 第 5 步「確認班級設定」：系統依學生人數、環境規格與課程期間做容量預檢；通過時列出全班要建立的機器台數、CPU、RAM、磁碟與要預留的 IP 數，並逐台節點列出需要與可用的 CPU、RAM。通過後按「完成設定並送出建機」，送出後學生、環境與課表會鎖定並等待管理員審核；還不想送出可以按「稍後再送出」。學生名單或教學環境還沒完成時不做預檢，改成顯示「還有步驟沒完成」與「前往學生名單」或「前往教學環境」按鈕。
+  - 第 5 步也列出四項設定的摘要（班級與課表、學生名單、教學環境、每週任務），點一項就回到那一步修改。
+  - 「班級草稿」摘要寫出班級名稱（還沒建立草稿時顯示正在填的名稱，什麼都沒填時顯示「還沒填班級名稱」），列出每一步的狀態、預估機器台數與建機準備進度（學生名單與教學環境兩項），點其中一列可以跳到那一步；第 5 步不顯示這份摘要。
+elements:
+  - id: classsetup.current_step
+    role: readonly
+    label: 目前步驟
+  - id: classsetup.saved
+    role: readonly
+    label: 班級已保存
+  - id: classsetup.student_count
+    role: readonly
+    label: 已保存學生人數
+  - id: classsetup.environment_saved
+    role: readonly
+    label: 已保存教學環境
+  - id: classsetup.available_environments
+    role: readonly
+    label: 可選教學環境數量
+  - id: classsetup.step_basic
+    role: list
+    label: 班級與課表
+    help: 先決定何時上課；學期、提前開機與下課後關機在「進階設定」裡，可以維持預設。
+    section: 班級與課表
+  - id: classsetup.class_name
+    role: text
+    label: 班級名稱
+    help: 例如：Linux Web 實務｜115-1。
+    constraints:
+      - 必填，最多 255 字。
+    section: 班級與課表
+  - id: classsetup.location
+    role: text
+    label: 上課地點
+    help: 例如：電腦教室 A，會顯示在學生的今日課表。
+    section: 班級與課表
+  - id: classsetup.schedule
+    role: date
+    label: 上課時間
+    help: 新班級的開始日期預設是最近的星期一（今天是星期一就是今天）、結束日期是四個月後，每週上課預設星期一 13:10 至 16:00。
+    constraints:
+      - 結束日期不能早於開始日期，結束時間必須晚於開始時間。
+      - 課程期間最長 104 週。
+      - 已經產生的週次不能因為改短課表而被刪掉。
+    section: 班級與課表
+  - id: classsetup.advanced
+    role: button
+    label: 進階設定
+    help: 收合的設定：學期（預設依開始日期算出學年度學期，留空存成「未指定」）、提前開機（準時或 5、10、15、30 分鐘，預設 10 分鐘）、下課後關機（下課即關機或下課後 10、30、60 分鐘，預設 30 分鐘）。
+    section: 班級與課表
+  - id: classsetup.step_students
+    role: list
+    label: 學生名單
+    help: 加入正式班級成員；至少要有一位已存在的學生帳號才能到下一步。
+    section: 學生名單
+  - id: classsetup.student_emails
+    role: textarea
+    label: 學生 Email
+    help: 一次貼上多個 Email，換行、逗號、分號或空白都可以分隔，重複的帳號會自動略過；按「儲存並下一步」才會加入。
+    constraints:
+      - 帳號必須已存在而且是學生身分；找不到或不是學生的帳號會留在輸入框，修正或刪掉後才能繼續。
+      - 這裡要填完整 Email，只填學號不會自動補網域。
+    section: 學生名單
+  - id: classsetup.import_csv
+    role: button
+    label: 匯入 CSV
+    help: 選一個 CSV 檔立即匯入；加不進去的帳號會放回輸入框讓你修正。
+    constraints:
+      - 每列第一欄填一個 Email 或學號；第一列可以是標題（email、學號或帳號），會自動略過。
+      - 只填學號時，系統用管理員在註冊設定填的學生信箱網域補成 Email；沒設定網域時整份退回，要改填完整 Email。
+      - 檔案大小上限 1 MB。
+    section: 學生名單
+  - id: classsetup.import_group
+    role: button
+    label: 從群組匯入
+    help: 從管理員建立的使用者群組挑一組，把群組目前的學生加進名單。
+    section: 學生名單
+  - id: classsetup.step_environment
+    role: list
+    label: 教學環境
+    help: 選用已發布且提供給正式課程的教學環境版本，定義每位學生的機器組合；清單只列出你自己的環境（管理員看得到全部）。可重用既有環境，或建立環境並發布後返回班級選用。
+    section: 教學環境
+  - id: classsetup.create_template
+    role: button
+    label: 建立新的上課模板
+    help: 班級資料與學生名單已保存為草稿；建立並發布新的教學環境後，會自動回到這一步並替你選好。一個已發布的環境都沒有時，按鈕是「現在建立模板」。
+    section: 教學環境
+  - id: classsetup.save_for_later
+    role: button
+    label: 稍後再繼續
+    help: 保存草稿並回到班級管理，之後點這個班級可以回來繼續。
+    section: 教學環境
+  - id: classsetup.step_tasks
+    role: list
+    label: 每週任務
+    help: 選填。安排每週主題或 Checkpoint；課次日期由固定課表產生。
+    section: 每週任務
+  - id: classsetup.publish_weeks
+    role: toggle
+    label: 填好主題的週次直接發布給學生
+    help: 預設勾選。不勾的話這些週次會留在草稿，學生在課程頁看不到內容；之後仍可在班級的「每週內容」逐週發布。
+    section: 每週任務
+  - id: classsetup.step_review
+    role: list
+    label: 確認建立
+    help: 做容量預檢後送出。預檢通過時列出機器、CPU、RAM、磁碟與 IP 的總量，並逐台節點比對需要／可用的 CPU 與 RAM（不夠的節點會標出來）。送出後學生、環境與課表會鎖定並進入管理員審核。
+    section: 確認建立
+  - id: classsetup.submit
+    role: button
+    label: 完成設定並送出建機
+    help: 容量預檢通過後才能按；送出後學生、環境與課表會鎖定並等待管理員建機審核。
+    section: 確認建立
+  - id: classsetup.save_and_next
+    role: button
+    label: 儲存並下一步
+    help: 保存目前這一步再前往下一步；第 3 步要先選好教學環境才能按。
+  - id: classsetup.draft
+    role: list
+    label: 班級草稿
+    help: 班級名稱、每一步的完成狀態、預估機器台數（學生人數乘以環境的機器數，跟著第 3 步目前選的環境即時變動）與建機準備進度；第 3 步選了環境還沒儲存時，那一列寫「環境名稱（未儲存）」。點一列可以跳到那一步；還沒解鎖的步驟點不進去。
+dialogs:
+  - id: group-import
+    title: 從群組匯入學生
+    opened_by: 從群組匯入
+    purpose: 從管理員建立的使用者群組，把群組目前的學生一次加進名單。
+    fields:
+      - label: 群組
+        help: 選項會顯示每個群組有幾位學生；預設選第一個有學生的群組。沒有學生的群組不能匯入。
+        required: true
+    notes:
+      - 只加入群組裡的學生，已在名單裡的略過；群組裡的老師或管理員帳號不會加入。
+      - 匯入只複製當下的成員，之後群組再有異動，不會改到這個班級。
+      - 群組由管理員維護，管理員還沒建立群組時清單是空的。
+related:
+  - path: /course-template-management
+    when: 要先建立或發布教學環境
+  - path: /class-management
+    when: 回到班級清單或繼續其他班級

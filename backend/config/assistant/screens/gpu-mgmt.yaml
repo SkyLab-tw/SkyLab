@@ -1,0 +1,74 @@
+# GPU 管理（/gpu-mgmt）
+id: gpu-mgmt
+path: /gpu-mgmt
+title: GPU 管理
+access: admin
+order: 290
+purpose: 查看各叢集 PVE 上的 GPU PCI mapping：直通或 SR-IOV、vGPU 規格、可用數量與正在使用的 VM。
+when_to_use: 要確認叢集有哪些 GPU、還剩幾張可用、被哪些機器佔用，或刪除不再使用的 GPU mapping。
+sections:
+  - GPU 清單
+  - 可用與使用中數量
+  - 使用中的 VM
+features:
+  - 清單每列是一組 GPU mapping：名稱附註 SR-IOV 或 Passthrough（有 vGPU 規格時附規格與每顆顯存），以及描述、節點 / PCI、可用 / 總數、使用中 VM 與狀態；清單每 30 秒自動更新。
+  - 搜尋框可以用 mapping 名稱、描述、節點或 PCI 位址篩選；沒有符合的顯示「沒有符合條件的 GPU」，可按「清除搜尋」。還沒有任何 GPU mapping 時顯示「尚未偵測到 GPU」。
+  - PCI 位址超過 3 個時，「節點 / PCI」欄改成摘要：連續的位址收成區段，收完不超過 3 段就列出區段；位址不連續、收完還超過 3 段時（例如整張卡直通的多張卡）只列節點，跨多個節點時寫成「節點 × 數量」。按「N 個 VF」（直通卡是「N 個裝置」）展開，依節點列出全部位址。
+  - 視窗較窄、表格放不下時會收欄，依序收起「描述」「節點 / PCI」「可用 / 總數」「使用中 VM」：描述與節點 / PCI 改寫在 Mapping 那一格（位址多時的展開鈕照樣能按），可用 / 總數（寫成「可用 / 總數 N / M」）與使用中的 VM 改寫在狀態那一格；Mapping、狀態與刪除鈕一直都在。
+  - 狀態欄：沒有機器使用時是「可用」，部分使用是「已用/總數 使用中」，全部用完是「已滿載」，總數算不出來時是「未知」。
+  - 每列的刪除鈕（滑過顯示「移除映射」）會先跳出「刪除 GPU mapping」確認，按「刪除」後才刪除 PVE 上的這組 PCI mapping；刪除處理中時各列的刪除鈕都暫時不能按。
+elements:
+  - id: gpu.col_mapping
+    role: table
+    label: Mapping
+    help: PVE 上的 GPU mapping 名稱，申請機器選 GPU 時看到的就是它；附註 SR-IOV 或 Passthrough 與 vGPU 規格。
+    section: GPU 清單
+  - id: gpu.col_description
+    role: table
+    label: 描述
+    section: GPU 清單
+  - id: gpu.col_node_pci
+    role: table
+    label: 節點 / PCI
+    help: 這組 mapping 的裝置插在哪個節點的哪個 PCI 位址；超過 3 個位址時改成摘要（連續的收成區段，不連續的只列節點），按「N 個 VF」或「N 個裝置」展開列出全部位址。表格窄時這欄改寫在 Mapping 那一格。
+    section: GPU 清單
+  - id: gpu.col_available_total
+    role: table
+    label: 可用 / 總數
+    help: 還能配出去的數量與實際可指派的上限。直通卡的上限等於裝置數；SR-IOV vGPU 取 VF 數與依顯存可切份數的較小者，兩者不同時另列 VF 數。有顯存資訊時也列出「VRAM 使用中 已用 / 總量」，已用量讀不到時寫「已用量未知」。表格窄時這欄改寫在狀態那一格。
+    section: 可用與使用中數量
+  - id: gpu.col_vm_in_use
+    role: table
+    label: 使用中 VM
+    help: 目前佔用這組 GPU 的機器，滑過顯示 VMID，圓點表示是否執行中；沒有機器使用時顯示「—」。表格窄時改寫在狀態那一格（沒有機器使用就不寫）。
+    section: 使用中的 VM
+  - id: gpu.col_status
+    role: table
+    label: 狀態
+    help: 可用、已用/總數 使用中、已滿載或未知。
+    section: 可用與使用中數量
+  - id: gpu.search
+    role: text
+    label: 搜尋節點、型號或 PCI 位址
+    help: 比對 mapping 名稱、描述、節點與 PCI 位址。
+    section: GPU 清單
+  - id: gpu.status_available
+    role: readonly
+    label: 可用
+    help: 目前沒有任何機器使用這組 GPU。
+    section: 可用與使用中數量
+  - id: gpu.status_full
+    role: readonly
+    label: 已滿載
+    help: 使用量已達總數，新的機器配不到這組 GPU。
+    section: 可用與使用中數量
+  - id: gpu.remove_mapping
+    role: button
+    label: 移除映射
+    help: 每列的刪除鈕，滑過顯示「移除映射」。先跳出「刪除 GPU mapping」確認，按「刪除」後刪除 PVE 上的這組 PCI mapping；同一個 id 出現在多個 PVE 連線時會拒絕刪除。
+    section: GPU 清單
+related:
+  - path: /request-review
+    when: 有申請需要 GPU，要決定是否核准
+  - path: /resource-mgmt
+    when: 要處理佔用 GPU 的機器

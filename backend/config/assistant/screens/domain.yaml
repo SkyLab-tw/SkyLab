@@ -1,0 +1,157 @@
+# 網域管理（/domain）
+id: domain
+path: /domain
+title: 網域管理
+access: admin
+order: 390
+purpose: 設定 Cloudflare 供應商連線、檢視 Zone，並新增、調整或刪除 DNS record。使用者以網址發布服務時能選的網址結尾，就是這裡連上的 Cloudflare 帳號裡狀態為 active 的 Zone。
+when_to_use: 要接上 Cloudflare 管理網域，讓機器能用網址對外，或手動新增、修改 DNS 紀錄。
+sections:
+  - 供應商連線
+  - Zone
+  - DNS record
+features:
+  - 連線設定：還沒連線時按「連線設定」填 Account ID 與 API Token（「前往 Cloudflare 建立 Token」會開啟 Cloudflare 的 Token 頁面），再設定預設 DNS Target；已連線後同一顆按鈕用來修改設定。
+  - 測試連線：按「測試連線」驗證已儲存的 API Token，不會修改任何 DNS 紀錄；成功後狀態旁顯示「上次驗證」時間。尚未連線時這顆按鈕不能按。
+  - 狀態列顯示「已連線」或「未設定」，以及 Account 與上次驗證時間。
+  - 「Cloudflare Dashboard」會在新分頁開啟 Cloudflare 主控台。
+  - Zone：連上後點選一個 Zone，查看它的 DNS 紀錄；清單只列前 50 個 Zone。
+  - DNS 紀錄：在搜尋框輸入紀錄名稱後按 Enter 查詢；每個 Zone 最多列出 100 筆。每筆顯示類型、內容、TTL（1 顯示為 Auto）、備註，標示「本系統 · VM N」（由本系統的對外網址功能建立）或「外部建立」，以及 Proxied 或 DNS only。
+  - 新增、編輯或刪除紀錄：按「新增紀錄」新增；每筆紀錄的「編輯」修改、「刪除」在確認「刪除 DNS 紀錄」後刪除，無法復原。
+  - 使用者要能用網址發布服務，需要已設定 API Token 與預設 DNS Target、至少有一個 active 的 Zone，而且閘道已就緒；本系統建立的 DNS 紀錄會指向預設 DNS Target。
+elements:
+  - id: domain.test_connection
+    role: button
+    label: 測試連線
+    help: 驗證已儲存的 Cloudflare API Token，成功後更新「上次驗證」時間；尚未連線時不能按。
+    section: 供應商連線
+  - id: domain.connection_settings
+    role: button
+    label: 連線設定
+    help: 開啟「Cloudflare 連線設定」視窗。
+    section: 供應商連線
+  - id: domain.status_connected
+    role: readonly
+    label: 已連線
+    help: 已設定 API Token。旁邊顯示 Account 與上次驗證時間。
+    section: 供應商連線
+  - id: domain.status_not_set
+    role: readonly
+    label: 未設定
+    help: 還沒設定 API Token，Zone 與 DNS 紀錄都無法顯示。
+    section: 供應商連線
+  - id: domain.api_token
+    role: text
+    label: API Token
+    help: 在「Cloudflare 連線設定」視窗裡。Token 只寫入不回讀，已設定時留空代表不變更。
+    constraints:
+      - 第一次設定時必填
+      - 至少 20 個字元
+    section: 供應商連線
+    sensitive: true
+  - id: domain.zones
+    role: list
+    label: Zones
+    help: 這個 Cloudflare 帳號的 Zone 清單（只列前 50 個），每個顯示狀態；點選後列出它的 DNS 紀錄。
+    section: Zone
+  - id: domain.record_search
+    role: text
+    label: 搜尋紀錄名稱，Enter 查詢
+    help: 輸入紀錄名稱後按 Enter 才會查詢；沒選 Zone 時不能用。
+    section: DNS record
+  - id: domain.add_record
+    role: button
+    label: 新增紀錄
+    help: 在目前選取的 Zone 新增一筆 DNS 紀錄；沒選 Zone 時不能按。
+    section: DNS record
+  - id: domain.record_name
+    role: text
+    label: 名稱
+    help: 紀錄名稱，例：www 或 www.example.com。
+    constraints:
+      - 必填
+    section: DNS record
+  - id: domain.record_content
+    role: text
+    label: 內容
+    help: 紀錄內容，例：140.131.x.x。
+    constraints:
+      - 必填
+    section: DNS record
+  - id: domain.proxied
+    role: toggle
+    label: 經由 Cloudflare Proxy（橘色雲）
+    help: 清單上顯示為 Proxied；不勾選時顯示 DNS only。
+    section: DNS record
+  - id: domain.ttl
+    role: number
+    label: TTL
+    help: 設 1 代表 Auto。
+    constraints:
+      - 1 到 86400
+    section: DNS record
+  - id: domain.managed_by_system
+    role: readonly
+    label: 本系統
+    help: 標示「本系統 · VM N」的紀錄由本系統的對外網址功能建立（N 是 VM 編號）。
+    section: DNS record
+  - id: domain.external_record
+    role: readonly
+    label: 外部建立
+    help: 不是本系統建立的紀錄（在 Cloudflare 或其他地方手動加的）。
+    section: DNS record
+  - id: domain.edit_record
+    role: button
+    label: 編輯
+    help: 修改這筆 DNS 紀錄，開啟的視窗標題是「編輯 DNS Record」。
+    section: DNS record
+  - id: domain.delete_record
+    role: button
+    label: 刪除
+    help: 確認「刪除 DNS 紀錄」後刪除這筆紀錄，此操作無法復原。
+    section: DNS record
+dialogs:
+  - id: config
+    title: Cloudflare 連線設定
+    opened_by: 連線設定
+    purpose: 讓平台可以管理 Cloudflare 上的 DNS。
+    fields:
+      - label: Account ID
+        help: Cloudflare 帳號的 Account ID；帳戶層級的 Token 要填它才驗證得過。
+      - label: API Token
+        help: 第一次設定時必填，至少 20 個字元；已設定時留空表示不變更。「前往 Cloudflare 建立 Token」會開啟 Cloudflare 的 Token 頁面。
+        required: true
+      - label: 預設 DNS Target 類型
+        help: 未設定、A（IP 位址）或 CNAME（主機名）。要讓使用者用網址發布服務就必須設定。
+      - label: 預設 DNS Target 值
+        help: 本系統建立的 DNS 紀錄所指向的 IP 或主機名稱，例：140.131.x.x 或 gw.example.com。
+    notes:
+      - 儲存後會重新載入 Zone 與 DNS 紀錄（換了 Token 可能是另一個帳號）。
+  - id: record
+    title: 新增 DNS Record
+    opened_by: 新增紀錄
+    purpose: 在選取的 Zone 新增一筆 DNS 紀錄，或（從紀錄的「編輯」開啟時）修改既有紀錄。
+    fields:
+      - label: 類型
+        help: A、AAAA、CNAME、TXT、MX、NS。
+        required: true
+      - label: TTL
+        help: 設 1 代表 Auto。
+      - label: 名稱
+        help: 例：www 或 www.example.com。
+        required: true
+      - label: 內容
+        help: 例：140.131.x.x。
+        required: true
+      - label: 優先順序
+        help: 類型選 MX 時才出現而且必填，0 到 65535，預設 10。
+      - label: 備註
+        help: 選填。
+      - label: 經由 Cloudflare Proxy（橘色雲）
+    notes:
+      - 從紀錄的「編輯」開啟時，視窗標題是「編輯 DNS Record」；把備註清空再儲存會清除原本的備註。
+related:
+  - path: /gateway
+    when: 要設定 HTTPS 憑證或平台入口
+  - path: /firewall
+    when: 要用網址發布某台機器的服務

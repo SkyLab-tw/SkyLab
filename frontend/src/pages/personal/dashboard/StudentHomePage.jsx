@@ -40,7 +40,7 @@ function normalizeSchedule(row, t) {
 
 const EMPTY = [];
 
-/* 學生首頁：課表、我的機器與快速練習範本；課程詳情在 StudentCoursePage（/courses/:pathId）。 */
+/* 學生首頁：課表、我的機器與快速練習範本；課程詳情在 StudentCoursePage（/courses/:classId）。 */
 export default function StudentHomePage() {
   const { t } = useTranslation("personal");
   const { user } = useAuth();
@@ -59,7 +59,7 @@ export default function StudentHomePage() {
 
   const resources = Array.isArray(resourcesQuery.data?.resources) ? resourcesQuery.data.resources : EMPTY;
   /* 課表在 render 時才格式化：語系切換不必重抓資料，畫面也會換成新語系 */
-  const paths = Array.isArray(scheduleQuery.data)
+  const courses = Array.isArray(scheduleQuery.data)
     ? scheduleQuery.data.map((row) => normalizeSchedule(row, t))
     : EMPTY;
   const quickTemplates = Array.isArray(templatesQuery.data) ? templatesQuery.data : EMPTY;
@@ -154,7 +154,7 @@ export default function StudentHomePage() {
 
   return (
     <div className={styles.page}>
-      <HomeOverview paths={paths} resources={resources}
+      <HomeOverview courses={courses} resources={resources}
         resourcesError={resourcesError} coursesError={coursesError}
         templates={quickTemplates} templatesLoading={templatesLoading} templatesError={templatesError}
         openingMachineId={openingMachineId} onOpenMachine={openPracticeMachine} todayLabel={todayLabel}

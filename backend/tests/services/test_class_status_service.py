@@ -65,7 +65,11 @@ def _job(status, *, done=2, total=2, failed=0):
 
 def _session(jobs, *, status=TeachingClassStatus.provisioning, reservation=None):
     item = SimpleNamespace(
-        id=uuid.uuid4(), status=status, updated_at=None, name="Linux 實務"
+        id=uuid.uuid4(),
+        status=status,
+        updated_at=None,
+        name="Linux 實務",
+        first_active_at=None,
     )
     nodes = [SimpleNamespace(batch_job_id=job.id) for job in jobs]
     return _FakeSession(
@@ -79,11 +83,6 @@ def _no_side_effects(monkeypatch):
         class_status_service.class_network_service,
         "apply_class_topology",
         lambda _session, class_id: [],
-    )
-    monkeypatch.setattr(
-        class_status_service.course_service,
-        "ensure_class_path",
-        lambda _session, **_kwargs: None,
     )
 
 

@@ -668,6 +668,34 @@ def get(
     return _to_public(db_request)
 
 
+def _infeasible_review_explanation(
+    *,
+    blocked_request_id: uuid.UUID | None,
+    overlapping_requests: list[VMRequest],
+) -> tuple[str, list[str]]:
+    """給審核者看的「為什麼不能核准」：摘要一句，加上原因。
+
+    重排預留是照開始時間一張一張排的。排不進去的可能是正在審的這張，也可能是
+    時段重疊、先前已核准的另一張；後者要指名是哪一張，審核者才知道該處理誰。
+    """
+    blocker = next(
+        (item for item in overlapping_requests if item.id == blocked_request_id),
+        None,
+    )
+    if blocker is not None:
+        return (
+            t("vm_request.review_blocked_summary", hostname=blocker.hostname),
+            [t("vm_request.review_blocked_reason", hostname=blocker.hostname)],
+        )
+    return (
+        t("vm_request.review_infeasible_summary"),
+        [
+            t("vm_request.review_infeasible_checked"),
+            t("vm_request.review_infeasible_next"),
+        ],
+    )
+
+
 def get_review_context(
     *,
     session: Session,
@@ -708,12 +736,27 @@ def get_review_context(
     projection_request.placement_strategy_used = None
     projection_request.reviewed_at = projection_request.reviewed_at or _utc_now()
     projected_requests = overlapping_requests + [projection_request]
-    selections = vm_request_placement_service.rebuild_reserved_assignments(
-        session=session,
-        requests=projected_requests,
-    )
+    # 排不進去的那張申請；None 表示重排成功
+    blocked_request_id: uuid.UUID | None = None
+    try:
+        selections = vm_request_placement_service.rebuild_reserved_assignments(
+            session=session,
+            requests=projected_requests,
+        )
+    except vm_request_placement_service.NoFeasibleReservationError as exc:
+        # 放不下是評估的結果，不是錯誤：照樣回審核脈絡（feasible=False 與原因），
+        # 審核者才知道「核准」為什麼不能按。沒接的話整支端點是 500。
+        logger.info(
+            "Review context for %s: no feasible reservation for %s",
+            db_request.id,
+            exc.request_id,
+        )
+        selections = {}
+        blocked_request_id = exc.request_id
     request_selection = selections.get(projection_request.id)
-    if not request_selection or not request_selection.node:
+    if blocked_request_id is None and (
+        not request_selection or not request_selection.node
+    ):
         raise BadRequestError(t("vm_request.no_projected_node"))
 
     now = _utc_now()
@@ -814,43 +857,59 @@ def get_review_context(
     ]
 
     node_score_breakdowns: list[VMRequestReviewNodeScore] = []
-    try:
-        breakdowns = vm_request_placement_service.get_preview_node_scores(
-            session=session,
-            db_request=projection_request,
-            reserved_requests=overlapping_requests,
-            # 直接沿用核准路徑（rebuild_reserved_assignments）算出的落點，
-            # 讓畫面標示的選定節點與按下核准後的結果必然一致。
-            selected_node=request_selection.node,
-        )
-        node_score_breakdowns = [
-            VMRequestReviewNodeScore(
-                node=b.node,
-                balance_score=b.balance_score,
-                cpu_share=b.cpu_share,
-                memory_share=b.memory_share,
-                disk_share=b.disk_share,
-                peak_penalty=b.peak_penalty,
-                loadavg_penalty=b.loadavg_penalty,
-                storage_penalty=b.storage_penalty,
-                reassignment_cost=b.reassignment_cost,
-                priority=b.priority,
-                is_selected=b.is_selected,
-                reason=b.reason,
+    # 排不進任何節點時沒有選定節點，也就沒有各節點的評分可比
+    if request_selection is not None:
+        try:
+            breakdowns = vm_request_placement_service.get_preview_node_scores(
+                session=session,
+                db_request=projection_request,
+                reserved_requests=overlapping_requests,
+                # 直接沿用核准路徑（rebuild_reserved_assignments）算出的落點，
+                # 讓畫面標示的選定節點與按下核准後的結果必然一致。
+                selected_node=request_selection.node,
             )
-            for b in breakdowns
-        ]
-    except Exception:
-        logger.debug("Could not compute node score breakdown for review context", exc_info=True)
+            node_score_breakdowns = [
+                VMRequestReviewNodeScore(
+                    node=b.node,
+                    balance_score=b.balance_score,
+                    cpu_share=b.cpu_share,
+                    memory_share=b.memory_share,
+                    disk_share=b.disk_share,
+                    peak_penalty=b.peak_penalty,
+                    loadavg_penalty=b.loadavg_penalty,
+                    storage_penalty=b.storage_penalty,
+                    reassignment_cost=b.reassignment_cost,
+                    priority=b.priority,
+                    is_selected=b.is_selected,
+                    reason=b.reason,
+                )
+                for b in breakdowns
+            ]
+        except Exception:
+            logger.debug(
+                "Could not compute node score breakdown for review context",
+                exc_info=True,
+            )
+
+    plan = request_selection.plan if request_selection is not None else None
+    feasible = bool(plan is not None and plan.feasible)
+    plan_warnings = list(plan.warnings or []) if plan is not None else []
+    if feasible and plan is not None:
+        summary = plan.summary
+        reasons = list(plan.rationale or [])
+    else:
+        # 不能核准時的說明是給審核者看的，一律走 i18n；placement advisor 的
+        # summary／rationale 是英文診斷字串，只留在 warnings 與日誌。
+        summary, reasons = _infeasible_review_explanation(
+            blocked_request_id=blocked_request_id,
+            overlapping_requests=overlapping_requests,
+        )
 
     # --- gather resource warnings ---
     resource_warnings: list[str] = []
-    if not request_selection.plan.feasible:
-        resource_warnings.append(
-            "投影的資源容量不足以在請求的時段內部署。"
-        )
-    if request_selection.plan.warnings:
-        resource_warnings.extend(request_selection.plan.warnings)
+    if not feasible:
+        resource_warnings.append(summary)
+    resource_warnings.extend(plan_warnings)
     if db_request.resource_warning is not None:
         resource_warnings.append(db_request.resource_warning)
 
@@ -859,12 +918,16 @@ def get_review_context(
         window_start=start_at,
         window_end=effective_end_at,
         window_active_now=start_at <= now < effective_end_at,
-        feasible=bool(request_selection.plan.feasible),
-        placement_strategy=request_selection.strategy,
-        projected_node=request_selection.node,
-        summary=request_selection.plan.summary,
-        reasons=list(request_selection.plan.rationale or []),
-        warnings=list(request_selection.plan.warnings or []),
+        feasible=feasible,
+        placement_strategy=(
+            request_selection.strategy if request_selection is not None else None
+        ),
+        projected_node=(
+            request_selection.node if request_selection is not None else None
+        ),
+        summary=summary,
+        reasons=reasons,
+        warnings=plan_warnings,
         resource_warnings=resource_warnings,
         cluster_nodes=sorted(
             {

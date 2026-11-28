@@ -781,7 +781,8 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
   useEffect(() => {
     if (!pendingGpu) return;
     if (resourceType !== "vm") { setPendingGpu(null); return; }
-    if (!selectedOsNeedsGpu) {
+    /* 與 GPU 區塊的顯示條件同一個：名稱標 -GPU，或範本政策要求 GPU */
+    if (!gpuNeeded) {
       setPendingGpu(null);
       toast.error(t("RequestFormPage.aiGpuOsMismatch"));
       return;
@@ -798,7 +799,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
     }
     setPendingGpu(null);
   }, [
-    pendingGpu, resourceType, selectedOsNeedsGpu, mode, gpuWindowReady,
+    pendingGpu, resourceType, gpuNeeded, mode, gpuWindowReady,
     gpuLoading, gpuOptions, gpuOptionsKey, gpuOptionsRequestKey, toast,
   ]);
 
@@ -859,7 +860,8 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
           ? usernameViolationText(usernameViolations.find((v) => v.severity === "error"))
           : null),
     },
-    "request.password": { value: form.password, error: errors.password ?? null },
+    /* 密碼本身不離開瀏覽器：助手只需要知道有沒有填、有沒有驗證錯誤 */
+    "request.password": { value: form.password ? "filled" : "", error: errors.password ?? null },
     "request.cores": { value: String(form.cores ?? "") },
     "request.memory": { value: String(form.memory ?? "") },
     "request.disk": {
@@ -1468,9 +1470,6 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                   <p className={styles.fieldHint}>{t("RequestFormPage.templateRequiresGpuHint")}</p>
                 )}
 
-                {!canLoadGpu && mode === "scheduled" && (
-                  <p className={styles.fieldHint}>{t("RequestFormPage.selectScheduleFirstHint")}</p>
-                )}
                 {gpuLoading && (
                   <p className={`${styles.fieldHint} ${styles.fieldHintLoading}`} role="status">
                     <MIcon name="autorenew" size={14} spin />
@@ -1499,7 +1498,6 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                       if (errors.gpu_mapping_id) setErrors((prev) => ({ ...prev, gpu_mapping_id: "" }));
                     }}
                     disabled={gpuLoading || gpuOptions.length === 0}
-                    placeholder={!canLoadGpu ? t("RequestFormPage.selectScheduleFirstPlaceholder") : undefined}
                   >
                     <option value="__none__">{t("RequestFormPage.selectGpuPlaceholder")}</option>
                     {gpuOptions.map((gpu) => (

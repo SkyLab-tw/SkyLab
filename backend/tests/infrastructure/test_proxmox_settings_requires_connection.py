@@ -40,13 +40,11 @@ def test_settings_come_from_connection_row(monkeypatch: pytest.MonkeyPatch) -> N
         user="root@pam",
         verify_ssl=True,
         iso_storage="iso",
-        data_storage="ssd",
         api_timeout=15,
         task_check_interval=3,
         pool_name="Lab",
         ca_cert=None,
         gateway_ip="10.0.0.254",
-        local_subnet="10.0.0.0/24",
         default_node="pve1",
         backup_storage="pbs-main",
     )
@@ -56,6 +54,6 @@ def test_settings_come_from_connection_row(monkeypatch: pytest.MonkeyPatch) -> N
     result = proxmox_settings.get_proxmox_settings(3)
 
     assert (result.host, result.port, result.password) == ("10.0.0.3", 443, "pw")
-    assert (result.pool_name, result.data_storage) == ("Lab", "ssd")
+    assert (result.pool_name, result.iso_storage) == ("Lab", "iso")
     assert result.backup_storage == "pbs-main"
     assert (result.connection_id, result.connection_name) == (3, "lab")

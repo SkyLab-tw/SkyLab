@@ -17,7 +17,7 @@
   "template.attachmentLimitReached": "The maximum number of attachments ({limit}) has been reached",
   "template.updateCycleInProgress": "Template is in an update cycle; finish or cancel it first",
   "template.hasClonedVms": "Template still has cloned VMs: {vmids}. Delete them first.",
-  "template.referencedByEnvironments": "Multi-machine environments \"{shown}\"{more} still reference this parent template. Please switch those environments to another source or take them offline before deleting it.",
+  "template.referencedByEnvironments": "Multi-machine environments \"{shown}\"{more} still reference this parent template. Please switch those environments to another source or delete them before deleting it.",
   "template.referencedByEnvironmentsMore": " ({count} total)",
   "template.hasOpenRequests": "{count} request(s) still point at this template and have not been provisioned yet. Approve or reject them before deleting it.",
   "template.referencedByBatchJobs": "{count} batch provisioning job(s) still use this template and have not finished. Cancel them or wait until they finish before deleting it.",

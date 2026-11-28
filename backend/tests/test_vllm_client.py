@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 
@@ -637,3 +638,420 @@ async def test_context_retry_tokenizes_with_the_same_effective_thinking(model):
     }
     assert retry == {**first, "max_tokens": 3968}
     assert payload == original
+
+
+# ── 單次請求指定的 thinking 等級（助手）與檢查用的 thinking ───────────────────
+
+
+def _agent_payload(model: str) -> dict:
+    return {
+        "model": model,
+        "messages": [{"role": "user", "content": "hello"}],
+        "max_tokens": 4096,
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "show_pages",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+        "tool_choice": "auto",
+        "stream": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("gpt-oss-120B", {"reasoning_effort": "medium"}),
+        (
+            "Qwen/Qwen3.8-27B",
+            {
+                "chat_template_kwargs": {
+                    "enable_thinking": True,
+                    "reasoning_effort": "medium",
+                }
+            },
+        ),
+        # 閘道模型全模型預設是關的，功能要求 medium 時用頂層 reasoning_effort 送
+        ("BIRC-LLM", {"reasoning_effort": "medium"}),
+        # 只有開關的模型沒有強度，medium 就是「開」
+        ("gemma4-26b-a4b-it", {"chat_template_kwargs": {"enable_thinking": True}}),
+    ],
+)
+async def test_explicit_thinking_level_reaches_the_wire(model: str, expected: dict):
+    seen = []
+
+    def respond(request):
+        seen.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    client = VLLMClient("http://offline/v1", "")
+    client._http_client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    payload = _agent_payload(model)
+    original = copy.deepcopy(payload)
+
+    await client.create_chat_completion(
+        payload, profile=VLLMRequestProfile.COMPLEX_AGENT, thinking="medium"
+    )
+
+    wire = json.loads(seen[0].content)
+    for key in ("reasoning_effort", "chat_template_kwargs"):
+        assert wire.get(key) == expected.get(key)
+    assert wire["tools"] == original["tools"]
+    assert wire["tool_choice"] == "auto"
+    assert payload == original
+
+
+async def test_without_an_explicit_level_the_model_default_still_applies():
+    seen = []
+
+    def respond(request):
+        seen.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    client = VLLMClient("http://offline/v1", "")
+    client._http_client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    await client.create_chat_completion(
+        _agent_payload("BIRC-LLM"), profile=VLLMRequestProfile.COMPLEX_AGENT
+    )
+    wire = json.loads(seen[0].content)
+    # BIRC-LLM 的全模型預設是關閉推理，用頂層 reasoning_effort="none" 送
+    assert wire["reasoning_effort"] == "none"
+    assert "chat_template_kwargs" not in wire
+
+
+async def test_invalid_thinking_level_is_rejected_before_transport():
+    client = VLLMClient("http://offline/v1", "")
+    client._http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail("request must not be sent")
+        )
+    )
+    with pytest.raises(VLLMProfileError, match="Invalid thinking level"):
+        await client.create_chat_completion(
+            _agent_payload("BIRC-LLM"),
+            profile=VLLMRequestProfile.COMPLEX_AGENT,
+            thinking="xhigh",  # type: ignore[arg-type]
+        )
+    with pytest.raises(VLLMProfileError, match="cannot disable reasoning"):
+        await client.create_chat_completion(
+            _agent_payload("gpt-oss-120B"),
+            profile=VLLMRequestProfile.COMPLEX_AGENT,
+            thinking="none",
+        )
+
+
+async def test_real_checker_turns_thinking_off_where_the_profile_says_so():
+    """BIRC-LLM 的推理在 128 token 內寫不完檢查結果；設定檔指定檢查關掉推理。"""
+    from app.ai.adherence_check import check_adherence
+    from app.ai.role_contracts import OutputMode, RoleContract, adherence_result_schema
+
+    seen = []
+
+    def respond(request):
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "content": '{"verdict":"allow","reason_code":"none"}'
+                        },
+                    }
+                ]
+            },
+        )
+
+    client = VLLMClient("http://offline/v1", "", default_timeout=99.0)
+    client._http_client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    result = await check_adherence(
+        client,
+        RoleContract("assistant", OutputMode.MODEL_FREE_TEXT, "v1", "fallback"),
+        "hello",
+        "hello",
+        {},
+        "gateway-checker",
+        model_name="BIRC-LLM",
+        phase="respond",
+        system_prompt="只擋三種情況。",
+        document={"user_request": "hello", "candidate": "hello", "tools_used": []},
+    )
+
+    assert result.allowed
+    assert len(seen) == 1
+    wire = json.loads(seen[0].content)
+    assert wire["model"] == "BIRC-LLM"
+    assert wire["max_tokens"] == 128
+    assert wire["reasoning_effort"] == "none"
+    assert "chat_template_kwargs" not in wire
+    assert wire["messages"][0] == {"role": "system", "content": "只擋三種情況。"}
+    assert json.loads(wire["messages"][1]["content"]) == {
+        "user_request": "hello",
+        "candidate": "hello",
+        "tools_used": [],
+    }
+    assert wire["response_format"]["json_schema"]["schema"] == adherence_result_schema()
+
+
+# ------------------------------------------------------------ 串流
+
+
+def _sse(*chunks: dict | str) -> bytes:
+    """把幾個 chunk 排成 OpenAI 相容的 SSE 內容；字串原樣當成一行。"""
+    lines = [
+        chunk if isinstance(chunk, str) else f"data: {json.dumps(chunk)}"
+        for chunk in chunks
+    ]
+    return ("\n\n".join(lines) + "\n\n").encode()
+
+
+def _delta(delta: dict, *, finish: str | None = None, **extra: object) -> dict:
+    return {
+        "model": "served-model",
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        **extra,
+    }
+
+
+def _stream_client(respond) -> VLLMClient:
+    client = VLLMClient("http://vllm/v1", "secret")
+    client._http_client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    return client
+
+
+async def _collect(client: VLLMClient, payload: dict, **kwargs) -> tuple[dict, list]:
+    pieces: list[str] = []
+
+    async def on_content(piece: str) -> None:
+        pieces.append(piece)
+
+    result = await client.stream_chat_completion(
+        payload,
+        profile=kwargs.pop("profile", VLLMRequestProfile.CONFIGURED_TEXT),
+        on_content=on_content,
+        **kwargs,
+    )
+    return result, pieces
+
+
+async def test_stream_hands_over_text_piece_by_piece_and_returns_the_whole_reply() -> (
+    None
+):
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=_sse(
+                ": keep-alive",
+                _delta({"role": "assistant", "content": ""}),
+                _delta({"reasoning_content": "想一下"}),
+                _delta({"content": "你"}),
+                _delta({"content": "好"}),
+                _delta({}, finish="stop"),
+                {
+                    "model": "served-model",
+                    "choices": [],
+                    "usage": {"prompt_tokens": 9, "completion_tokens": 2},
+                },
+                "data: [DONE]",
+            ),
+        )
+
+    payload = _text_payload()
+    original = copy.deepcopy(payload)
+    result, pieces = await _collect(
+        _stream_client(respond), payload, request_id="stream-1"
+    )
+
+    assert pieces == ["你", "好"], "推理內容不交出去"
+    assert result == {
+        "model": "served-model",
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": "你好"},
+            }
+        ],
+        "usage": {"prompt_tokens": 9, "completion_tokens": 2},
+    }
+    (request,) = requests
+    assert request.url.path == "/v1/chat/completions"
+    assert request.headers["X-Request-ID"] == "stream-1"
+    assert request.headers["Authorization"] == "Bearer secret"
+    assert json.loads(request.content) == {
+        **original,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    assert payload == original
+
+
+async def test_stream_puts_tool_calls_back_together() -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_sse(
+                _delta({"content": "到防火牆設定。"}),
+                _delta(
+                    {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call-a",
+                                "type": "function",
+                                "function": {"name": "show_pages", "arguments": ""},
+                            }
+                        ]
+                    }
+                ),
+                _delta(
+                    {"tool_calls": [{"index": 0, "function": {"arguments": '{"page'}}]}
+                ),
+                _delta(
+                    {
+                        "tool_calls": [
+                            {"index": 0, "function": {"arguments": '_ids": ["fw"]}'}},
+                            {
+                                "index": 1,
+                                "id": "call-b",
+                                "function": {"name": "point_at", "arguments": "{}"},
+                            },
+                        ]
+                    }
+                ),
+                _delta({}, finish="tool_calls"),
+                "data: [DONE]",
+            ),
+        )
+
+    payload = {
+        **_text_payload(max_tokens=4096),
+        "tools": [{"type": "function", "function": {"name": "show_pages"}}],
+        "tool_choice": "auto",
+    }
+    result, pieces = await _collect(
+        _stream_client(respond), payload, profile=VLLMRequestProfile.COMPLEX_AGENT
+    )
+
+    assert pieces == ["到防火牆設定。"]
+    message = result["choices"][0]["message"]
+    assert result["choices"][0]["finish_reason"] == "tool_calls"
+    assert message["content"] == "到防火牆設定。"
+    assert message["tool_calls"] == [
+        {
+            "id": "call-a",
+            "type": "function",
+            "function": {"name": "show_pages", "arguments": '{"page_ids": ["fw"]}'},
+        },
+        {
+            "id": "call-b",
+            "type": "function",
+            "function": {"name": "point_at", "arguments": "{}"},
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("chunks", "message"),
+    [
+        # 連線斷在一半：沒有 finish_reason 就不算寫完
+        ([_delta({"content": "寫到一"})], "ended before the response was complete"),
+        ([_delta({"content": "太長"}, finish="length")], "truncated"),
+        ([{"error": {"message": "upstream exploded"}}], "reported an error"),
+        (["data: {not json"], "not JSON"),
+        ([_delta({"content": "   "}, finish="stop")], "non-empty assistant content"),
+        (
+            [
+                {
+                    "choices": [
+                        {"index": 1, "delta": {"content": "x"}, "finish_reason": None}
+                    ]
+                }
+            ],
+            "exactly one response choice",
+        ),
+    ],
+)
+async def test_an_incomplete_or_broken_stream_is_an_error(
+    chunks: list, message: str
+) -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=_sse(*chunks))
+
+    with pytest.raises(VLLMProfileError, match=message):
+        await _collect(_stream_client(respond), _text_payload())
+
+
+async def test_stream_http_errors_are_raised_before_any_text() -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": {"message": "busy"}})
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await _collect(_stream_client(respond), _text_payload())
+
+
+async def test_stream_context_overflow_retries_with_output_room() -> None:
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/tokenize":
+            return httpx.Response(200, json={"count": 92000, "max_model_len": 96000})
+        if len(requests) == 1:
+            return httpx.Response(400, json=_context_error())
+        return httpx.Response(
+            200, content=_sse(_delta({"content": "ok"}, finish="stop"), "data: [DONE]")
+        )
+
+    payload = _text_payload(max_tokens=4096)
+    result, pieces = await _collect(
+        _stream_client(respond), payload, profile=VLLMRequestProfile.COMPLEX_AGENT
+    )
+
+    assert pieces == ["ok"]
+    assert result["choices"][0]["message"]["content"] == "ok"
+    assert [request.url.path for request in requests] == [
+        "/v1/chat/completions",
+        "/tokenize",
+        "/v1/chat/completions",
+    ]
+    assert json.loads(requests[2].content) == {
+        **payload,
+        "max_tokens": 3968,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+
+async def test_stream_timeout_covers_the_whole_response() -> None:
+    """httpx 的讀取逾時只管兩段資料之間；慢慢滴的串流也要有總時間上限。"""
+
+    class Dripping(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield _sse(_delta({"content": "慢"}))
+            await asyncio.sleep(5)
+            yield _sse(_delta({}, finish="stop"))
+
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=Dripping())
+
+    with pytest.raises(TimeoutError):
+        await _collect(_stream_client(respond), _text_payload(), timeout=0.05)
+
+
+async def test_stream_rejects_a_payload_that_asks_for_streaming_itself() -> None:
+    """串流參數由 client 自己加；呼叫端照非串流的寫法給，兩條路才是同一份請求。"""
+    with pytest.raises(VLLMProfileError, match="non-stream"):
+        await _collect(
+            _stream_client(lambda _request: httpx.Response(500)),
+            {**_text_payload(), "stream": True},
+        )

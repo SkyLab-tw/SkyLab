@@ -637,7 +637,7 @@ def resolve_target_storage(
     raise BadRequestError(
         "No enabled Proxmox storage is available on "
         f"node '{node}' for content '{required_content}'. "
-        f"Configured/requested storage: '{requested_storage or get_proxmox_settings_for_node(node).data_storage}'. "
+        f"Requested storage: {requested_storage!r}. "
         f"Node storages: {', '.join(available_names) if available_names else 'none'}."
     )
 

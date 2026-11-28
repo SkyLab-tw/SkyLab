@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
     UserRole,
@@ -522,6 +523,86 @@ def test_review_context_open_ended_infeasible_with_warnings(
     assert context.resource_warnings[1:] == ["cpu tight", "storage almost full"]
     assert [item.vmid for item in context.current_running_resources] == [901]
     assert context.window_end > _now() + timedelta(days=3000)
+    # placement advisor 的英文診斷字串不給審核者看：原因一律走 i18n
+    assert context.summary == t("vm_request.review_infeasible_summary")
+    assert context.reasons == [
+        t("vm_request.review_infeasible_checked"),
+        t("vm_request.review_infeasible_next"),
+    ]
+    assert context.resource_warnings[0] == context.summary
+
+
+def test_review_context_explains_why_the_request_cannot_be_placed(
+    db: Session, monkeypatch: pytest.MonkeyPatch, pve_listing: None
+) -> None:
+    """放不下不是錯誤：回 feasible=False 與原因，不能讓端點丟 500。"""
+    request = _vm_request(db)
+
+    def rebuild(**kwargs: Any) -> dict[uuid.UUID, Any]:
+        raise svc.vm_request_placement_service.NoFeasibleReservationError(
+            kwargs["requests"][-1].id
+        )
+
+    monkeypatch.setattr(
+        svc.vm_request_placement_service, "rebuild_reserved_assignments", rebuild
+    )
+
+    context = svc.get_review_context(
+        session=db, request_id=request.id, current_user=ADMIN
+    )
+
+    assert context.feasible is False
+    assert context.projected_node is None
+    assert context.placement_strategy is None
+    assert context.node_scores == []
+    assert context.summary == t("vm_request.review_infeasible_summary")
+    assert context.reasons == [
+        t("vm_request.review_infeasible_checked"),
+        t("vm_request.review_infeasible_next"),
+    ]
+    assert context.resource_warnings == [context.summary]
+    assert [item.vmid for item in context.current_running_resources] == [901]
+    assert [item.request_id for item in context.overlapping_approved_requests] == [
+        request.id
+    ]
+    assert context.projected_nodes == []
+
+
+def test_review_context_names_the_approved_request_that_blocks_placement(
+    db: Session, monkeypatch: pytest.MonkeyPatch, pve_listing: None
+) -> None:
+    """排不進去的是另一張已核准的申請時，要說出是哪一張，不能賴給正在審的這張。"""
+    start = _now() + timedelta(hours=1)
+    end = start + timedelta(hours=2)
+    blocker = _vm_request(
+        db,
+        status=VMRequestStatus.approved,
+        start_at=start,
+        end_at=end,
+        hostname="blocker-host",
+        desired_node="pve-a",
+    )
+    request = _vm_request(db, start_at=start, end_at=end)
+
+    def rebuild(**_kwargs: Any) -> dict[uuid.UUID, Any]:
+        raise svc.vm_request_placement_service.NoFeasibleReservationError(blocker.id)
+
+    monkeypatch.setattr(
+        svc.vm_request_placement_service, "rebuild_reserved_assignments", rebuild
+    )
+
+    context = svc.get_review_context(
+        session=db, request_id=request.id, current_user=ADMIN
+    )
+
+    assert context.feasible is False
+    assert context.summary == t(
+        "vm_request.review_blocked_summary", hostname="blocker-host"
+    )
+    assert context.reasons == [
+        t("vm_request.review_blocked_reason", hostname="blocker-host")
+    ]
+    assert "blocker-host" in context.summary
 
 
 # ---------------------------------------------------------------------------

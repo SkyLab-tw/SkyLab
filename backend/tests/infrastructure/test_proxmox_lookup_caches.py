@@ -46,7 +46,6 @@ def _settings_stub() -> Any:
         password="p",
         verify_ssl=False,
         iso_storage="local",
-        data_storage="local-lvm",
         api_timeout=30,
         task_check_interval=2,
         pool_name="SkyLab",

@@ -46,7 +46,6 @@ vi.mock("../../services/jobs", () => ({
 }));
 vi.mock("../../services/courses", () => ({
   CoursesService: { listReminders: mocks.listReminders },
-  CourseAdminService: {},
 }));
 vi.mock("./JobDetailDialog", () => ({ default: () => null }));
 

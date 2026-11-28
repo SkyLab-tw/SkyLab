@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { wsBaseUrl } from "./wsUrl";
 import { wsBaseUrl as legacyWsBaseUrl } from "../hooks/useClassroomSocket";
-import { courseProgressWsUrl } from "../services/courses";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -27,14 +26,5 @@ describe("wsBaseUrl", () => {
 
   test("舊的 hooks/useClassroomSocket 匯入路徑仍指向同一個函式", () => {
     expect(legacyWsBaseUrl).toBe(wsBaseUrl);
-  });
-});
-
-describe("courseProgressWsUrl", () => {
-  test("沿用 wsBaseUrl 並把 token 編碼進 query", () => {
-    vi.stubEnv("VITE_API_URL", "https://skylab.example.edu");
-    expect(courseProgressWsUrl("p1", "a b+c")).toBe(
-      "wss://skylab.example.edu/ws/courses/paths/p1/progress?token=a%20b%2Bc",
-    );
   });
 });

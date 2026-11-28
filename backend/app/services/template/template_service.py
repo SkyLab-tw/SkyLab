@@ -79,6 +79,7 @@ TASK_UPDATE_CANCEL = "template.update_cancel"
 # 查詢
 # ---------------------------------------------------------------------------
 
+
 def _to_public(
     template: VMTemplate,
     *,
@@ -90,9 +91,7 @@ def _to_public(
         public.pve_exists = template.pve_vmid in pve_raw
         # 建範本時「自訂規格」是選填，未填的欄位以 PVE 母機實際規格回填，
         # 讓前端規格控制項一律有範本基準可錨定（沒有基準就只能寫死假值）。
-        raw_cores, raw_memory, raw_disk = _spec_from_raw(
-            pve_raw.get(template.pve_vmid)
-        )
+        raw_cores, raw_memory, raw_disk = _spec_from_raw(pve_raw.get(template.pve_vmid))
         if public.default_cores is None:
             public.default_cores = raw_cores
         if public.default_memory is None:
@@ -178,9 +177,7 @@ def resolve_effective_spec(
     )
     return (
         template.default_cores if template.default_cores is not None else raw_cores,
-        template.default_memory
-        if template.default_memory is not None
-        else raw_memory,
+        template.default_memory if template.default_memory is not None else raw_memory,
         template.default_disk if template.default_disk is not None else raw_disk,
     )
 
@@ -223,9 +220,7 @@ def list_student_catalog(*, session: Session) -> list[TemplateCatalogItem]:
     if not templates:
         return []
     # VM 與 LXC 範本都要對帳，所以讀 pool 內的原始紀錄（VM 專用清單已排除 LXC）
-    raw_by_vmid = {
-        int(item["vmid"]): item for item in proxmox_ops.get_vm_templates()
-    }
+    raw_by_vmid = {int(item["vmid"]): item for item in proxmox_ops.get_vm_templates()}
     catalog: list[TemplateCatalogItem] = []
     for template in templates:
         raw = raw_by_vmid.get(template.pve_vmid)
@@ -263,11 +258,21 @@ def get_template_for_user(
     require_view(session, user, template)
     _reconcile_failed_template_tasks(session, [template])
     counts = _attachment_counts(session, [template.id])
-    return _to_public(
+    public = _to_public(
         template,
         pve_raw=_pve_template_raw(),
         attachment_count=counts.get(template.id, 0),
     )
+    # 克隆視窗要在送出前就對照 Windows 的密碼規則。只有 VM 有 ostype，而且讀它要打
+    # PVE，所以只在查單一範本時填。這裡只是給畫面的提示：查不到當成不是 Windows，
+    # 真正把關的是克隆時的 template_is_windows（查不到就讓克隆失敗）。
+    if template.resource_type.lower() == "lxc":
+        public.is_windows = False
+    else:
+        from app.services.proxmox.provisioning_service import is_windows_template
+
+        public.is_windows = is_windows_template(template.pve_vmid)
+    return public
 
 
 def _reconcile_failed_template_tasks(
@@ -306,9 +311,7 @@ def _reconcile_failed_template_tasks(
 
 
 def get_or_404(session: Session, template_id: uuid.UUID) -> VMTemplate:
-    template = template_repo.get_template(
-        session=session, template_id=template_id
-    )
+    template = template_repo.get_template(session=session, template_id=template_id)
     if template is None or template.status == VMTemplateStatus.deleted:
         raise NotFoundError(t("template.notFound"))
     return template
@@ -344,6 +347,7 @@ def _require_owner(user: User, template: VMTemplate) -> None:
 # 建立（VM → 範本）
 # ---------------------------------------------------------------------------
 
+
 async def create_template(
     *, session: Session, user: User, data: VMTemplateCreate
 ) -> tuple[VMTemplatePublic, TaskRecord]:
@@ -356,9 +360,7 @@ async def create_template(
     return _to_public(template), record
 
 
-def _prepare_create(
-    session: Session, user: User, data: VMTemplateCreate
-) -> VMTemplate:
+def _prepare_create(session: Session, user: User, data: VMTemplateCreate) -> VMTemplate:
     """create_template 的同步部分：權限、來源 VM 校驗與建立範本紀錄。"""
     from app.core.authorizers import require_template_manage
 
@@ -370,16 +372,12 @@ def _prepare_create(
         session=session, pve_vmid=data.source_vmid
     )
     if existing is not None:
-        raise ConflictError(
-            t("template.vmidAlreadyRegistered", vmid=data.source_vmid)
-        )
+        raise ConflictError(t("template.vmidAlreadyRegistered", vmid=data.source_vmid))
 
     try:
         pve_resource = proxmox_ops.find_resource(data.source_vmid)
     except NotFoundError:
-        raise NotFoundError(
-            t("template.sourceVmNotFound", vmid=data.source_vmid)
-        )
+        raise NotFoundError(t("template.sourceVmNotFound", vmid=data.source_vmid))
     if pve_resource.get("template") == 1:
         raise BadRequestError(
             t("template.sourceAlreadyPveTemplate", vmid=data.source_vmid)
@@ -480,9 +478,7 @@ def _prepare_retry(
     try:
         pve_resource = proxmox_ops.find_resource(template.pve_vmid)
     except NotFoundError:
-        raise NotFoundError(
-            t("template.sourceVmGone", vmid=template.pve_vmid)
-        )
+        raise NotFoundError(t("template.sourceVmGone", vmid=template.pve_vmid))
     # 失敗的範本會保留 pve_vmid；母機若已被刪除，PVE 會把這個 VMID 發給
     # 下一台新機器。重試前必須跟 create_template 一樣確認這個 VMID 上的
     # 機器仍歸呼叫者，否則會把別人的機器轉成範本（連同刪掉對方的
@@ -530,9 +526,7 @@ def _prepare_retry(
         )
 
     template.node = str(pve_resource["node"])
-    template.resource_type = (
-        "lxc" if pve_resource.get("type") == "lxc" else "qemu"
-    )
+    template.resource_type = "lxc" if pve_resource.get("type") == "lxc" else "qemu"
     template.status = VMTemplateStatus.creating
     template.error_message = None
     template_repo.touch(session=session, template=template)
@@ -578,6 +572,7 @@ def update_template(
 # 附件（使用手冊）
 # ---------------------------------------------------------------------------
 
+
 def _template_attachments(
     session: Session, template_id: uuid.UUID
 ) -> list[TemplateAttachment]:
@@ -620,14 +615,10 @@ def get_manual_for_cloned_resource(
 def get_manual_attachment_for_cloned_resource(
     *, session: Session, vmid: int, attachment_id: uuid.UUID
 ) -> tuple[Path, TemplateAttachment]:
-    template, attachments = get_manual_for_cloned_resource(
-        session=session, vmid=vmid
-    )
+    template, attachments = get_manual_for_cloned_resource(session=session, vmid=vmid)
     if template is None:
         raise NotFoundError(t("template.manualNotFound"))
-    attachment = next(
-        (a for a in attachments if a.id == attachment_id), None
-    )
+    attachment = next((a for a in attachments if a.id == attachment_id), None)
     if attachment is None:
         raise NotFoundError(t("template.attachmentNotFound"))
     path = template_files.attachment_path(template.id, attachment.id)
@@ -656,9 +647,7 @@ def add_attachment(
         raise BadRequestError(t("template.filenameRequired"))
     ext = Path(safe_name).suffix.lower()
     if ext not in template_files.ATTACHMENT_ALLOWED_EXTENSIONS:
-        allowed = "、".join(
-            sorted(template_files.ATTACHMENT_ALLOWED_EXTENSIONS)
-        )
+        allowed = "、".join(sorted(template_files.ATTACHMENT_ALLOWED_EXTENSIONS))
         raise BadRequestError(
             t(
                 "template.attachmentTypeUnsupported",
@@ -668,9 +657,7 @@ def add_attachment(
         )
     if len(data) > template_files.ATTACHMENT_MAX_BYTES:
         raise BadRequestError(t("template.attachmentTooLarge"))
-    existing = list_attachments(
-        session=session, user=user, template_id=template_id
-    )
+    existing = list_attachments(session=session, user=user, template_id=template_id)
     if len(existing) >= template_files.ATTACHMENT_MAX_COUNT:
         raise BadRequestError(
             t(
@@ -731,6 +718,7 @@ def remove_attachment(
 # 刪除（先擋子機）
 # ---------------------------------------------------------------------------
 
+
 def _clone_children_vmids(session: Session, pve_vmid: int) -> list[int]:
     stmt = select(Resource.vmid).where(Resource.template_id == pve_vmid)
     return list(session.exec(stmt).all())
@@ -784,10 +772,10 @@ def _open_batch_job_count(session: Session, template_id: uuid.UUID) -> int:
 
 
 def _environments_referencing(session: Session, template_id: uuid.UUID) -> list[str]:
-    """引用這個母範本的教學環境名稱（含草稿與已下架版本）。
+    """引用這個母範本的教學環境名稱（不分版本狀態，草稿也算）。
 
     已發布的環境會在學生按下啟動時才用到來源範本，所以刪除前必須先盤點；
-    草稿與已下架版本一樣要算，否則教師之後建立新版本會拿到空的來源。
+    草稿一樣要算，否則教師之後發布時會拿到空的來源。
     """
     rows = session.exec(
         select(CourseEnvironment.name)
@@ -823,9 +811,7 @@ async def delete_template(
     )
 
 
-def _prepare_delete(
-    session: Session, user: User, template_id: uuid.UUID
-) -> VMTemplate:
+def _prepare_delete(session: Session, user: User, template_id: uuid.UUID) -> VMTemplate:
     """delete_template 的同步校驗：擁有者、更新中、仍被子機／申請／批量／環境引用。"""
     template = get_or_404(session, template_id)
     _require_owner(user, template)
@@ -843,15 +829,11 @@ def _prepare_delete(
 
     open_requests = _open_request_count(session, template.pve_vmid)
     if open_requests:
-        raise ConflictError(
-            t("template.hasOpenRequests", count=open_requests)
-        )
+        raise ConflictError(t("template.hasOpenRequests", count=open_requests))
 
     open_batch_jobs = _open_batch_job_count(session, template.id)
     if open_batch_jobs:
-        raise ConflictError(
-            t("template.referencedByBatchJobs", count=open_batch_jobs)
-        )
+        raise ConflictError(t("template.referencedByBatchJobs", count=open_batch_jobs))
 
     environments = _environments_referencing(session, template.id)
     if environments:
@@ -1075,7 +1057,9 @@ def _wait_until_stopped(
         except Exception as exc:
             logger.warning(
                 "Status poll failed for %s %s while waiting for stop: %s",
-                resource_type, vmid, exc,
+                resource_type,
+                vmid,
+                exc,
             )
         else:
             if status.get("status") == "stopped":
@@ -1163,9 +1147,7 @@ def _reset_cloud_init_state(
         if status.get("status") != "running":
             # 關機的母機先開機重設；轉換流程接著會把它關回去
             proxmox_ops.control(node, vmid, resource_type, "start")
-            if not _wait_for_guest_agent(
-                node, vmid, _BOOT_AGENT_TIMEOUT_SECONDS
-            ):
+            if not _wait_for_guest_agent(node, vmid, _BOOT_AGENT_TIMEOUT_SECONDS):
                 logger.warning(
                     "VM %d booted for cloud-init reset but guest agent "
                     "did not come up within %ds; skipping reset",
@@ -1320,9 +1302,7 @@ def _detect_template_disk_gb(
             return None
         return _parse_disk_size_gb(str(raw))
     except Exception as exc:
-        logger.warning(
-            "Failed to detect disk size for VM %d: %s", vmid, exc
-        )
+        logger.warning("Failed to detect disk size for VM %d: %s", vmid, exc)
         return None
 
 
@@ -1343,9 +1323,7 @@ def _strip_hostpci_for_convert(
         keys = [f"hostpci{i}" for i in range(16) if config.get(f"hostpci{i}")]
         if not keys:
             return
-        proxmox_ops.update_config(
-            node, vmid, resource_type, delete=",".join(keys)
-        )
+        proxmox_ops.update_config(node, vmid, resource_type, delete=",".join(keys))
         logger.info(
             "Stripped %s from VM %d before template convert",
             ",".join(keys),
@@ -1393,9 +1371,7 @@ def run_convert_task(task_id: uuid.UUID, payload: dict[str, Any]) -> dict[str, A
         proxmox_ops.protect_template_guest(node, pve_vmid, resource_type)
         report_progress(task_id, 90)
     except Exception as exc:
-        _set_template_error(
-            template_id, str(exc), status=VMTemplateStatus.failed
-        )
+        _set_template_error(template_id, str(exc), status=VMTemplateStatus.failed)
         raise
     detected_disk = _detect_template_disk_gb(node, pve_vmid, resource_type)
     password_settable = _detect_password_settable(
@@ -1428,9 +1404,7 @@ def run_convert_task(task_id: uuid.UUID, payload: dict[str, Any]) -> dict[str, A
 
             nat_service.remove_nat_rules_for_vmid(session, pve_vmid)
         except Exception as exc:
-            logger.warning(
-                "Failed to remove NAT rules for VM %s: %s", pve_vmid, exc
-            )
+            logger.warning("Failed to remove NAT rules for VM %s: %s", pve_vmid, exc)
         # 母機若來自申請單，一併標為已消耗；否則排程器會反覆嘗試
         # 啟動範本，資源頁也會把申請單復活成「建立失敗」placeholder
         from app.services.resource import resource_service
@@ -1500,20 +1474,26 @@ def run_update_clone_task(
             # 範本更新需要可獨立寫入的完整副本，一律 full clone
             if resource_type == "lxc":
                 proxmox_ops.clone_lxc(
-                    node, pve_vmid, newid=new_vmid, hostname=clone_name,
-                    full=1, pool=pool,
+                    node,
+                    pve_vmid,
+                    newid=new_vmid,
+                    hostname=clone_name,
+                    full=1,
+                    pool=pool,
                 )
             else:
                 proxmox_ops.clone_vm(
-                    node, pve_vmid, newid=new_vmid, name=clone_name,
-                    full=1, pool=pool,
+                    node,
+                    pve_vmid,
+                    newid=new_vmid,
+                    name=clone_name,
+                    full=1,
+                    pool=pool,
                 )
         report_progress(task_id, 80)
     except Exception as exc:
         # 克隆失敗 → 回復 ready，讓使用者可重新發起
-        _set_template_error(
-            template_id, str(exc), status=VMTemplateStatus.ready
-        )
+        _set_template_error(template_id, str(exc), status=VMTemplateStatus.ready)
         raise
     with Session(engine) as session:
         template = session.get(VMTemplate, template_id)
@@ -1677,7 +1657,8 @@ def run_update_cancel_task(
                 logger.warning(
                     "Template %s update cancel: VMID %s is no longer the "
                     "update clone; leaving it untouched",
-                    template_id, temp_vmid,
+                    template_id,
+                    temp_vmid,
                 )
         report_progress(task_id, 80)
     except Exception as exc:

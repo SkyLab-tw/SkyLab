@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.exceptions import NotFoundError
-from app.models.course import CoursePath, CoursePathStatus
 from app.models.teacher_judge_script_artifact import (
     TeacherJudgeScriptArtifact,
     TeacherJudgeScriptStatus,
@@ -102,7 +101,7 @@ def _judge(session: Session, teaching_class_id: uuid.UUID, title: str) -> Teache
     return judge
 
 
-def _setup_class(session: Session) -> tuple[uuid.UUID, TeachingClass, CoursePath]:
+def _setup_class(session: Session) -> tuple[uuid.UUID, TeachingClass]:
     student_id = uuid.uuid4()
     teaching_class = TeachingClass(
         name="Linux A",
@@ -114,17 +113,12 @@ def _setup_class(session: Session) -> tuple[uuid.UUID, TeachingClass, CoursePath
         weekday=1,
         start_time=time(9),
         end_time=time(11),
-    )
-    path = CoursePath(
-        title="Linux",
-        teaching_class_id=teaching_class.id,
-        status=CoursePathStatus.published,
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     session.add(teaching_class)
-    session.add(path)
     session.add(TeachingClassStudent(class_id=teaching_class.id, user_id=student_id))
     session.commit()
-    return student_id, teaching_class, path
+    return student_id, teaching_class
 
 
 # ── Pure projection helpers ────────────────────────────────────────────────
@@ -199,7 +193,7 @@ def test_legacy_judgement_items_filters_non_dicts_and_other_items() -> None:
 
 
 def test_source_document_missing_raises_not_found(session: Session) -> None:
-    student_id, teaching_class, path = _setup_class(session)
+    student_id, teaching_class = _setup_class(session)
     judge = _judge(session, teaching_class.id, "No PDF")
     artifact = _artifact(db=session, teaching_class_id=teaching_class.id, name="No PDF", session_id=judge.id)
     session.add(artifact)
@@ -209,7 +203,7 @@ def test_source_document_missing_raises_not_found(session: Session) -> None:
         ai_assignment_service.get_student_ai_assignment_source_document(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
             assignment_id=judge.id,
         )
 
@@ -217,7 +211,7 @@ def test_source_document_missing_raises_not_found(session: Session) -> None:
 def test_get_student_ai_check_returns_own_run_and_hides_others(
     session: Session,
 ) -> None:
-    student_id, teaching_class, path = _setup_class(session)
+    student_id, teaching_class = _setup_class(session)
     judge = _judge(session, teaching_class.id, "Check")
     sibling_judge = _judge(session, teaching_class.id, "Sibling")
     artifact = _artifact(db=session, teaching_class_id=teaching_class.id, name="Check", session_id=judge.id)
@@ -264,7 +258,7 @@ def test_get_student_ai_check_returns_own_run_and_hides_others(
     check = ai_assignment_service.get_student_ai_check(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         run_id=own_run.id,
     )
@@ -277,14 +271,14 @@ def test_get_student_ai_check_returns_own_run_and_hides_others(
             ai_assignment_service.get_student_ai_check(
                 session,
                 user_id=student_id,
-                path_id=path.id,
+                class_id=teaching_class.id,
                 assignment_id=judge.id,
                 run_id=run_id,
             )
 
 
 def test_update_completion_rejects_unknown_item(session: Session) -> None:
-    student_id, teaching_class, path = _setup_class(session)
+    student_id, teaching_class = _setup_class(session)
     judge = _judge(session, teaching_class.id, "Toggle")
     artifact = _artifact(db=session, teaching_class_id=teaching_class.id, name="Toggle", session_id=judge.id)
     session.add(artifact)
@@ -294,7 +288,7 @@ def test_update_completion_rejects_unknown_item(session: Session) -> None:
         ai_assignment_service.update_student_completion(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
             assignment_id=judge.id,
             item_id="nope",
             completed=True,

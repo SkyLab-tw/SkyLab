@@ -1,0 +1,25 @@
+# 我的課程（/courses）
+id: courses
+path: /courses
+title: 我的課程
+access: learner
+order: 20
+purpose: 學生修的課程清單；課程就是你所在的班級，班級可以上課後就會出現在這裡。
+when_to_use: 學生想看自己修了哪些課，或要進入某一門課看本週任務。
+sections:
+  - 課程列表
+features:
+  - 每張票是一門課，也就是你在名單上、而且已經進入過「可以上課」的班級；點一下進入課程頁。
+  - 票上顯示上課狀態（正在上課、今天稍後、可課後練習、今天已結束、可以開始）、老師、日期、時間與教室；票根的條碼只是裝飾，不代表進度。
+  - 看不到課程時，代表班級還沒進入「可以上課」，或老師還沒把你加進班級名單。
+elements:
+  - id: courses.list
+    role: list
+    label: 我的課程
+    help: 每張票是一門課，點進去看任務、本週進度與課堂機器。沒有課程時顯示「目前沒有課程」。
+    section: 課程列表
+related:
+  - path: /my-resources
+    when: 要直接開關或連線到課堂機器
+  - path: /dashboard
+    when: 回首頁看今天的總覽

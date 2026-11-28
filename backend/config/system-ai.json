@@ -49,5 +49,13 @@
       "presence_penalty": 0.0,
       "repetition_penalty": 1.0
     }
+  },
+  "assistant": {
+    "thinking": "medium",
+    "max_rounds": 4,
+    "timeout": 60,
+    "temperature": 0.2,
+    "top_p": 0.95,
+    "max_tokens": 4096
   }
 }

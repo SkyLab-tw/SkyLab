@@ -379,7 +379,7 @@ print(payload["choices"][0]["message"])
 | 限流狀態 | 不消耗生成配額 | `/rate-limit/status` 回報憑證當下額度；`disabled=true` 或 `error` 需分別判讀 |
 | Backend admission | 每個 process 全域 active 20、每個模型 active 10、等待 40 | 併發與排隊限制，不是 RPM；等待／cooldown 預算 70 秒、整次請求 deadline 115 秒 |
 | LiteLLM deployment | generator 的每個 deployment `rpm` 預設 10 | source of truth 是 `vllm-service/models.json` 的 `litellm.rpm`；生成設定只供 runtime 使用 |
-| AI 導覽 | 每個登入帳號 30 次／60 秒 | `/resolve`、`/intake` 共用 `ai-navigation` scope；intake 不打模型，但也占額度 |
+| 內建 AI 助手 | 每個登入帳號 30 則訊息／60 秒 | `/ai/assistant/chat` 使用 `ai-assistant` scope；一則訊息可能呼叫模型好幾次（讀說明、回答、檢查回答），只算一次 |
 | AI PVE 助手 | chat route 沒有另外設定 RPM dependency | 不表示無限容量；仍受登入權限、System AI transport 與上游限制，不能套用公開 API 的 20 RPM |
 
 生成配額 identity 是核准申請 `request_id`，同一申請輪替金鑰不會重置；不同模型也不會

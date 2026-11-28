@@ -11,8 +11,6 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.models import (
-    CoursePath,
-    CoursePathStatus,
     Resource,
     TeachingClass,
     TeachingClassStudent,
@@ -79,15 +77,9 @@ def test_reminders_cover_today_tomorrow_rejected_and_fallback_name(
         weekday=2,
         start_time=time(9),
         end_time=time(11),
+        first_active_at=datetime(2026, 8, 1, 0, 0),
     )
     session.add(teaching_class)
-    session.add(
-        CoursePath(
-            title="Linux",
-            teaching_class_id=teaching_class.id,
-            status=CoursePathStatus.published,
-        )
-    )
     session.add(TeachingClassStudent(class_id=teaching_class.id, user_id=student_id))
     session.add(
         TeachingClassWeek(

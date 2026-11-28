@@ -20,7 +20,6 @@ def _cfg(*, ca_cert: str | None = None, verify_ssl: bool = False) -> ProxmoxSett
         password="pw",
         verify_ssl=verify_ssl,
         iso_storage="local",
-        data_storage="local-lvm",
         api_timeout=10,
         task_check_interval=1,
         pool_name="SkyLab",

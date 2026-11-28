@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -9,7 +9,6 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app.core.i18n import t
 from app.exceptions import NotFoundError
 from app.models import User, UserRole
-from app.models.course import CoursePath, CoursePathStatus
 from app.models.teacher_judge_file import TeacherJudgeFile
 from app.models.teacher_judge_script_artifact import (
     TeacherJudgeScriptArtifact,
@@ -134,6 +133,7 @@ def test_student_sees_only_approved_assignments_from_linked_class() -> None:
         weekday=1,
         start_time=time(9),
         end_time=time(11),
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     other_class = TeachingClass(
         name="其他老師班級",
@@ -145,6 +145,7 @@ def test_student_sees_only_approved_assignments_from_linked_class() -> None:
         weekday=2,
         start_time=time(9),
         end_time=time(11),
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     same_teacher_other_class = TeachingClass(
         name="同老師另一班",
@@ -156,14 +157,8 @@ def test_student_sees_only_approved_assignments_from_linked_class() -> None:
         weekday=3,
         start_time=time(9),
         end_time=time(11),
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
-    path = CoursePath(
-        title="Linux",
-        status=CoursePathStatus.published,
-        created_by=teacher_id,
-        teaching_class_id=own_class.id,
-    )
-    session.add(path)
     session.add(own_class)
     session.add(other_class)
     session.add(same_teacher_other_class)
@@ -208,7 +203,7 @@ def test_student_sees_only_approved_assignments_from_linked_class() -> None:
     assignments = list_student_ai_assignments(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=own_class.id,
     )
 
     assert len(assignments) == 1
@@ -235,12 +230,7 @@ def test_student_can_toggle_each_task_item_without_starting_ai_check() -> None:
         weekday=1,
         start_time=time(9),
         end_time=time(11),
-    )
-    path = CoursePath(
-        title="Linux",
-        status=CoursePathStatus.published,
-        created_by=teacher_id,
-        teaching_class_id=teaching_class.id,
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     judge = _judge(
         session, teaching_class_id=teaching_class.id, title="Linux completion toggle"
@@ -261,7 +251,6 @@ def test_student_can_toggle_each_task_item_without_starting_ai_check() -> None:
         }
     )
     session.add(teaching_class)
-    session.add(path)
     session.add(artifact)
     session.add(TeachingClassStudent(class_id=teaching_class.id, user_id=student_id))
     session.commit()
@@ -269,7 +258,7 @@ def test_student_can_toggle_each_task_item_without_starting_ai_check() -> None:
     first_item = ai_assignment_service.update_student_completion(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         item_id="permissions",
         completed=True,
@@ -281,14 +270,14 @@ def test_student_can_toggle_each_task_item_without_starting_ai_check() -> None:
     assert list_student_ai_assignments(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )[0].completion.completed_item_ids == ["permissions"]
     assert session.exec(select(TeacherJudgeScriptRun)).all() == []
 
     all_completed = ai_assignment_service.update_student_completion(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         item_id="resources",
         completed=True,
@@ -301,7 +290,7 @@ def test_student_can_toggle_each_task_item_without_starting_ai_check() -> None:
     first_item_unchecked = ai_assignment_service.update_student_completion(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         item_id="permissions",
         completed=False,
@@ -314,7 +303,7 @@ def test_student_can_toggle_each_task_item_without_starting_ai_check() -> None:
         list_student_ai_assignments(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
         )[0].completion.completed
         is False
     )
@@ -335,12 +324,7 @@ def test_student_can_toggle_the_whole_weekly_assignment() -> None:
         weekday=1,
         start_time=time(9),
         end_time=time(11),
-    )
-    path = CoursePath(
-        title="Linux",
-        status=CoursePathStatus.published,
-        created_by=teacher_id,
-        teaching_class_id=teaching_class.id,
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     judge = _judge(
         session, teaching_class_id=teaching_class.id, title="Weekly Linux assignment"
@@ -363,7 +347,6 @@ def test_student_can_toggle_the_whole_weekly_assignment() -> None:
     session.add_all(
         [
             teaching_class,
-            path,
             artifact,
             TeachingClassStudent(class_id=teaching_class.id, user_id=student_id),
         ]
@@ -373,7 +356,7 @@ def test_student_can_toggle_the_whole_weekly_assignment() -> None:
     completed = ai_assignment_service.update_student_completion(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         item_id=None,
         completed=True,
@@ -386,7 +369,7 @@ def test_student_can_toggle_the_whole_weekly_assignment() -> None:
     reopened = ai_assignment_service.update_student_completion(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         item_id=None,
         completed=False,
@@ -414,12 +397,7 @@ def test_student_can_view_one_uploaded_pdf_for_multiple_checkpoints(
         weekday=1,
         start_time=time(9),
         end_time=time(11),
-    )
-    path = CoursePath(
-        title="Linux",
-        status=CoursePathStatus.published,
-        created_by=teacher_id,
-        teaching_class_id=teaching_class.id,
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     source_file = TeacherJudgeFile(
         teaching_class_id=teaching_class.id,
@@ -448,7 +426,6 @@ def test_student_can_view_one_uploaded_pdf_for_multiple_checkpoints(
         }
     )
     session.add(teaching_class)
-    session.add(path)
     session.add(source_file)
     session.add(artifact)
     session.add(TeachingClassStudent(class_id=teaching_class.id, user_id=student_id))
@@ -461,7 +438,7 @@ def test_student_can_view_one_uploaded_pdf_for_multiple_checkpoints(
     assignments = list_student_ai_assignments(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
 
     assert len(assignments) == 1
@@ -474,7 +451,7 @@ def test_student_can_view_one_uploaded_pdf_for_multiple_checkpoints(
         ai_assignment_service.get_student_ai_assignment_source_document(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
             assignment_id=judge.id,
         )
     )
@@ -485,7 +462,7 @@ def test_student_can_view_one_uploaded_pdf_for_multiple_checkpoints(
         ai_assignment_service.get_student_ai_assignment_source_document(
             session,
             user_id=uuid.uuid4(),
-            path_id=path.id,
+            class_id=teaching_class.id,
             assignment_id=judge.id,
         )
     assert exc_info.value.status_code == 404
@@ -505,14 +482,8 @@ def test_student_assignment_includes_only_safe_latest_ai_feedback() -> None:
         weekday=1,
         start_time=time(9),
         end_time=time(11),
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
-    path = CoursePath(
-        title="Linux",
-        status=CoursePathStatus.published,
-        created_by=teacher_id,
-        teaching_class_id=teaching_class.id,
-    )
-    session.add(path)
     session.add(teaching_class)
     session.commit()
     session.add(TeachingClassStudent(class_id=teaching_class.id, user_id=student_id))
@@ -568,7 +539,7 @@ def test_student_assignment_includes_only_safe_latest_ai_feedback() -> None:
     assignments = list_student_ai_assignments(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
 
     check = assignments[0].latest_check
@@ -794,7 +765,7 @@ def test_student_projection_uses_own_batch_target_and_teacher_review() -> None:
 
 def _class_with_student(
     session: Session,
-) -> tuple[uuid.UUID, TeachingClass, CoursePath]:
+) -> tuple[uuid.UUID, TeachingClass]:
     student_id = uuid.uuid4()
     teacher_id = uuid.uuid4()
     teaching_class = TeachingClass(
@@ -807,22 +778,16 @@ def _class_with_student(
         weekday=1,
         start_time=time(9),
         end_time=time(11),
-    )
-    path = CoursePath(
-        title="網站部署",
-        status=CoursePathStatus.published,
-        created_by=teacher_id,
-        teaching_class_id=teaching_class.id,
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     session.add_all(
         [
             teaching_class,
-            path,
             TeachingClassStudent(class_id=teaching_class.id, user_id=student_id),
         ]
     )
     session.commit()
-    return student_id, teaching_class, path
+    return student_id, teaching_class
 
 
 def _machine_script(
@@ -880,7 +845,7 @@ def _student_run(
 
 def test_every_machine_of_the_week_shows_up_as_one_assignment() -> None:
     session = _session()
-    student_id, teaching_class, path = _class_with_student(session)
+    student_id, teaching_class = _class_with_student(session)
     judge = _judge(
         session, teaching_class_id=teaching_class.id, title="第 3 週：網站部署"
     )
@@ -930,7 +895,7 @@ def test_every_machine_of_the_week_shows_up_as_one_assignment() -> None:
     session.commit()
 
     assignments = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )
 
     assert len(assignments) == 1
@@ -944,7 +909,7 @@ def test_every_machine_of_the_week_shows_up_as_one_assignment() -> None:
 
 def test_completion_survives_rebuild_but_old_results_stay_historical() -> None:
     session = _session()
-    student_id, teaching_class, path = _class_with_student(session)
+    student_id, teaching_class = _class_with_student(session)
     judge = _judge(session, teaching_class_id=teaching_class.id, title="第 3 週")
     set_id = uuid.uuid4()
     first = _machine_script(
@@ -960,7 +925,7 @@ def test_completion_survives_rebuild_but_old_results_stay_historical() -> None:
     ai_assignment_service.update_student_completion(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         item_id="service",
         completed=True,
@@ -983,7 +948,7 @@ def test_completion_survives_rebuild_but_old_results_stay_historical() -> None:
     session.commit()
 
     assignment = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )[0]
     assert assignment.version == 2
     assert assignment.completion.completed_item_ids == ["service"]
@@ -996,7 +961,7 @@ def test_completion_survives_rebuild_but_old_results_stay_historical() -> None:
 
 def test_an_environment_failure_keeps_the_last_real_verdict() -> None:
     session = _session()
-    student_id, teaching_class, path = _class_with_student(session)
+    student_id, teaching_class = _class_with_student(session)
     judge = _judge(session, teaching_class_id=teaching_class.id, title="第 3 週")
     script = _machine_script(
         db=session,
@@ -1015,7 +980,7 @@ def test_an_environment_failure_keeps_the_last_real_verdict() -> None:
     session.commit()
 
     assignment = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )[0]
     assert assignment.checkpoint_checks["service"].items[0].status == "fail"
 
@@ -1035,7 +1000,7 @@ def test_students_only_see_tasks_after_scripts_are_approved(
 ) -> None:
     """發布週次不公開仍在設定的任務；製作並核准後才提供任務、PDF 與回報入口。"""
     session = _session()
-    student_id, teaching_class, path = _class_with_student(session)
+    student_id, teaching_class = _class_with_student(session)
     week = TeachingClassWeek(
         class_id=teaching_class.id,
         week_number=3,
@@ -1092,7 +1057,7 @@ def test_students_only_see_tasks_after_scripts_are_approved(
 
     # 週次還是草稿：不外流給學生
     assert (
-        list_student_ai_assignments(session, user_id=student_id, path_id=path.id) == []
+        list_student_ai_assignments(session, user_id=student_id, class_id=teaching_class.id) == []
     )
 
     week.status = "published"
@@ -1101,12 +1066,12 @@ def test_students_only_see_tasks_after_scripts_are_approved(
 
     # 已發布週次仍可看課程內容，但不能從每週內容的 fallback 取得 AI 草稿。
     assert (
-        list_student_ai_assignments(session, user_id=student_id, path_id=path.id) == []
+        list_student_ai_assignments(session, user_id=student_id, class_id=teaching_class.id) == []
     )
     [student_week] = weekly_task_service.list_student_weekly_tasks(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
     assert student_week.title == "網站部署"
     assert student_week.checkpoints == []
@@ -1117,21 +1082,21 @@ def test_students_only_see_tasks_after_scripts_are_approved(
         ai_assignment_service.get_student_ai_assignment(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
             assignment_id=judge.id,
         )
     with pytest.raises(NotFoundError):
         ai_assignment_service.get_student_ai_assignment_source_document(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
             assignment_id=judge.id,
         )
     with pytest.raises(NotFoundError):
         ai_assignment_service.update_student_completion(
             session,
             user_id=student_id,
-            path_id=path.id,
+            class_id=teaching_class.id,
             assignment_id=judge.id,
             item_id=None,
             completed=True,
@@ -1144,7 +1109,7 @@ def test_students_only_see_tasks_after_scripts_are_approved(
     session.add(script)
     session.commit()
     [assignment] = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )
     assert assignment.id == judge.id
     assert assignment.check_available is True
@@ -1154,7 +1119,7 @@ def test_students_only_see_tasks_after_scripts_are_approved(
     [student_week] = weekly_task_service.list_student_weekly_tasks(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
     assert [item.id for item in student_week.checkpoints] == ["service", "database"]
     [document] = student_week.source_documents
@@ -1165,7 +1130,7 @@ def test_students_only_see_tasks_after_scripts_are_approved(
     ai_assignment_service.update_student_completion(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         assignment_id=judge.id,
         item_id=None,
         completed=True,
@@ -1179,7 +1144,7 @@ def test_students_only_see_tasks_after_scripts_are_approved(
 
 def test_editing_a_checklist_keeps_only_the_approved_snapshot_visible() -> None:
     session = _session()
-    student_id, teaching_class, path = _class_with_student(session)
+    student_id, teaching_class = _class_with_student(session)
     judge = _judge(session, teaching_class_id=teaching_class.id, title="第 3 週")
     approved = _machine_script(
         db=session,
@@ -1215,13 +1180,13 @@ def test_editing_a_checklist_keeps_only_the_approved_snapshot_visible() -> None:
     session.commit()
 
     [assignment] = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )
     assert [item.id for item in assignment.items] == ["published-service"]
     [student_week] = weekly_task_service.list_student_weekly_tasks(
         session,
         user_id=student_id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
     assert [item.id for item in student_week.checkpoints] == ["published-service"]
 
@@ -1229,7 +1194,7 @@ def test_editing_a_checklist_keeps_only_the_approved_snapshot_visible() -> None:
 def test_teacher_reply_is_per_week_overwritten_and_optional() -> None:
     """回覆對的是「這位學生的這一週」：再回覆覆蓋前一則，學生只看到最新的；空白＝不回覆。"""
     session = _session()
-    student_id, teaching_class, path = _class_with_student(session)
+    student_id, teaching_class = _class_with_student(session)
     session.add(
         User(
             id=student_id,
@@ -1253,7 +1218,7 @@ def test_teacher_reply_is_per_week_overwritten_and_optional() -> None:
 
     # 老師可以不回覆
     [assignment] = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )
     assert assignment.teacher_reply == ""
     assert assignment.teacher_reply_at is None
@@ -1276,14 +1241,14 @@ def test_teacher_reply_is_per_week_overwritten_and_optional() -> None:
     assert second["teacher_reply"] == "記得補上日誌設定"
 
     [assignment] = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )
     assert assignment.teacher_reply == "記得補上日誌設定"
     assert assignment.teacher_reply_at is not None
     [row] = ai_assignment_service.session_progress(session, judge)["students"]
     assert row["teacher_reply"] == "記得補上日誌設定"
     [week] = weekly_task_service.list_student_weekly_tasks(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )
     assert week.teacher_reply == "記得補上日誌設定"
 
@@ -1301,7 +1266,7 @@ def test_teacher_reply_is_per_week_overwritten_and_optional() -> None:
         "teacher_reply_at": None,
     }
     [assignment] = list_student_ai_assignments(
-        session, user_id=student_id, path_id=path.id
+        session, user_id=student_id, class_id=teaching_class.id
     )
     assert assignment.teacher_reply == ""
 

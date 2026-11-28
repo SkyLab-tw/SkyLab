@@ -98,7 +98,7 @@ The template's machine on PVE is deleted together with its disk, and the attachm
 - any machine cloned from the template still exists (the message lists their VMIDs);
 - a pending or approved request that chose this template has not been provisioned yet;
 - a batch provisioning job that uses the template has not finished;
-- a teaching environment (including drafts and retired versions) uses the template as a source.
+- a teaching environment (including drafts) uses the template as a source.
 
 Remove or finish those first, then try again.
 

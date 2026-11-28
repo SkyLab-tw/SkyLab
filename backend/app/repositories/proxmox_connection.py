@@ -58,10 +58,8 @@ def create_connection(
     api_timeout: int,
     pool_name: str,
     iso_storage: str,
-    data_storage: str,
     task_check_interval: int,
     gateway_ip: str | None = None,
-    local_subnet: str | None = None,
     default_node: str | None = None,
     enabled: bool = True,
     is_default: bool = False,
@@ -80,11 +78,9 @@ def create_connection(
         api_timeout=api_timeout,
         pool_name=pool_name,
         iso_storage=iso_storage,
-        data_storage=data_storage,
         backup_storage=(backup_storage or "").strip() or None,
         task_check_interval=task_check_interval,
         gateway_ip=gateway_ip or None,
-        local_subnet=local_subnet or None,
         default_node=default_node or None,
         enabled=enabled,
         is_default=is_default,
@@ -108,11 +104,9 @@ _UPDATABLE_FIELDS: frozenset[str] = frozenset(
         "api_timeout",
         "pool_name",
         "iso_storage",
-        "data_storage",
         "backup_storage",
         "task_check_interval",
         "gateway_ip",
-        "local_subnet",
         "default_node",
         "enabled",
         "is_default",
@@ -121,7 +115,7 @@ _UPDATABLE_FIELDS: frozenset[str] = frozenset(
 
 # 這幾個欄位允許清空：帶 None 或空字串都存成 None
 _NULLABLE_TEXT_FIELDS: frozenset[str] = frozenset(
-    {"gateway_ip", "local_subnet", "default_node", "backup_storage"}
+    {"gateway_ip", "default_node", "backup_storage"}
 )
 
 
@@ -137,8 +131,7 @@ def update_connection(
     「沒帶這個欄位」與「帶了 None」能分開處理，呼叫端不必回送整份設定：
     - ``password``：帶 None 表示不換密碼
     - ``ca_cert``：帶 None 表示不動，帶空字串才是清除
-    - ``gateway_ip`` / ``local_subnet`` / ``default_node`` / ``backup_storage``：帶 None
-      或空字串是清空
+    - ``gateway_ip`` / ``default_node`` / ``backup_storage``：帶 None 或空字串是清空
     - 其餘欄位帶 None 一律忽略（它們沒有「設為 None」的語義）
     """
     conn = session.get(ProxmoxConnection, connection_id)

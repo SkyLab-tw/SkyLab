@@ -100,7 +100,7 @@ Internet access is open for every machine by default, so you do not add it. Clic
 ### Publish the environment
 
 1. On **Machine Configuration**, click **Publish**.
-2. SkyLab checks the name, the number of machines and the connection ports. If something is missing, it takes you to the field or tab and explains why.
+2. SkyLab checks the environment name, the number of machines, each machine's name and role, the number of connections and published services, and the connection ports. If something is missing, it takes you to the field or tab and explains why.
 3. Confirm **Publish and lock**. The version is locked for good.
 4. A message tells you where the environment can now be used (class management, quick practice, or both).
 

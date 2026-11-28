@@ -9,8 +9,8 @@ export const ProxmoxConfigService = {
   /**
    * 新增連線。
    * 連線層：name / host / port / user / password / verify_ssl / ca_cert / api_timeout
-   * 該叢集自身：pool_name / iso_storage / data_storage / task_check_interval /
-   *             gateway_ip / local_subnet / default_node
+   * 該叢集自身：pool_name / iso_storage / backup_storage / task_check_interval /
+   *             gateway_ip / default_node
    * 其他：enabled / is_default
    */
   createConnection(body) {

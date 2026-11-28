@@ -39,7 +39,6 @@ from app.api.websocket.classroom import (
     classroom_presence_proxy,
     classroom_watch_proxy,
 )
-from app.api.websocket.course_progress import course_progress_proxy
 from app.api.websocket.jobs import jobs_ws_proxy
 from app.api.websocket.terminal import terminal_proxy
 from app.core import metrics
@@ -323,11 +322,3 @@ async def websocket_classroom_watch(
 ):
     with track_websocket("classroom_watch"):
         await classroom_watch_proxy(websocket, session_id, token=token)
-
-
-@app.websocket("/ws/courses/paths/{path_id}/progress")
-async def websocket_course_progress(
-    websocket: WebSocket, path_id: str, token: str = ""
-):
-    with track_websocket("course_progress"):
-        await course_progress_proxy(websocket, path_id, token=token)

@@ -492,6 +492,34 @@
   overflow-wrap: anywhere;
 }
 
+/* 「核准」不能按的原因：審核列裡獨佔一列，排在備註與按鈕上方，不必捲回詳情去找 */
+.blockedHint {
+  @include flex-column;
+  gap: $spacing-4;
+  padding: $spacing-8 $spacing-16;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--color-border));
+  border-radius: $radius-8;
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+  color: var(--color-text-primary);
+  font-size: $font-size-14;
+  line-height: $line-height-base;
+  overflow-wrap: anywhere;
+
+  @include respond-to(md) {
+    flex: 1 0 100%;
+  }
+
+  strong {
+    font-weight: $font-weight-500;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: $spacing-16;
+    color: var(--color-text-secondary);
+  }
+}
+
 %review-btn {
   padding: 6px $spacing-16;
   border-radius: $radius-8;

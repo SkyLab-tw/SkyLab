@@ -28,7 +28,6 @@ const ROUTE_GUIDES = [
   { match: /^\/ai-api-keys$/, id: "ai-api-keys", icon: "vpn_key", profile: "resource" },
   { match: /^\/ai-monitoring$/, id: "ai-monitoring", icon: "query_stats", profile: "monitor" },
 
-  { match: /^\/course-cms$/, id: "course-cms", icon: "school", profile: "teaching" },
   { match: /^\/course-template-management$/, id: "course-templates", icon: "view_quilt", profile: "teaching" },
   { match: /^\/course-template-management\/(?:new|[^/]+)$/, id: "course-template-editor", icon: "edit_note", profile: "teaching" },
   { match: /^\/class-management$/, id: "class-management", icon: "groups_2", profile: "teaching" },

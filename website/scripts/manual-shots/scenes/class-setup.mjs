@@ -130,9 +130,9 @@ export default {
     {
       mocks(m) {
         m.state.classes.web.weeks = WEB_WEEKS;
-        // The backend's screen list names this page (app/ai/contextual_help/surfaces.py, id "class-setup");
+        // The backend's screen list names this page (app/ai/assistant/surfaces.py, id "class-setup");
         // without it the panel says it is viewing "SkyLab".
-        m.use([["GET", /^\/api\/v1\/ai\/contextual-help\/surfaces$/, () => [{
+        m.use([["GET", /^\/api\/v1\/ai\/assistant\/surfaces$/, () => [{
           id: "class-setup", path: "/class-setup", title: m.L("Class setup", "建立班級"),
           purpose: m.L("Work through the schedule, students, environment and weekly tasks; each step is saved to the class.",
             "依序完成課表、學生、環境與每週任務，每一步都會保存到正式班級。"),

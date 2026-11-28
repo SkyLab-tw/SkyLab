@@ -71,6 +71,12 @@ class TeachingClass(SQLModel, table=True):
         default_factory=get_datetime_utc,
         sa_column=Column(DateTime(timezone=True), nullable=False, onupdate=get_datetime_utc),
     )
+    # 第一次進入「可以上課」的時間。有值之後，名單上的學生就看得到這門課，
+    # 之後班級狀態怎麼變（補機器、部分失敗、封存）都不會再清掉。
+    first_active_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
     archived_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),

@@ -20,7 +20,7 @@ Administrators only.
 1. Click **Add Connection** (in the page header, or in the empty state when there are no connections yet).
 2. Under **Connection Settings**, fill in **Name**, **Host**, **Port** (8006 by default), **API User** and **Password**. Adjust **API Timeout (seconds)** if needed.
 3. To verify the PVE certificate, tick **Verify SSL certificate** and paste the CA certificate into **CA Certificate PEM**.
-4. Under **This Cluster's Resource Settings**, set **Pool Name**, **ISO Storage**, **Data Storage** and, optionally, **Backup Storage**, **Task Check Interval (seconds)**, **Gateway IP**, **Local Subnet** and **Default Node**.
+4. Under **This Cluster's Resource Settings**, set **Pool Name** and **ISO Storage** and, optionally, **Backup Storage**, **Task Check Interval (seconds)**, **Gateway IP** and **Default Node**.
 5. Keep **Enable this connection** ticked. Tick **Set as default connection** if this should become the default.
 6. Click **Save Connection**.
 7. Click **Sync** on the new row so its nodes and storages appear.
@@ -114,26 +114,24 @@ A disabled node shows **Disabled** and "Not accepting new VMs (existing VMs unaf
 | CA Certificate PEM | CA that signed the PVE certificate | Shown only when verification is ticked; must be a valid PEM certificate |
 | Pool Name | PVE pool that machines from this connection go into | Default `SkyLab` |
 | ISO Storage | Storage for ISO images | Default `local` |
-| Data Storage | Storage for machine disks | Default `local-lvm` |
 | Backup Storage | Storage for machine backups | Optional; blank means backups are not offered on this cluster. Machines that cannot use snapshots fall back to backups as restore points. A dedicated storage is recommended rather than one shared with your scheduled backups |
 | Task Check Interval (seconds) | How often the platform checks a PVE task it is waiting for | 1–60, default 2 |
-| Gateway IP | Gateway of the machine network on this cluster | Optional |
-| Local Subnet | Machine network of this cluster, e.g. `192.168.100.0/24` | Optional |
+| Gateway IP | Gateway address of this cluster | Optional. The platform only uses it to protect the gateway: a machine that reports this address as its IP cannot be opened to the outside by URL or public port |
 | Default Node | Node used preferentially when none is specified | Optional |
 | Enable this connection | Whether the connection is in use | Shown as **Enabled** or **Disabled** in the list |
 | Set as default connection | Makes this the default connection | Only one default |
 | Node Host / Port | Address the platform uses to call that node's PVE API | A wrong value breaks sync and power actions |
-| Node Priority | Tie-breaker between nodes | Lower wins; only used when placement scores are close; default 5 |
+| Node Priority | Tie-breaker between nodes | A whole number from 1 to 10; lower wins; only used when placement scores are close; default 5 |
 
 Each connection row shows the name (with a **Default** tag for the default connection), `host:port · API user`, the **Enabled** or **Disabled** state and the number of synced nodes. Each node row shows the node name (with a **Primary Node** tag where applicable), `host:port · Priority`, and **Online** or **Offline**.
 
 ## Limits and behaviour to know
 
-- The pool, storage, gateway IP, subnet and default node apply only to machines created through that connection, so each cluster can use different values. Cross-cluster placement and scheduling parameters are on [Resource Scheduling](/manual/scheduler).
+- The pool, ISO and backup storage, gateway IP and default node apply only to machines created through that connection, so each cluster can use different values. Cross-cluster placement and scheduling parameters are on [Resource Scheduling](/manual/scheduler).
 - **Online** and **Offline** show the result of the platform's most recent connection to the node (a sync, or opening an API connection to that cluster), not a live check.
 - While a row is testing, syncing or deleting, its buttons are disabled.
 - For live node usage, trends and alerts, open [Resource Monitoring](/manual/monitoring); the link is also in the page header.
-- Storage speed tiers, priorities and enabling individual storages are managed on [Storage](/manual/storage).
+- Which storages machine disks may use, along with storage speed tiers, priorities and enabling individual storages, is managed on [Storage](/manual/storage); the machine subnet is set on [IP Management](/manual/ip-management).
 
 ## Related
 

@@ -10,7 +10,7 @@ import PageHeader from "../../../components/PageHeader/PageHeader";
 import TeacherReplyNote from "../../../components/TeacherReplyNote/TeacherReplyNote";
 import { useQueryView } from "../../../hooks/useQueryLoadState";
 import { CoursesService } from "../../../services/courses";
-import { useCoursePathQuery, usePracticeMachinesQuery, useWeeklyTasksQuery } from "../../../queries/courses";
+import { useCourseClassQuery, usePracticeMachinesQuery, useWeeklyTasksQuery } from "../../../queries/courses";
 import StatusBadge from "../../../components/StatusBadge/StatusBadge";
 import styles from "./StudentWeekPage.module.scss";
 import { feedbackFor } from "./studentWeekFeedback";
@@ -46,7 +46,7 @@ function createGuideDemoWeek(t) {
   return {
     loading: false,
     failed: false,
-    path: { id: "demo", title: t("StudentWeekPage.guideDemoCourseTitle") },
+    course: { id: "demo", title: t("StudentWeekPage.guideDemoCourseTitle") },
     week: {
       id: "demo-week-1",
       teaching_class_name: t("StudentWeekPage.guideDemoCourseTitle"),
@@ -82,18 +82,18 @@ function createGuideDemoWeek(t) {
 export default function StudentWeekPage() {
   const { t, i18n } = useTranslation("personal");
   const navigate = useNavigate();
-  const { pathId, weekId } = useParams();
-  const isGuideDemo = pathId === "demo" || weekId === "demo-week-1";
+  const { classId, weekId } = useParams();
+  const isGuideDemo = classId === "demo" || weekId === "demo-week-1";
   const [openingFileId, setOpeningFileId] = useState(null);
 
   /* 與課程頁共用快取（從課程頁點進來直接有資料）；導覽示範模式不讀 API */
-  const live = !isGuideDemo && pathId != null;
-  const pathQuery = useCoursePathQuery(pathId, { enabled: live });
-  const weeksQuery = useWeeklyTasksQuery(pathId, { enabled: live });
-  const machinesQuery = usePracticeMachinesQuery(pathId, { enabled: live });
+  const live = !isGuideDemo && classId != null;
+  const courseQuery = useCourseClassQuery(classId, { enabled: live });
+  const weeksQuery = useWeeklyTasksQuery(classId, { enabled: live });
+  const machinesQuery = usePracticeMachinesQuery(classId, { enabled: live });
   /* 首次載入還沒有資料才算載入中／載入失敗；背景刷新失敗沿用上一份。
      首載失敗後背景重試期間維持失敗畫面，不閃回載入中（見 useQueryView） */
-  const pathView = useQueryView(pathQuery);
+  const courseView = useQueryView(courseQuery);
   const weeksView = useQueryView(weeksQuery);
   const machinesView = useQueryView(machinesQuery);
 
@@ -103,9 +103,9 @@ export default function StudentWeekPage() {
   } else {
     const weeks = Array.isArray(weeksQuery.data) ? weeksQuery.data : EMPTY;
     view = {
-      loading: live && (pathView.loading || weeksView.loading || machinesView.loading),
+      loading: live && (courseView.loading || weeksView.loading || machinesView.loading),
       failed: Boolean(weeksView.error),
-      path: pathQuery.data ?? null,
+      course: courseQuery.data ?? null,
       week: weeks.find((item) => String(item.id) === String(weekId)) ?? null,
       machines: Array.isArray(machinesQuery.data) ? machinesQuery.data : EMPTY,
     };
@@ -117,8 +117,8 @@ export default function StudentWeekPage() {
     const preview = window.open("", "_blank");
     try {
       const blob = file.assignment_id
-        ? await CoursesService.getAiAssignmentSourceDocument(pathId, file.assignment_id)
-        : await CoursesService.getWeeklyTaskDocument(pathId, weekId, file.id);
+        ? await CoursesService.getAiAssignmentSourceDocument(classId, file.assignment_id)
+        : await CoursesService.getWeeklyTaskDocument(classId, weekId, file.id);
       const url = URL.createObjectURL(blob);
       if (preview) preview.location = url;
       else window.open(url, "_blank", "noopener,noreferrer");
@@ -134,7 +134,7 @@ export default function StudentWeekPage() {
   if (view.loading) return <div className={styles.page}><LoadingState fullPage text={t("StudentWeekPage.loading")} /></div>;
 
   if (!view.week) {
-    const back = <button type="button" className={`${styles.backBtn} ${styles.backBtnAlone}`} onClick={() => navigate(`/courses/${pathId}`)}><MIcon name="arrow_back" size={18} />{t("StudentWeekPage.back")}</button>;
+    const back = <button type="button" className={`${styles.backBtn} ${styles.backBtnAlone}`} onClick={() => navigate(`/courses/${classId}`)}><MIcon name="arrow_back" size={18} />{t("StudentWeekPage.back")}</button>;
     return <div className={styles.page}>
       {view.failed
         ? <>{back}<ErrorState /></>
@@ -151,11 +151,11 @@ export default function StudentWeekPage() {
   return <div className={styles.page}>
     <div data-guide="course-week-header">
       <PageHeader
-        eyebrow={view.path?.title ?? view.week.teaching_class_name}
+        eyebrow={view.course?.title ?? view.week.teaching_class_name}
         title={view.week.title}
         subtitle={t("StudentWeekPage.weekMeta", { week: view.week.week_number, date: new Intl.DateTimeFormat(i18n.language, { dateStyle: "long" }).format(new Date(`${view.week.session_date}T00:00:00`)) })}
       >
-        <button type="button" className={styles.backBtn} onClick={() => navigate(`/courses/${pathId}`)}><MIcon name="arrow_back" size={18} />{t("StudentWeekPage.back")}</button>
+        <button type="button" className={styles.backBtn} onClick={() => navigate(`/courses/${classId}`)}><MIcon name="arrow_back" size={18} />{t("StudentWeekPage.back")}</button>
       </PageHeader>
     </div>
 
@@ -212,7 +212,8 @@ export default function StudentWeekPage() {
               {machine.public_url ? <a href={machine.public_url} target="_blank" rel="noreferrer"><MIcon name="language" size={17} />{t("StudentWeekPage.openWebsite")}</a> : (machine.forward_endpoints ?? []).length === 0 && <span className={styles.urlPending}><MIcon name="link_off" size={16} />{t("StudentWeekPage.urlPending")}</span>}
               {/* 對外 port：SSH / 資料庫這類不是網頁的服務，學生用 host:port 連 */}
               {(machine.forward_endpoints ?? []).map((endpoint) => <code key={`${endpoint.protocol}-${endpoint.external_port}`} title={t("StudentWeekPage.forwardEndpointTitle", { port: endpoint.internal_port, protocol: endpoint.protocol })}><MIcon name="swap_horiz" size={15} />{endpoint.host ? `${endpoint.host}:${endpoint.external_port}` : t("StudentWeekPage.forwardPortOnly", { port: endpoint.external_port })}</code>)}
-              {machine.vmid && <button type="button" onClick={() => navigate(`/my-resources/${machine.vmid}`)}><MIcon name="tune" size={17} />{t("StudentWeekPage.openMachine")}</button>}
+              {/* 主控台與電源操作在「我的資源」清單；單台的資源詳情頁沒有這兩樣 */}
+              {machine.vmid && <button type="button" onClick={() => navigate("/my-resources")}><MIcon name="tune" size={17} />{t("StudentWeekPage.openMachine")}</button>}
             </div>
           </article>)}</div> : <EmptyState icon="dns" title={t("StudentWeekPage.noMachineTitle")} description={t("StudentWeekPage.noMachineDesc")} />}
         </section>

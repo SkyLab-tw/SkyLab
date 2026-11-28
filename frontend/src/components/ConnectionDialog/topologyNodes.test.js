@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { canManageNode, nodeLabel, readOnlyNodeMessageKey, toDialogNodes } from "./topologyNodes";
+import { canManageNode, nodeLabel, readOnlyNodeMessageKey, readOnlyNodeReason, toDialogNodes } from "./topologyNodes";
 
 const gateway = { vmid: null, name: "Internet", node_type: "gateway" };
 const mine = { vmid: 100, name: "demo", node_type: "vm" };
@@ -42,6 +42,14 @@ describe("readOnlyNodeMessageKey", () => {
     expect(readOnlyNodeMessageKey(quickPractice)).toBe("FirewallPage.readOnlyNodeQuickPractice");
     expect(readOnlyNodeMessageKey(readOnlyClassVm)).toBe("FirewallPage.readOnlyNode");
     expect(readOnlyNodeMessageKey(orphanClassVm)).toBe("FirewallPage.readOnlyNodeNoPermission");
+  });
+
+  test("規則面板共用同一套原因判斷", () => {
+    const quickPractice = { vmid: 301, machine_kind: "quick_practice", teaching_class_name: "資安實務" };
+    expect(readOnlyNodeReason(quickPractice)).toBe("quick_practice");
+    expect(readOnlyNodeReason(readOnlyClassVm)).toBe("class");
+    expect(readOnlyNodeReason({ vmid: 302, machine_kind: "teaching_class" })).toBe("no_permission");
+    expect(readOnlyNodeReason(undefined)).toBe("no_permission");
   });
 });
 

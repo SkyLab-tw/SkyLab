@@ -24,16 +24,6 @@ from .batch_provision import (
     BatchProvisionTaskStatus,
 )
 from .cloudflare_config import CloudflareConfig
-from .course import (
-    CourseDifficulty,
-    CoursePath,
-    CoursePathStatus,
-    CourseQuestion,
-    CourseQuestionType,
-    CourseRoom,
-    CourseTask,
-    UserCourseProgress,
-)
 from .course_environment import (
     ClassCapacityReservation,
     CourseEnvironment,
@@ -273,13 +263,4 @@ __all__ = [
     "TeachingClassStudentMachine",
     "WireGuardPeer",
     "WireGuardPeerEndpoint",
-    # Course Lab (互動式實作教學)
-    "CoursePath",
-    "CoursePathStatus",
-    "CourseRoom",
-    "CourseDifficulty",
-    "CourseTask",
-    "CourseQuestion",
-    "CourseQuestionType",
-    "UserCourseProgress",
 ]

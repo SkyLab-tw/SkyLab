@@ -1,0 +1,82 @@
+# 班級管理（/class-management）
+id: class-management
+path: /class-management
+title: 班級管理
+access: staff
+order: 160
+purpose: 列出你的班級（管理員看得到全部班級），從尚未完成的班級繼續準備，或進入已就緒的班級開始上課。
+when_to_use: 老師要開新班級、繼續還沒設定完的班級、進入已就緒的班級上課，或一次封存多個已經結束的班級。
+sections:
+  - 班級清單
+features:
+  - 按「建立班級」進入一步步建立班級的精靈。
+  - 用狀態篩選：全部、準備中（還沒送出建機）、建置中（等待審核或正在建立，不需要做事）、需要處理（有機器建立失敗，只在有這種班級時出現）、可以上課；每個選項都會標出班級數。
+  - 輸入「搜尋班級」依班級名稱過濾；已結束的班級預設不列出，有已結束的班級時才會出現「顯示已結束」可以勾。
+  - 每個班級顯示狀態、學期、上課時間（每週星期與時段、提前幾分鐘開機）與學期期間；準備中的班級顯示班級設定完成幾項（共 3 項：學生、教學環境、每週任務），其他班級顯示機器建好幾台。
+  - 點準備中的班級會回到建立班級精靈、停在下一個還沒完成的步驟；點其他班級則進入班級，管理學生、上課環境、每週內容、上課監看與 AI 導師檢查。
+  - 批量封存：勾選班級（已結束的不能勾）後按「封存並回收」，確認後會停止後續排程、取消未完成的建機，並回收這些班級的所有機器，無法復原；班級與課程紀錄會保留。有機器沒送出回收時，可以在該班級按「重試回收」。
+elements:
+  - id: classmgmt.status_planning
+    role: readonly
+    label: 準備中
+    help: 還在準備，尚未送出機器配置。
+    section: 班級清單
+  - id: classmgmt.status_pending_review
+    role: readonly
+    label: 等待審核
+    help: 機器配置已送出，等管理員審核。
+    section: 班級清單
+  - id: classmgmt.status_provisioning
+    role: readonly
+    label: 正在建立
+    help: 審核通過，正在建立學生的機器。
+    section: 班級清單
+  - id: classmgmt.status_partial_failed
+    role: readonly
+    label: 需要處理
+    help: 部分機器建立失敗，要處理過才能正常上課。
+    section: 班級清單
+  - id: classmgmt.status_active
+    role: readonly
+    label: 可以上課
+    section: 班級清單
+  - id: classmgmt.status_archived
+    role: readonly
+    label: 已結束
+    help: 已封存的班級，班上的機器會被回收；班級與課程紀錄仍保留。
+    section: 班級清單
+  - id: classmgmt.filter_planning
+    role: button
+    label: 準備中
+    help: 篩選還沒送出機器配置的班級。
+    section: 班級清單
+  - id: classmgmt.filter_building
+    role: button
+    label: 建置中
+    help: 篩選已送出、正在等待審核或正在建立機器的班級；這段期間老師不需要做任何事。
+    section: 班級清單
+  - id: classmgmt.filter_partial_failed
+    role: button
+    label: 需要處理
+    help: 只有在真的有班級建機失敗時才會出現；進入班級可以按「重試失敗項目」，還沒有任何機器建好時也能解除鎖定返回編輯。
+    section: 班級清單
+  - id: classmgmt.filter_active
+    role: button
+    label: 可以上課
+    help: 篩選機器都建好、可以開始上課的班級。
+    section: 班級清單
+  - id: classmgmt.show_archived
+    role: button
+    label: 顯示已結束
+    help: 有已結束的班級時才出現，後面括號是已結束的班級數。已結束的班級預設不列出，也不計入其他篩選的數字。
+    section: 班級清單
+  - id: classmgmt.batch_archive
+    role: button
+    label: 封存並回收
+    help: 勾選班級後才出現。會停止後續排程、取消未完成建機，並回收這些班級的機器，無法復原；班級與課程紀錄會保留。
+    section: 班級清單
+related:
+  - path: /class-setup
+    when: 要建立新班級
+  - path: /course-template-management
+    when: 還沒有可以給班級用的教學環境

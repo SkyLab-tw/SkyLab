@@ -1,25 +1,15 @@
-import { Suspense, lazy, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../contexts/AuthContext";
-import { LayoutContext } from "../../layout/layoutContext";
-import { AiNavigationService } from "../../services/aiNavigation";
-import { AiTemplateRecommendationApi } from "../../services/aiTemplateRecommendation";
-import { queryClient } from "../../queries/queryClient";
-import { myResourcesQueryOptions } from "../../queries/resources";
-import { myVmRequestsQueryOptions } from "../../queries/vmRequests";
-import { newTask, taskRoute, withTaskMemory, recentMessages, intakeFactsPayload, planErrorKey, markStep, requestIsReady, TEACHING_PATTERN, SIDE_QUESTION_PATTERN, shouldContinueIntake, rememberWorkflow, addWorkflows, flowOwnsPath, environmentStepPath } from "./taskState";
-import {
-  AiContextualHelpService,
-  matchSurface,
-} from "../../services/aiContextualHelp";
 import MIcon from "../MIcon";
 import OctoPet from "../OctoPet/OctoPet";
-import OctoAvatar from "../OctoPet/OctoAvatar";
 import PageHelpHint from "./PageHelpHint";
+import AssistantMessage from "./AssistantMessage";
+import useAssistantChat from "./useAssistantChat";
+import { pageContextFor } from "./pageContexts";
+import { streamStatusKey } from "./taskState";
 import { getRouteGuide, USER_GUIDE_START_EVENT } from "../UserGuide/routeGuides";
-import { formatDate } from "../../utils/formatDate";
-import { joinList } from "../../utils/joinList";
 import useAutoGrowTextarea from "../../hooks/useAutoGrowTextarea";
 import useDialogPresence from "../../hooks/useDialogPresence";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
@@ -38,224 +28,27 @@ function useConfirmLeave() {
   }
 }
 
-/* title/suggestions 是模組層級常數，無法呼叫 hook，改存 key，實際 render 處再 t() */
-const PAGE_CONTEXTS = [
-  { match: /^\/dashboard/, titleKey: "AiFloatingChat.pageDashboardTitle", suggestionKeys: ["AiFloatingChat.pageDashboardSuggestion1", "AiFloatingChat.pageDashboardSuggestion2", "AiFloatingChat.pageDashboardSuggestion3"] },
-  { match: /^\/my-resources/, titleKey: "AiFloatingChat.pageMyResourcesTitle", suggestionKeys: ["AiFloatingChat.pageMyResourcesSuggestion1", "AiFloatingChat.pageMyResourcesSuggestion2", "AiFloatingChat.pageMyResourcesSuggestion3"] },
-  { match: /^\/my-requests/, titleKey: "AiFloatingChat.pageMyRequestsTitle", suggestionKeys: ["AiFloatingChat.pageMyRequestsSuggestion1", "AiFloatingChat.pageMyRequestsSuggestion2", "AiFloatingChat.pageMyRequestsSuggestion3"] },
-  { match: /^\/resource-mgmt/, titleKey: "AiFloatingChat.pageResourceMgmtTitle", suggestionKeys: ["AiFloatingChat.pageResourceMgmtSuggestion1", "AiFloatingChat.pageResourceMgmtSuggestion2", "AiFloatingChat.pageResourceMgmtSuggestion3"] },
-  { match: /^\/request-review/, titleKey: "AiFloatingChat.pageRequestReviewTitle", suggestionKeys: ["AiFloatingChat.pageRequestReviewSuggestion1", "AiFloatingChat.pageRequestReviewSuggestion2", "AiFloatingChat.pageRequestReviewSuggestion3"] },
-  { match: /^\/ip-management/, titleKey: "AiFloatingChat.pageIpManagementTitle", suggestionKeys: ["AiFloatingChat.pageIpManagementSuggestion1", "AiFloatingChat.pageIpManagementSuggestion2", "AiFloatingChat.pageIpManagementSuggestion3"] },
-  { match: /^\/firewall/, titleKey: "AiFloatingChat.pageFirewallTitle", suggestionKeys: ["AiFloatingChat.pageFirewallSuggestion1", "AiFloatingChat.pageFirewallSuggestion2", "AiFloatingChat.pageFirewallSuggestion3"] },
-  { match: /^\/domain/, titleKey: "AiFloatingChat.pageDomainTitle", suggestionKeys: ["AiFloatingChat.pageDomainSuggestion1", "AiFloatingChat.pageDomainSuggestion2", "AiFloatingChat.pageDomainSuggestion3"] },
-  { match: /^\/gateway/, titleKey: "AiFloatingChat.pageGatewayTitle", suggestionKeys: ["AiFloatingChat.pageGatewaySuggestion1", "AiFloatingChat.pageGatewaySuggestion2", "AiFloatingChat.pageGatewaySuggestion3"] },
-  { match: /^\/ai-api-review/, titleKey: "AiFloatingChat.pageAiApiReviewTitle", suggestionKeys: ["AiFloatingChat.pageAiApiReviewSuggestion1", "AiFloatingChat.pageAiApiReviewSuggestion2", "AiFloatingChat.pageAiApiReviewSuggestion3"] },
-  { match: /^\/ai-api-keys/, titleKey: "AiFloatingChat.pageAiApiKeysTitle", suggestionKeys: ["AiFloatingChat.pageAiApiKeysSuggestion1", "AiFloatingChat.pageAiApiKeysSuggestion2", "AiFloatingChat.pageAiApiKeysSuggestion3"] },
-  { match: /^\/ai-monitoring/, titleKey: "AiFloatingChat.pageAiMonitoringTitle", suggestionKeys: ["AiFloatingChat.pageAiMonitoringSuggestion1", "AiFloatingChat.pageAiMonitoringSuggestion2", "AiFloatingChat.pageAiMonitoringSuggestion3"] },
-  { match: /^\/ai-api/, titleKey: "AiFloatingChat.pageAiApiTitle", suggestionKeys: ["AiFloatingChat.pageAiApiSuggestion1", "AiFloatingChat.pageAiApiSuggestion2", "AiFloatingChat.pageAiApiSuggestion3"] },
-  { match: /^\/templates/, titleKey: "AiFloatingChat.pageTemplatesTitle", suggestionKeys: ["AiFloatingChat.pageTemplatesSuggestion1", "AiFloatingChat.pageTemplatesSuggestion2", "AiFloatingChat.pageTemplatesSuggestion3"] },
-  { match: /^\/gpu-mgmt/, titleKey: "AiFloatingChat.pageGpuMgmtTitle", suggestionKeys: ["AiFloatingChat.pageGpuMgmtSuggestion1", "AiFloatingChat.pageGpuMgmtSuggestion2", "AiFloatingChat.pageGpuMgmtSuggestion3"] },
-  { match: /^\/monitoring/, titleKey: "AiFloatingChat.pageMonitoringTitle", suggestionKeys: ["AiFloatingChat.pageMonitoringSuggestion1", "AiFloatingChat.pageMonitoringSuggestion2", "AiFloatingChat.pageMonitoringSuggestion3"] },
-];
-
-const DEFAULT_CONTEXT = {
-  titleKey: "AiFloatingChat.pageDefaultTitle",
-  suggestionKeys: ["AiFloatingChat.pageDefaultSuggestion1", "AiFloatingChat.pageDefaultSuggestion2", "AiFloatingChat.pageDefaultSuggestion3"],
-};
-
-/* 同一個對話框背後有幾種能力，開場列出名稱，使用者才會用到後面幾個。 */
+/* 助手只有一個對話框、一條路：每句話都交給後端的模型判斷要回答、帶路、指給你看還是規劃機器。
+   開場把做得到的事列出來，使用者才會用到後面幾個。 */
 const CAPABILITIES = [
-  { titleKey: "AiFloatingChat.capabilityFindTitle" },
-  { titleKey: "AiFloatingChat.capabilityGuideTitle" },
-  { titleKey: "AiFloatingChat.capabilityRecommendTitle" },
-  { titleKey: "AiFloatingChat.capabilityExplainTitle" },
+  "AiFloatingChat.capabilityAnswerTitle",
+  "AiFloatingChat.capabilityFindTitle",
+  "AiFloatingChat.capabilityPointTitle",
+  "AiFloatingChat.capabilityRecommendTitle",
 ];
-
-const NAVIGATION_PATTERN = /(帶我|前往|打開|開啟|跳到|導航|在哪|哪裡|頁面)/i;
-/* 「我要申請一台機器」這種整件事的描述沒有導覽關鍵字，但正是流程導覽要接的。 */
-const GUIDE_PATTERN = /(怎麼|怎樣|如何|步驟|流程|我要|我想|幫我)/i;
-/* 問規格、問選哪個 → 交給推薦規劃，回來的是一份可以直接填進申請單的配置。 */
-const RECOMMEND_PATTERN =
-  /(推薦|建議|規格|配置|幾核|多少核|記憶體|多大|硬碟|該用|適合|還是|哪個|哪種|比較|差別|差異)/i;
-/* 問眼前這個畫面的事：欄位怎麼填、為什麼送不出去、這頁在做什麼。
-   要排在導覽前面——「這格要填什麼」是要說明，不是要被帶去別頁。 */
-/* 閘門刻意放寬：真正的分類在後端（intent.py），那裡認得比較多說法，而且答不
-   出來時會退回頁面說明。前端寫太窄只會把好的分類器擋在外面。 */
-const HELP_PATTERN = new RegExp(
-  [
-    // 指著畫面上的東西問
-    "這格|這欄|這個欄位|欄位|這顆|這個按鈕|按鈕|這個選項|這裡|這張表|這個狀態",
-    "這頁|這一頁|本頁|這個頁面|目前頁面",
-    // 問意義與用法
-    "是什麼|什麼意思|代表什麼|用來做什麼|做什麼用|用途|怎麼用|怎麼填|要填什麼|填什麼",
-    "怎麼選|要選什麼|有什麼限制|限制是|格式|可以做什麼|能做什麼|解釋",
-    // 問為什麼被擋
-    "為什麼不能|為什麼送不|送不出|送不了|沒反應|按不了|紅字|驗證|必填|反灰|停用|灰的",
-  ].join("|"),
-  "i",
-);
-
-/* 問的是整個平台還是眼前這一頁。兩者的答案完全不同：
-   「平台怎麼用」要的是功能清單，「這頁怎麼用」要的是這一頁的說明。 */
-const GLOBAL_SCOPE_PATTERN = /(平台|系統|全站|整個網站|這個網站|skylab)/i;
-const SCREEN_SCOPE_PATTERN =
-  /(這頁|這一頁|本頁|這個頁面|目前頁面|這格|這欄|這個欄位|這顆|這個按鈕|這裡)/i;
-/* 「有哪些功能」不是導覽——導覽只會挑一頁帶你去，答不出一張清單。 */
-const INDEX_PATTERN =
-  /(有哪些功能|有什麼功能|哪些功能|功能清單|功能列表|有哪些頁面|可以做哪些)/i;
-const GLOBAL_USAGE_PATTERN = /(可以做什麼|能做什麼|怎麼用|做什麼)/i;
-
-/** 問的是「這個平台有哪些功能」而不是某一頁。 */
-export function isFeatureIndex(text) {
-  if (SCREEN_SCOPE_PATTERN.test(text)) return false;
-  if (INDEX_PATTERN.test(text)) return true;
-  return GLOBAL_SCOPE_PATTERN.test(text) && GLOBAL_USAGE_PATTERN.test(text);
-}
-
-/* 問配置的「知識」（差別、夠不夠、有哪些 GPU／作業系統）要直接回答；只有要我們
-   動手（推薦、幫我配、要申請）才進入規劃。否則「LXC 跟 VM 差別？」會被帶去開申請
-   表單，再反問「這台機器主要要拿來做什麼？」，問題本身沒人回答。 */
-const KNOWLEDGE_QUESTION_PATTERN =
-  /(差別|差異|不同|比較好|優缺點|夠嗎|夠不夠|夠用|可以嗎|能不能|支援|有沒有|是什麼|什麼是|什麼意思|為什麼)/i;
-const INVENTORY_QUESTION_PATTERN = /(有哪些|有什麼|哪些|還有|可以選|可選|可用|型號)/i;
-const RESOURCE_NOUN_PATTERN =
-  /(gpu|顯卡|顯示卡|作業系統|映像|規格|機器|主機|伺服器|型號|cpu|記憶體|硬碟|lxc|vm|虛擬機|容器)/i;
-const PLAN_REQUEST_PATTERN = /(幫我|替我|給我|我要|我想|我該|想要|申請|規劃|產生|推薦)/i;
-const NAVIGATE_VERB_PATTERN = /(怎麼|如何|步驟|流程|在哪|哪裡|帶我|前往)/i;
-
-/** 問的是配置相關的知識或平台有什麼資源，要回答而不是產生配置。 */
-export function isConfigQuestion(text) {
-  if (PLAN_REQUEST_PATTERN.test(text) || NAVIGATE_VERB_PATTERN.test(text)) return false;
-  if (KNOWLEDGE_QUESTION_PATTERN.test(text)) return true;
-  return INVENTORY_QUESTION_PATTERN.test(text) && RESOURCE_NOUN_PATTERN.test(text);
-}
-
-/* 講到流程或步驟就是要被帶著走，不管句子裡還有什麼——導覽優先於說明。 */
-const FLOW_PATTERN = /(流程|步驟)/i;
-
-/* 要這一頁的完整導覽（用途、時機、功能、彈出視窗、相關頁面），或問跳出來的視窗
-   怎麼填。要指著畫面講才算：「介紹一下 GPU 管理」問的是別頁，交給導覽。 */
-const PAGE_GUIDE_PATTERN =
-  /(介紹|導覽|使用說明|怎麼用|如何使用|怎麼操作|教我|有哪些功能|有什麼功能|可以做什麼|能做什麼|什麼時候用|何時用|什麼時候需要)/i;
-const DIALOG_PATTERN = /(視窗|彈窗|對話框|跳出來|跳出的)/i;
-
-/** 只問這一頁整體怎麼用：直接開前端的頁面導覽，不用文字說明。
- *  問跳出來的視窗屬於具體問題，留給 AI 回答。 */
-export function isPageTour(text) {
-  if (FLOW_PATTERN.test(text) || DIALOG_PATTERN.test(text)) return false;
-  return SCREEN_SCOPE_PATTERN.test(text) && PAGE_GUIDE_PATTERN.test(text);
-}
-
-/** 要眼前這一頁的導覽，或問這一頁跳出來的視窗。要排在教學與導覽判斷之前：
- *  在班級頁問「這頁怎麼用」，要的是這頁的說明，不是被帶去建立班級。 */
-export function isPageGuide(text) {
-  if (FLOW_PATTERN.test(text)) return false;
-  if (DIALOG_PATTERN.test(text)) return true;
-  return SCREEN_SCOPE_PATTERN.test(text) && PAGE_GUIDE_PATTERN.test(text);
-}
-
-/** 問的是眼前這個畫面。提到平台或系統而沒指著畫面，就不算。 */
-export function isScreenHelp(text) {
-  if (FLOW_PATTERN.test(text)) return false;
-  if (!HELP_PATTERN.test(text)) return false;
-  return !GLOBAL_SCOPE_PATTERN.test(text) || SCREEN_SCOPE_PATTERN.test(text);
-}
-
-/**
- * 一句話該交給哪個能力。各種能力共用同一個對話框，使用者不需要知道背後是不同的服務。
- * 進行中的任務先由 taskRoute 判斷（cancel／planNow／continueTask／recommend），
- * 否則回傳 index（功能清單）、navigate（導覽含流程）、help（說明眼前畫面）、
- * recommend（推薦配置）或 chat（一般問答）。
- */
-export function routeQuestion(text, task = newTask(), flowId = null, hasForm = false) {
-  const contextual = taskRoute(text, task, flowId, hasForm);
-  if (contextual) return contextual;
-  if (isFeatureIndex(text)) return "index";
-  if (isPageTour(text)) return "tour";
-  if (isPageGuide(text)) return "help";
-  // Teaching questions need the relationship between screens, not a machine recommendation.
-  if (TEACHING_PATTERN.test(text)) return "navigate";
-  if (FLOW_PATTERN.test(text)) return "navigate";
-  if (/(另外|同時|接著|然後|也要|並且|以及)/.test(text) && GUIDE_PATTERN.test(text)) return "navigate";
-  if ((task.stage === "collecting" || flowId) && SIDE_QUESTION_PATTERN.test(text) && !SCREEN_SCOPE_PATTERN.test(text)
-    && !/(推薦|幫我.*配置|申請)/.test(text)) return "chat";
-  if (isScreenHelp(text)) return "help";
-  if (isConfigQuestion(text)) return "chat";
-  if (RECOMMEND_PATTERN.test(text)) return "recommend";
-  if (NAVIGATION_PATTERN.test(text) || GUIDE_PATTERN.test(text)) return "navigate";
-  return "chat";
-}
-
-/**
- * 功能索引要列哪些畫面。
- * 帶參數的路徑（資源詳細）進不去，同一個路徑只留一個（申請列表與申請表單
- * 是同一個入口），避免清單裡出現點了沒用或重複的項目。
- */
-export function indexableSurfaces(surfaces) {
-  const seen = new Set();
-  return (surfaces ?? []).filter((surface) => {
-    if (!surface?.path || surface.path.includes(":")) return false;
-    if (seen.has(surface.path)) return false;
-    seen.add(surface.path);
-    return true;
-  });
-}
-
-/**
- * 把推薦出來的 form_prefill 講成人看得懂的幾行。
- * t 由呼叫端（畫面 render 時）帶入才會翻譯；省略 t 時維持原繁中字面（供單元測試）。
- */
-export function describePlan(prefill = {}, t) {
-  const tr = (key, options, fallback) => (t ? t(key, options) : fallback);
-  const lines = [];
-  if (prefill.resource_type) {
-    const typeLabel = prefill.resource_type === "vm"
-      ? tr("AiFloatingChat.resourceTypeVm", null, "虛擬機")
-      : tr("AiFloatingChat.resourceTypeLxc", null, "LXC 容器");
-    lines.push(tr("AiFloatingChat.planTypeLine", { type: typeLabel }, `類型：${typeLabel}`));
-  }
-  const spec = [
-    prefill.cores ? tr("AiFloatingChat.planCores", { cores: prefill.cores }, `${prefill.cores} 核心`) : "",
-    prefill.memory_mb
-      ? tr("AiFloatingChat.planMemory", { gb: (prefill.memory_mb / 1024).toFixed(1) }, `${(prefill.memory_mb / 1024).toFixed(1)} GB RAM`)
-      : "",
-    prefill.disk_gb ? tr("AiFloatingChat.planDisk", { gb: prefill.disk_gb }, `${prefill.disk_gb} GB 硬碟`) : "",
-  ].filter(Boolean);
-  if (spec.length) lines.push(tr("AiFloatingChat.planSpecLine", { spec: spec.join(" · ") }, `規格：${spec.join(" · ")}`));
-  if (prefill.gpu_mapping_id) {
-    lines.push(tr("AiFloatingChat.planGpuLine", { gpu: prefill.gpu_mapping_id }, `GPU：${prefill.gpu_mapping_id}`));
-  }
-  if (prefill.start_at && prefill.end_at) {
-    const day = (value) => formatDate(value);
-    lines.push(tr(
-      "AiFloatingChat.planTimeRangeLine",
-      { start: day(prefill.start_at), end: day(prefill.end_at) },
-      `時段：${day(prefill.start_at)} ～ ${day(prefill.end_at)}`,
-    ));
-  } else if (prefill.mode === "immediate") {
-    lines.push(tr("AiFloatingChat.planTimeImmediate", null, "時段：立即使用"));
-  }
-  return lines;
-}
-
-function stripThinkTags(text) {
-  return String(text || "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-}
-
-function pageContextFor(pathname) {
-  return PAGE_CONTEXTS.find((item) => item.match.test(pathname)) ?? DEFAULT_CONTEXT;
-}
 
 function displayName(user, t) {
   return user?.full_name?.trim() || user?.email?.split("@")[0] || t("AiFloatingChat.defaultUserName");
 }
 
-/* 回覆中：章魚學士敲筆電，飄出 0 和 1（原本是三個跳動的點） */
-function TypingIndicator() {
+/* 回覆中：章魚學士敲筆電，飄出 0 和 1（原本是三個跳動的點）。
+   助手用過工具、還要再想一輪時，旁邊多一行字說明它做到哪了（statusKey）。 */
+function TypingIndicator({ statusKey = null }) {
   const { t } = useTranslation("components");
   return (
     <div className={styles.typing} role="status" aria-label={t("AiFloatingChat.aiReplyingAriaLabel")}>
       <OctoPet activity="thinking" scale={3} />
+      {statusKey && <span className={styles.typingStatus}>{t(statusKey)}</span>}
     </div>
   );
 }
@@ -265,159 +58,6 @@ const OVERLAY_QUERY = "(max-width: 1439px)";
 
 /* 回覆對齊到訊息區上緣時留的距離：剛好避開上緣的淡出帶（.messages 的 mask） */
 const REPLY_TOP_GAP_PX = 16;
-
-const STEP_ICON = { done: "check_circle", current: "play_circle", todo: "radio_button_unchecked" };
-
-/* Only confirmed actions advance progress. Opening a page never completes work. */
-export function stepStatuses(steps, floor = 0) {
-  const marked = steps.findIndex((step) => step.status === "current");
-  const active = marked >= 0 ? Math.max(floor, marked) : (floor > 0 ? floor : -1);
-  if (active < 0) return steps.map((step) => step.status);
-  return steps.map((_, index) => (index < active ? "done" : index === active ? "current" : "todo"));
-}
-
-function StepList({ steps, currentPath, floor = 0, onNavigate, onRecommend }) {
-  const statuses = stepStatuses(steps, floor);
-  return (
-    <ol className={styles.stepList}>
-      {steps.map((step, index) => (
-        <li key={`${step.path}-${index}`} className={styles[`step_${statuses[index]}`]}>
-          {/* action 步驟由助手就地完成，不換頁 */}
-          <button
-            type="button"
-            aria-current={step.path === currentPath ? "location" : undefined}
-            onClick={() => (step.action === "recommend"
-              ? onRecommend()
-              : onNavigate(step.path, step.state, index))}
-          >
-            <MIcon
-              name={step.action === "recommend" && statuses[index] !== "done"
-                ? "tune"
-                : (STEP_ICON[statuses[index]] ?? STEP_ICON.todo)}
-              size={17}
-            />
-            <span>
-              <strong>{step.title}</strong>
-              {/* 做完的步驟只留標題，說明文字佔掉的版面留給還沒做的 */}
-              {step.detail && statuses[index] !== "done" && <small>{step.detail}</small>}
-            </span>
-          </button>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function PlanCard({ plan, onNavigate }) {
-  const { t } = useTranslation("components");
-  const lines = describePlan(plan.prefill, t);
-  return (
-    <div className={styles.planCard}>
-      {lines.length > 0 && (
-        <ul className={styles.planSpec}>
-          {lines.map((line) => <li key={line}>{line}</li>)}
-        </ul>
-      )}
-      <button type="button" onClick={() => onNavigate("/my-requests", { create: true, prefill: plan.prefill })}>
-        <MIcon name="edit_note" size={17} />
-        <span>
-          <strong>{t("AiFloatingChat.planGoToFormTitle")}</strong>
-          <small>{t("AiFloatingChat.planGoToFormDetail")}</small>
-        </span>
-      </button>
-    </div>
-  );
-}
-
-/* 配置模式的答案晶片：點一下就等於打了那句話 */
-function ChoiceRow({ choices, progress, onAnswer, onPlanNow, allowPlan = true }) {
-  const { t } = useTranslation("components");
-  return (
-    <div className={styles.choiceBlock}>
-      {progress && <span className={styles.choiceProgress}>{progress}</span>}
-      <div className={styles.choiceRow}>
-        {choices.map((choice) => (
-          <button key={choice} type="button" onClick={() => onAnswer(choice)}>
-            {choice}
-          </button>
-        ))}
-        {allowPlan && <button type="button" className={styles.choiceSkip} onClick={onPlanNow}>
-          {t("AiFloatingChat.choiceSkipButton")}
-        </button>}
-      </div>
-    </div>
-  );
-}
-
-// markdown 解析器很大，等真的有 AI 回覆要顯示時才載入
-const MarkdownContent = lazy(() => import("./MarkdownContent"));
-
-function Message({ message, live = false, currentPath, onNavigate, onRecommend, onAnswer, onPlanNow, onFlowStep }) {
-  const isUser = message.role === "user";
-  return (
-    <div className={`${styles.message} ${isUser ? styles.messageUser : styles.messageAssistant}`}>
-      {/* 最新一則回覆是整隻會動的章魚（安靜模式），較舊的回覆是靜態頭像 */}
-      {!isUser && (
-        <span className={`${styles.messageAvatar} ${live ? styles.messageAvatarLive : ""}`}>
-          {live ? <OctoPet scale={2} quiet /> : <OctoAvatar />}
-        </span>
-      )}
-      <div className={styles.messageContent}>
-        {/* 模型回的是 markdown（清單、粗體、程式碼），直接印出來會看到一堆星號 */}
-        {isUser ? (
-          <div className={styles.messageText}>{message.content}</div>
-        ) : (
-          <div className={`${styles.messageText} ${styles.markdown}`}>
-            <Suspense fallback={message.content}>
-              <MarkdownContent>{message.content}</MarkdownContent>
-            </Suspense>
-          </div>
-        )}
-        {/* 先給結果（配置），再給接下來要做的事（流程），最後才是選項 */}
-        {message.plan && <PlanCard plan={message.plan} onNavigate={onNavigate} />}
-        {message.steps?.length > 0 && (
-          <StepList
-            steps={message.steps}
-            currentPath={currentPath}
-            floor={message.stepsFloor ?? 0}
-            onNavigate={onNavigate}
-            onRecommend={onRecommend}
-          />
-        )}
-        {message.flows?.map((flow) => (
-          <div key={flow.flow_id}>
-            <strong>{flow.flow_title}</strong>
-            <StepList steps={flow.steps} currentPath={currentPath}
-              onNavigate={(path, state, index) => onFlowStep(flow.flow_id, path, state, false, index)}
-              onRecommend={() => onFlowStep(flow.flow_id, null, null, true)} />
-          </div>
-        ))}
-        {message.choices?.length > 0 && (
-          <ChoiceRow
-            choices={message.choices}
-            progress={message.progress}
-            onAnswer={onAnswer}
-            onPlanNow={onPlanNow}
-            allowPlan={message.allowPlan !== false}
-          />
-        )}
-        {message.targets?.length > 0 && (
-          <div className={styles.actionList}>
-            {message.targets.map((target) => (
-              <button key={target.path} type="button" onClick={() => onNavigate(target.path, target.state)}>
-                <span>
-                  <strong>{target.title}</strong>
-                  {target.reason && <small>{target.reason}</small>}
-                </span>
-                <MIcon name="arrow_forward" size={17} />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /* 面板左側剩下的寬度低於這個值（手機全螢幕抽屜、窄視窗）就不讓位：
    對話框擠不進去，寧可讓面板蓋著 */
@@ -469,36 +109,39 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
       docEl.style.removeProperty("--ai-panel-inset");
     };
   }, [panelOpen]);
+
   const location = useLocation();
-  const navigate = useNavigate();
   const confirmLeave = useConfirmLeave();
   const { user } = useAuth();
   const { t } = useTranslation("components");
-  /* 申請表單開著時會把自己註冊進來：規劃就地填進欄位，而且拿得到
-     這張表單當下的真實候選，推薦的 GPU 與時段才不會是憑空的。 */
-  const { requestForm, surface, requestSubmission } = useContext(LayoutContext);
-  const requestFormRef = useRef(requestForm);
-  requestFormRef.current = requestForm;
-  /* 目前這一頁對應到哪個畫面定義。有頁面自己註冊就用它（同一個路徑可能有多個
-     畫面，例如申請列表與申請表單），否則靠路徑對照。清單只跟身分有關，載一次。 */
-  const [surfaceList, setSurfaceList] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [history, setHistory] = useState([]);
+  const close = () => onOpenChange(false);
+  const assistant = useAssistantChat({ overlayMode, onClose: close, confirmLeave });
+  const { messages, loading, streaming, failedRef, activeSurface, activeSurfaceId } = assistant;
+  /* 回答邊寫邊顯示：寫出字之前是敲筆電的章魚，有字之後就是一則正在變長的回覆。
+     排在對話的最後一格，寫完時由完整的回應原地接手（同一個 key，不會重播進場動畫）。 */
+  const writingText = loading ? streaming?.text ?? "" : "";
+  const shownMessages = writingText
+    ? [...messages, { role: "assistant", content: writingText }]
+    : messages;
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  /* 浮動按鈕的章魚要知道：面板關著時回覆好了（或出錯）還沒被看到，就冒對話泡泡提醒 */
+
+  const inputRef = useRef(null);
+  /* 浮動按鈕的章魚要知道：面板關著時回覆好了（或出錯）還沒被看到，就冒對話泡泡提醒。
+     面板開著就把游標還給輸入框——等回覆的期間它是停用的，要等重新啟用之後才接得住焦點 */
   const [fabNotice, setFabNotice] = useState(null);
-  const replyFailedRef = useRef(false);
   const wasLoadingRef = useRef(false);
   useEffect(() => {
-    if (loading) replyFailedRef.current = false;
-    else if (wasLoadingRef.current && !open) setFabNotice(replyFailedRef.current ? "error" : "done");
+    if (!loading && wasLoadingRef.current) {
+      if (open) inputRef.current?.focus();
+      else setFabNotice(failedRef.current ? "error" : "done");
+    }
     wasLoadingRef.current = loading;
-  }, [loading, open]);
+  }, [loading, open, failedRef]);
   useEffect(() => {
     if (open) setFabNotice(null);
   }, [open]);
   const fabActivity = loading ? "thinking" : fabNotice ?? "idle";
+
   /* 只有最新一則回覆旁的章魚會動；AI 正在回覆時下方已有敲筆電的章魚，這時全部回覆都用靜態頭像 */
   let liveReplyIndex = -1;
   if (!loading) {
@@ -506,588 +149,89 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
       if (messages[i].role !== "user") { liveReplyIndex = i; break; }
     }
   }
+
   const scrollRef = useRef(null);
-  const inputRef = useRef(null);
-  // 輸入框從兩行開始，隨內容長高；到上限（.composer textarea 的 max-height）就停，之後框內捲動。
-  // 助手打開、輸入框出現後才量
-  useAutoGrowTextarea(inputRef, input, presence.open);
-  // 配置模式：{ answered, total }，null 代表沒在配置模式
-  const [intake, updateIntake] = useState(null);
-  const intakeRef = useRef(null);
-  function setIntake(value) { intakeRef.current = value; updateIntake(value); }
-  const taskRef = useRef(newTask());
-  // 正在進行的流程，配置產生後要接回它的下一步，不能斷在配置卡片
-  const flowRef = useRef(null);
-  const workflowsRef = useRef(new Map());
-  const [workflows, setWorkflows] = useState([]);
-  const pageContext = useMemo(() => pageContextFor(location.pathname), [location.pathname]);
-  const activeSurface = useMemo(() => {
-    const matched = matchSurface(surfaceList, location.pathname);
-    if (!surface?.id) return matched;
-    return surfaceList.find((item) => item.id === surface.id) ?? matched;
-  }, [surface, surfaceList, location.pathname]);
-  const activeSurfaceId = activeSurface?.id ?? surface?.id ?? null;
-  const screenRef = useRef(null);
-  screenRef.current = { path: location.pathname + location.search, surfaceId: activeSurfaceId, getState: surface?.getState };
-  function screenSnapshot() {
-    const screen = screenRef.current;
-    return JSON.stringify({ path: screen.path, surfaceId: screen.surfaceId, state: screen.getState?.() ?? {} });
-  }
-  /* 頁名優先用畫面定義的標題：它涵蓋每一頁，PAGE_CONTEXTS 只列了一部分，
+
+  const pageContext = pageContextFor(location.pathname);
+  /* 頁名優先用畫面定義的標題：它涵蓋每一頁，pageContexts 只列了一部分，
      沒列到的會落到「SkyLab」，等於沒講。 */
   const currentPageName = activeSurface?.title ?? t(pageContext.titleKey);
-  const pageTourId = getRouteGuide(location.pathname)?.id ?? null;
-  const hasPageTour = Boolean(pageTourId);
-
-  useEffect(() => {
-    const flow = flowRef.current;
-    if (flowOwnsPath(flow, location.pathname)) {
-      flow.resumePath = location.pathname + location.search;
-    }
-  }, [location.pathname, location.search]);
-
-  function saveWorkflow() {
-    rememberWorkflow(workflowsRef.current, flowRef.current, taskRef.current, intakeRef.current);
-    setWorkflows([...workflowsRef.current.values()].map((entry) => entry.flow));
-  }
-
-  function selectWorkflow(id) {
-    rememberWorkflow(workflowsRef.current, flowRef.current, taskRef.current, intakeRef.current);
-    const entry = workflowsRef.current.get(id);
-    if (!entry) return null;
-    flowRef.current = entry.flow;
-    if (flowOwnsPath(entry.flow, location.pathname)) {
-      entry.flow.resumePath = location.pathname + location.search;
-    }
-    taskRef.current = entry.task;
-    setIntake(entry.intake);
-    setWorkflows([...workflowsRef.current.values()].map((item) => item.flow));
-    return entry.flow;
-  }
-
-  function handleFlowStep(id, path, state, recommend = false, index = 0) {
-    if (loading) return;
-    const flow = selectWorkflow(id);
-    if (!flow) return;
-    if (recommend) { runRecommendation(); return; }
-    if (id === "prepare_environment") {
-      handleNavigate(environmentStepPath(location.pathname + location.search, flow.resumePath, flow.steps[index]?.state?.environmentTab));
-      return;
-    }
-    const resume = flow.resumePath;
-    const resumeBase = resume?.split("?")[0];
-    handleNavigate(resumeBase === path || resumeBase?.startsWith(`${path}/`) ? resume : path, state);
-  }
-
-  useEffect(() => {
-    if (!requestSubmission?.id) return;
-    const active = ["planned", "filled"].includes(taskRef.current.stage);
-    const saved = [...workflowsRef.current.values()].find((entry) => ["planned", "filled"].includes(entry.task.stage));
-    const task = active ? taskRef.current : saved?.task;
-    const flow = active ? flowRef.current : saved?.flow;
-    if (!task) return;
-    task.stage = "submitted";
-    task.requestId = requestSubmission.id;
-    const steps = markStep(flow?.steps ?? [], 2);
-    if (flow) flow.steps = steps;
-    const message = {
-      role: "assistant", content: t("AiFloatingChat.requestSubmitted"), steps, flowId: flow?.id,
-      choices: [t("AiFloatingChat.checkRequestProgress")], allowPlan: false,
-    };
-    setMessages((previous) => [...previous, message]);
-    setHistory((previous) => [...previous, { role: "assistant", content: message.content }]);
-  }, [requestSubmission, t]);
-
-  useEffect(() => {
-    let cancelled = false;
-    AiContextualHelpService.surfaces()
-      .then((list) => { if (!cancelled) setSurfaceList(list ?? []); })
-      .catch(() => { /* 對照表載不到就只剩頁面自己註冊的那一個，不影響其他能力 */ });
-    return () => { cancelled = true; };
-  }, []);
 
   useEffect(() => {
     if (open) window.setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
 
+  // 輸入框從兩行開始，隨內容長高；到上限（.composer textarea 的 max-height）就停，之後框內捲動。
+  // 助手打開、輸入框出現後才量
+  useAutoGrowTextarea(inputRef, input, presence.open);
+
   /* 自己送出的訊息與「回覆中」捲到底；助手回覆出來時，改把「剛問的那句＋回覆開頭」對齊到
-     訊息區上緣——長回答（頁面導覽、流程步驟）要從第一行讀起，不是停在結尾。
-     回覆比訊息區矮時，瀏覽器會把捲動位置夾在最底，效果等同捲到底 */
+     訊息區上緣——長回答（頁面說明、流程步驟）要從第一行讀起，不是停在結尾。
+     回覆比訊息區矮時，瀏覽器會把捲動位置夾在最底，效果等同捲到底。
+     回覆是邊寫邊長高的：寫的期間只往下補到定位點，不把已經往下讀的人拉回來；寫完時
+     位置已經對好，不再動。 */
+  const anchoredWhileWritingRef = useRef(false);
   useEffect(() => {
     const box = scrollRef.current;
     if (!box) return;
     const last = messages[messages.length - 1];
-    if (loading || !last || last.role === "user") {
+    const writing = Boolean(writingText);
+    if (!last || (!writing && (loading || last.role === "user"))) {
       box.scrollTop = box.scrollHeight;
+      anchoredWhileWritingRef.current = false;
       return;
     }
     const reply = box.lastElementChild;
-    const asked = messages[messages.length - 2]?.role === "user" ? reply?.previousElementSibling : null;
+    const askedMessage = writing ? last : messages[messages.length - 2];
+    const asked = askedMessage?.role === "user" ? reply?.previousElementSibling : null;
     const anchor = asked ?? reply;
     // offsetTop 不受進場動畫的位移與捲動中的位置影響；兩者同一個 offsetParent（面板）
-    box.scrollTop = anchor ? Math.max(0, anchor.offsetTop - box.offsetTop - REPLY_TOP_GAP_PX) : box.scrollHeight;
-  }, [messages, loading]);
-
-  function close() {
-    onOpenChange(false);
-  }
+    const target = anchor ? Math.max(0, anchor.offsetTop - box.offsetTop - REPLY_TOP_GAP_PX) : box.scrollHeight;
+    if (writing) {
+      if (box.scrollTop < target) box.scrollTop = target;
+      anchoredWhileWritingRef.current = true;
+      return;
+    }
+    if (anchoredWhileWritingRef.current) {
+      anchoredWhileWritingRef.current = false;
+      return;
+    }
+    box.scrollTop = target;
+  }, [messages, loading, writingText]);
 
   function clearChat() {
-    setMessages([]);
-    setHistory([]);
+    assistant.clearChat();
     setInput("");
-    setIntake(null);
-    taskRef.current = newTask();
-    flowRef.current = null;
-    workflowsRef.current.clear();
-    setWorkflows([]);
     inputRef.current?.focus();
   }
 
-  /* 使用者點的導覽（步驟、目標、計畫卡）要先確認未儲存的表單；助手自動導覽的流程不在此列。
-     覆蓋層模式先收起面板再問：面板的 backdrop 與 z-index 會蓋住確認框，也會吃掉 Esc/Enter。
-     並排停靠模式的確認框會避開面板（--ai-panel-inset），可以開著問。 */
-  async function handleNavigate(path, state) {
-    if (!path) return;
-    if (overlayMode) close();
-    if (!(await confirmLeave())) return;
-    navigate(path, state ? { state } : undefined);
+  /* 輸入框、建議問題、快速回覆晶片都走這裡：沒有分流，就是把這句話交給助手 */
+  async function submit(value = input) {
+    const text = String(value).trim();
+    if (!text || loading) return;
+    setInput("");
+    await assistant.send(text);
   }
 
-  function appendAssistant(content, extra = {}) {
-    setMessages((previous) => [...previous, { role: "assistant", content, flowId: flowRef.current?.id, ...extra }]);
-    setHistory((previous) => [...previous, { role: "assistant", content }]);
-  }
-
-  async function startIntake(nextHistory) {
-    if (flowRef.current && !["request_machine", "publish_service"].includes(flowRef.current.id)) {
-      rememberWorkflow(workflowsRef.current, flowRef.current, taskRef.current, intakeRef.current);
-      flowRef.current = null;
-      taskRef.current = { ...newTask(), goal: nextHistory.filter((item) => item.role === "user").at(-1)?.content ?? "" };
-      setIntake(null);
-    }
-    if (flowRef.current?.id === "publish_service") taskRef.current.returnFlow = flowRef.current;
-    taskRef.current.stage = "collecting";
-    if (!requestFormRef.current) navigate("/my-requests", { state: { create: true } });
-    const latest = nextHistory.filter((message) => message.role === "user").at(-1);
-    if (latest) taskRef.current.intakeHistory.push(latest);
-    return advanceIntake(taskRef.current.intakeHistory);
-  }
-
-  async function continueTask() {
-    if (["open_class", "prepare_environment", "share_template"].includes(flowRef.current?.id)) {
-      const question = "繼續目前流程，請依目前畫面與已保存狀態說明接下來要做什麼。";
-      return sendNavigation(question, [...history, { role: "user", content: question }]);
-    }
-    const task = taskRef.current;
-    if (task.stage === "filled" || task.stage === "planned") {
-      appendAssistant(t("AiFloatingChat.reviewBeforeSubmit"), {
-        targets: [{ title: t("AiFloatingChat.planGoToFormTitle"), path: "/my-requests", state: { create: true } }],
-      });
-      return true;
-    }
-    if (task.stage === "submitted") {
-      /* 要的是當下的伺服器狀態：staleTime 0 一定重抓，結果寫回共用快取，「我的資源」「我的申請」頁也跟著更新 */
-      const [requests, mine] = await Promise.all([
-        queryClient.fetchQuery({ ...myVmRequestsQueryOptions(), staleTime: 0 }),
-        queryClient.fetchQuery({ ...myResourcesQueryOptions(), staleTime: 0 }),
-      ]);
-      const request = requests?.find((item) => item.id === task.requestId);
-      if (!requestIsReady(request, mine?.resources ?? [])) {
-        appendAssistant(t("AiFloatingChat.requestNotReady", {
-          status: request?.status ?? "unknown", provisioning: request?.provisioning_status ?? "unknown",
-        }), {
-          choices: [t("AiFloatingChat.checkRequestProgress")], allowPlan: false,
-          targets: [{ title: t("AiFloatingChat.pageMyRequestsTitle"), path: "/my-requests" }],
-        });
-        return true;
-      }
-      const readySteps = markStep(flowRef.current?.steps ?? [], 3);
-      task.stage = "ready";
-      if (task.returnFlow) {
-        flowRef.current = task.returnFlow;
-        task.returnFlow = null;
-        appendAssistant(t("AiFloatingChat.resumePublish", { goal: task.goal }), { steps: flowRef.current.steps });
-      } else {
-        if (flowRef.current) flowRef.current.steps = readySteps;
-        appendAssistant(t("AiFloatingChat.machineReady"), { steps: readySteps });
-      }
-      navigate(`/my-resources/${request.vmid}`);
-      return true;
-    }
-    const step = flowRef.current?.steps.find((item) => item.status === "current");
-    if (step?.action === "recommend") return startIntake(history);
-    if (step) {
-      const resume = flowRef.current?.resumePath;
-      navigate(resume ?? step.path, step.state ? { state: step.state } : undefined);
-      appendAssistant(step.detail);
-      return true;
-    }
-    return false;
-  }
-
-  async function sendNavigation(text, nextHistory) {
-    const requestedScreen = screenSnapshot();
-    const data = await AiNavigationService.resolve(text, {
-      // 送出前的前文（不含這一輪），讓「然後呢」這種追問有東西可以指
-      history: withTaskMemory(nextHistory.slice(0, -1), taskRef.current),
-      currentPath: location.pathname + location.search,
-      surfaceId: activeSurfaceId,
-      screenState: surface?.getState?.() ?? {},
-      activeFlowId: flowRef.current?.id,
-      pendingFlowIds: [...workflowsRef.current.keys()],
-    });
-    if (screenSnapshot() !== requestedScreen) {
-      appendAssistant(t("AiFloatingChat.screenChanged"));
-      return true;
-    }
-    const steps = data.steps ?? [];
-
-    if (data.action === "answer" && data.answer) {
-      /* 已在目標頁時後端改回說明；其他相關頁面仍附成按鈕（後端已排除目前頁） */
-      const targets = (data.suggestions ?? []).filter((target) => target?.path && target?.title);
-      appendAssistant(data.answer, targets.length ? { targets } : {});
-      return true;
-    }
-
-    if (data.action === "guide" && steps.length) {
-      rememberWorkflow(workflowsRef.current, flowRef.current, taskRef.current, intakeRef.current);
-      const flows = data.flows?.length ? data.flows : [{ flow_id: data.flow_id, flow_title: data.flow_title, steps }];
-      addWorkflows(workflowsRef.current, flows, text);
-      selectWorkflow(flows[0].flow_id);
-      if (flows.length > 1) {
-        appendAssistant(data.answer || t("AiFloatingChat.multipleFlowsIntro"), { flows });
-        return true;
-      }
-      if (data.flow_id === "request_machine") {
-        if (["planned", "filled", "submitted", "ready"].includes(taskRef.current.stage)) return continueTask();
-        return startIntake(nextHistory);
-      }
-      if (data.flow_id === "publish_service") {
-        taskRef.current.returnFlow = flowRef.current;
-        let resources;
-        try {
-          resources = (await queryClient.fetchQuery({ ...myResourcesQueryOptions(), staleTime: 0 })).resources;
-        } catch { /* Ask instead of assuming empty. */ }
-        if (Array.isArray(resources) && resources.length === 0) return startIntake(nextHistory);
-        if (!Array.isArray(resources)) {
-          appendAssistant(t("AiFloatingChat.machineCheckFailed"), {
-            choices: [t("AiFloatingChat.noMachineChoice"), t("AiFloatingChat.hasMachineChoice")], allowPlan: false,
-          });
-          return true;
-        }
-      }
-      const flowTitle = data.flow_title ?? t("AiFloatingChat.defaultFlowTitle");
-      const content = data.answer || t("AiFloatingChat.flowIntro", { flowTitle });
-      const assistantMessage = { role: "assistant", content, flows };
-      setMessages((previous) => [...previous, assistantMessage]);
-      setHistory((previous) => [...previous, {
-        role: "assistant",
-        content: `${content}（${steps.map((step) => step.title).join("→")}）`,
-      }]);
-      return true;
-    }
-
-    const targets = [...(data.primary ? [data.primary] : []), ...(data.suggestions ?? [])]
-      .filter((target, index, all) => all.findIndex((item) => item.path === target.path) === index);
-
-    // 導覽答不出東西時，交給一般問答回答，不要用「找不到頁面」把使用者擋掉。
-    if (!targets.length && data.clarification_question) {
-      appendAssistant(data.clarification_question);
-      return true;
-    }
-    if (!targets.length) return false;
-
-    const content = data.action === "clarify"
-      ? (data.clarification_question || t("AiFloatingChat.defaultClarificationQuestion"))
-      : (data.answer || t("AiFloatingChat.foundTargetsMessage"));
-    const assistantMessage = { role: "assistant", content, targets };
-    setMessages((previous) => [...previous, assistantMessage]);
-    setHistory((previous) => [...previous, { role: "assistant", content }]);
-    return true;
-  }
-
-  /* 推薦配置：規劃出一份可以直接送出的申請內容。資源候選（作業系統、GPU、時段）
-     由後端自己補，所以助手不在申請頁也能規劃。 */
-  async function sendRecommendation(nextHistory) {
-    let data;
-    const source = taskRef.current.intakeHistory.length ? taskRef.current.intakeHistory : nextHistory;
-    try {
-      data = await AiTemplateRecommendationApi.recommend({
-        messages: withTaskMemory(recentMessages(source), taskRef.current),
-        top_k: 5,
-        device_nodes: [],
-        form_context: requestFormRef.current?.getContext() ?? null,
-        intake_facts: intakeFactsPayload(taskRef.current),
-      });
-    } catch (error) {
-      throw new Error(t(planErrorKey(error)));
-    }
-    const plan = data?.final_plan;
-    const prefill = plan?.form_prefill;
-    if (!prefill?.resource_type) throw new Error(t("AiFloatingChat.planFailed"));
-
-    const summary = stripThinkTags(plan.summary);
-
-    /* 配置只是流程的一步，產生完要把剩下的步驟接回來，不能停在這裡。 */
-    const flow = flowRef.current;
-    const recommendIndex = flow
-      ? flow.steps.findIndex((step) => step.action === "recommend")
-      : -1;
-    /* 進度停在規劃那一步：欄位填好了，但檢查、輸入密碼、按送出都還在同一張
-       表單上，還沒走到「等待審核」。 */
-    const followUp = flow && recommendIndex >= 0
-      ? { steps: flow.steps, stepsFloor: recommendIndex }
-      : {};
-
-    /* 申請表單開著就直接填進去——填好的表單本身就是結果，
-       不需要再給一張長得像表單的卡片。表單沒開才給卡片＋一鍵帶過去。 */
-    const filled = Boolean(requestFormRef.current);
-    if (filled) requestFormRef.current.applyPrefill(prefill);
-    else navigate("/my-requests", { state: { create: true, prefill } });
-    taskRef.current.stage = filled ? "filled" : "planned";
-    setIntake(null);
-    taskRef.current.pendingKey = null;
-    const filledNote = t("AiFloatingChat.filledFormNote");
-    let content = filled
-      ? (summary ? `${summary}\n\n${filledNote}` : filledNote)
-      : (summary || t("AiFloatingChat.recommendationIntro"));
-    if (taskRef.current.returnFlow) content += `\n\n${t("AiFloatingChat.publishAfterApproval")}`;
-
-    const assistantMessage = {
-      role: "assistant",
-      content,
-      flowId: flowRef.current?.id,
-      ...(filled ? {} : { plan: { prefill } }),
-      ...followUp,
-    };
-    setMessages((previous) => [...previous, assistantMessage]);
-    setHistory((previous) => [...previous, {
-      role: "assistant",
-      content: `${content}（${describePlan(prefill).join("；")}）`,
-    }]);
-    return true;
-  }
-
-  /* Keep answers between turns and ask only the missing question supplied by intake. */
-  async function advanceIntake(nextHistory) {
-    const state = await AiNavigationService.intake(nextHistory, {
-      facts: taskRef.current.facts,
-      pendingKey: taskRef.current.pendingKey,
-      goal: taskRef.current.goal,
-    });
-    taskRef.current.facts = state.facts ?? {};
-    taskRef.current.stage = "collecting";
-    /* 直接問「推薦規格」進來的人沒有走過流程，這裡把流程補上，
-       配置產生後才有下一步可以接。 */
-    if (state.steps?.length) {
-      flowRef.current = { id: state.flow_id, title: state.flow_title, steps: state.steps };
-    }
-
-    if (state.ready || !state.question) {
-      return await sendRecommendation(nextHistory);
-    }
-
-    taskRef.current.pendingKey = state.question.key;
-    setIntake({ answered: state.answered, total: state.total });
-
-    // The question and its choices share one source; no model can change the topic.
-    const assumptions = state.assumptions?.length
-      ? t("AiFloatingChat.defaultAssumptions", { assumptions: joinList(state.assumptions) })
-      : "";
-    const question = [assumptions, state.question.text].filter(Boolean).join("\n\n");
-    taskRef.current.intakeHistory.push({ role: "assistant", content: question });
-
-    const assistantMessage = {
-      role: "assistant",
-      content: question,
-      flowId: flowRef.current?.id,
-      choices: state.question.options,
-      progress: t("AiFloatingChat.answeredProgress", { answered: state.answered, total: state.total }),
-    };
-    setMessages((previous) => [...previous, assistantMessage]);
-    setHistory((previous) => [...previous, { role: "assistant", content: question }]);
-    return true;
-  }
-
-  /* 流程裡的「讓 AI 規劃配置」那一步：從這裡進配置模式。 */
-  async function runRecommendation() {
-    if (loading) return;
-    const nextHistory = taskRef.current.intakeHistory.length
-      ? taskRef.current.intakeHistory
-      : [{ role: "user", content: taskRef.current.goal || "我想申請一台機器，請幫我規劃配置。" }];
-    setLoading(true);
-    try {
-      if (taskRef.current.stage === "collecting") await advanceIntake(nextHistory);
-      else await startIntake(nextHistory);
-    } catch (error) {
-      replyFailedRef.current = true;
-      setMessages((previous) => [...previous, {
-        role: "assistant",
-        content: error instanceof Error ? error.message : t(planErrorKey(error)),
-      }]);
-    } finally {
-      saveWorkflow();
-      setLoading(false);
-      inputRef.current?.focus();
-    }
-  }
-
-  /* 不想被問完的人可以直接跳到結果 */
-  async function planNow() {
-    if (loading) return;
-    setLoading(true);
-    try {
-      await sendRecommendation(history);
-    } catch (error) {
-      replyFailedRef.current = true;
-      appendAssistant(error?.message || t("AiFloatingChat.planFailed"));
-    } finally {
-      saveWorkflow();
-      setLoading(false);
-      inputRef.current?.focus();
-    }
-  }
-
-  /* 功能索引：使用者問「有哪些功能」。清單就是他權限內看得到的畫面，
-     不呼叫模型——列清單不需要推論，也不該有幻覺的空間。 */
-  function sendFeatureIndex() {
-    /* 說明寫「什麼時候用」：使用者挑頁面看的是自己的處境，不是頁面定義 */
-    const targets = indexableSurfaces(surfaceList).map((surface) => ({
-      path: surface.path,
-      title: surface.title,
-      reason: surface.when_to_use || surface.purpose || "",
-    }));
-    if (!targets.length) return false;
-    const content = t("AiFloatingChat.featureIndexIntro", { count: targets.length });
-    setMessages((previous) => [...previous, { role: "assistant", content, targets }]);
-    setHistory((previous) => [...previous, {
-      role: "assistant",
-      content: `${content}（${targets.map((target) => target.title).join("、")}）`,
-    }]);
-    return true;
-  }
-
-  /* 畫面說明：只問眼前這一頁。沒有對應的畫面定義就交給下一個能力，
-     不要硬答——這個助手的價值全在「講的都有依據」。 */
-  async function sendContextualHelp(text) {
-    if (!activeSurfaceId) return false;
-    const requestedScreen = screenSnapshot();
-    const data = await AiContextualHelpService.explain({
-      question: text,
-      surfaceId: activeSurfaceId,
-      activeTarget: surface?.getActiveTarget?.() ?? null,
-      contextVersion: surface?.getVersion?.() ?? 0,
-      state: surface?.getState?.() ?? {},
-    });
-    if (screenSnapshot() !== requestedScreen) {
-      appendAssistant(t("AiFloatingChat.screenChanged"));
-      return true;
-    }
-    const answer = data?.answer?.trim();
-    if (!answer) return false;
-    /* 相關頁面由後端依權限挑好，附成可以直接點的按鈕：「要做的事不在這頁」時帶過去 */
-    const targets = (data.related ?? []).filter((target) => target?.path && target?.title);
-    setMessages((previous) => [...previous, { role: "assistant", content: answer, targets }]);
-    setHistory((previous) => [...previous, { role: "assistant", content: answer }]);
-    return true;
-  }
-
-  /* 頁面導覽按鈕、建議晶片與提示泡泡：關掉助手，改由前端導覽一步步帶 */
+  /* 頁面導覽按鈕、建議晶片與提示泡泡：這一頁有前端導覽就關掉助手、一步步帶著看；
+     沒有導覽的頁面才替使用者問「這個頁面怎麼用？」。使用者自己打字問的一律交給助手，不在前端猜意圖 */
+  const pageTourId = getRouteGuide(location.pathname)?.id ?? null;
+  const hasPageTour = Boolean(pageTourId);
   function startPageTour() {
     onOpenChange(false);
     window.dispatchEvent(new CustomEvent(USER_GUIDE_START_EVENT));
   }
-
-  async function sendChat(text, nextHistory) {
-    const remembered = withTaskMemory(recentMessages(nextHistory, { maxMessages: 20 }), taskRef.current);
-    const contextualHistory = remembered.map((message, index) => {
-      if (index !== remembered.length - 1 || message.role !== "user") return message;
-      return {
-        ...message,
-        content: `目前所在頁面：${currentPageName}。使用者問題：${message.content}`,
-      };
-    });
-    const data = await AiTemplateRecommendationApi.chat({
-      messages: contextualHistory,
-      top_k: 5,
-      device_nodes: [],
-      form_context: requestFormRef.current?.getContext() ?? null,
-    });
-    const assistantMessage = {
-      role: "assistant",
-      content: stripThinkTags(data.reply) || t("AiFloatingChat.noReplyFallback"),
-    };
-    setMessages((previous) => [...previous, assistantMessage]);
-    setHistory((previous) => [...previous, assistantMessage]);
+  function showPageGuide() {
+    if (hasPageTour) startPageTour();
+    else submit(t("AiFloatingChat.pageGuideQuestion"));
   }
-
-  async function send(value = input) {
-    const text = value.trim();
-    if (!text || loading) return;
-
-    // 每個能力答不出來就往下一個退，最後一定有一般問答接住。
-    let route = text === t("AiFloatingChat.checkRequestProgress") ? "continueTask"
-      : text === t("AiFloatingChat.hasMachineChoice") ? "continueTask"
-      : text === t("AiFloatingChat.noMachineChoice") ? "recommend"
-      : routeQuestion(text, taskRef.current, flowRef.current?.id, Boolean(requestFormRef.current));
-    if (route === "tour") {
-      if (hasPageTour) {
-        setInput("");
-        startPageTour();
-        return;
-      }
-      route = "help";
-    }
-
-    const userMessage = { role: "user", content: text };
-    const nextHistory = [...history, userMessage];
-    setInput("");
-    setMessages((previous) => [...previous, userMessage]);
-    setHistory(nextHistory);
-    setLoading(true);
-
-    try {
-      if (["recommend", "navigate", "planNow"].includes(route) && (!taskRef.current.goal || (taskRef.current.stage === "idle" && !flowRef.current))) {
-        taskRef.current.goal = text.slice(0, 2000);
-      }
-      // 配置模式進行中就繼續問，除非使用者明講要去別的地方
-      const stayInIntake = shouldContinueIntake(text, taskRef.current, route);
-
-      let handled = false;
-      if (route === "cancel") {
-        if (flowRef.current) workflowsRef.current.delete(flowRef.current.id);
-        setIntake(null);
-        taskRef.current = newTask();
-        flowRef.current = null;
-        appendAssistant(t("AiFloatingChat.taskCancelled"));
-        handled = true;
-      }
-      else if (stayInIntake || route === "recommend") handled = await startIntake(nextHistory);
-      else if (route === "planNow") handled = await sendRecommendation(nextHistory);
-      else if (route === "continueTask") handled = await continueTask();
-      else if (route === "index") handled = sendFeatureIndex();
-      else if (route === "help") handled = await sendContextualHelp(text);
-      else if (route === "navigate") handled = await sendNavigation(text, nextHistory);
-      if (!handled) await sendChat(text, nextHistory);
-    } catch (error) {
-      replyFailedRef.current = true;
-      setMessages((previous) => [...previous, {
-        role: "assistant",
-        content: error?.message || t("AiFloatingChat.genericErrorFallback"),
-      }]);
-    } finally {
-      saveWorkflow();
-      setLoading(false);
-      inputRef.current?.focus();
-    }
-  }
+  const canShowPageGuide = hasPageTour || Boolean(activeSurfaceId);
 
   function handleKeyDown(event) {
     // 注音、倉頡選字時按 Enter 是確認選字，不是送出
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      send();
+      submit();
     }
   }
 
@@ -1125,89 +269,65 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
 
           <div className={styles.contextRow}>
             <div className={styles.contextBar}>
-              {intake ? (
-                <>
-                  <MIcon name="tune" size={16} />
-                  <span>{t("AiFloatingChat.contextIntakeStatus", { answered: intake.answered, total: intake.total })}</span>
-                </>
-              ) : (
-                <>
-                  <MIcon name="web_asset" size={16} />
-                  <span>{t("AiFloatingChat.contextViewingPage", { page: currentPageName })}</span>
-                </>
-              )}
+              <MIcon name="web_asset" size={16} />
+              <span>{t("AiFloatingChat.contextViewingPage", { page: currentPageName })}</span>
             </div>
-            {/* 隨時可以叫出這一頁的前端導覽 */}
-            {!intake && hasPageTour && (
-              <button type="button" className={styles.pageGuideBtn} onClick={startPageTour} disabled={loading}>
+            {/* 隨時可以叫出這一頁的導覽 */}
+            {canShowPageGuide && (
+              <button type="button" className={styles.pageGuideBtn} onClick={showPageGuide} disabled={loading}>
                 <MIcon name="tour" size={16} />
                 {t("AiFloatingChat.pageGuideButton")}
               </button>
             )}
           </div>
 
-          {workflows.length > 0 && (
-            <div className={styles.workflowBar} aria-label={t("AiFloatingChat.savedFlows")}>
-              {workflows.map((flow) => (
-                <button key={flow.id} type="button" disabled={loading}
-                  aria-pressed={flowRef.current?.id === flow.id}
-                  onClick={() => {
-                    const selected = selectWorkflow(flow.id);
-                    if (selected) appendAssistant(t("AiFloatingChat.resumeFlow", { title: selected.title }), {
-                      flows: [{ flow_id: selected.id, flow_title: selected.title, steps: selected.steps }],
-                    });
-                  }}>{flow.title}</button>
-              ))}
-            </div>
-          )}
-
           <div className={styles.messages} ref={scrollRef}>
             {messages.length === 0 ? (
               <div className={styles.emptyState}>
                 <h2>{displayName(user, t)}{t("AiFloatingChat.greetingSuffix")}</h2>
                 <p>{t("AiFloatingChat.emptyStatePrompt")}</p>
-                {/* 能力要講出來，不然沒有人知道可以叫它推薦規格、幫忙填表。
+                {/* 能力要講出來，不然沒有人知道可以叫它指給你看、幫忙填表。
                     但它只是說明、不能點：做成一般的圓點清單，可點的只有下方建議問題
                     （原本白底細框的樣子像按鈕，常被誤點） */}
                 <ul className={styles.capabilities}>
-                  {CAPABILITIES.map((item) => (
-                    <li key={item.titleKey}>{t(item.titleKey)}</li>
+                  {CAPABILITIES.map((key) => (
+                    <li key={key}>{t(key)}</li>
                   ))}
                 </ul>
-                {(hasPageTour || pageContext.suggestionKeys.length > 0) && (
+                {(canShowPageGuide || pageContext.suggestionKeys.length > 0) && (
                   <p className={styles.suggestionsLead}>{t("AiFloatingChat.suggestionsLead")}</p>
                 )}
                 <div className={styles.suggestions}>
-                  {hasPageTour && (
-                    <button type="button" onClick={startPageTour}>
+                  {canShowPageGuide && (
+                    <button type="button" onClick={showPageGuide}>
                       {t("AiFloatingChat.pageGuideQuestion")}
                     </button>
                   )}
                   {pageContext.suggestionKeys.map((key) => (
-                    <button key={key} type="button" onClick={() => send(t(key))}>
+                    <button key={key} type="button" onClick={() => submit(t(key))}>
                       {t(key)}
                     </button>
                   ))}
                 </div>
               </div>
             ) : (
-              messages.map((message, index) => (
-                <Message
+              shownMessages.map((message, index) => (
+                <AssistantMessage
                   key={`${message.role}-${index}`}
                   message={message}
                   live={index === liveReplyIndex}
                   currentPath={location.pathname}
-                  onNavigate={handleNavigate}
-                  onRecommend={() => { if (message.flowId) selectWorkflow(message.flowId); runRecommendation(); }}
-                  onAnswer={(choice) => { if (message.flowId) selectWorkflow(message.flowId); send(choice); }}
-                  onPlanNow={() => { if (message.flowId) selectWorkflow(message.flowId); planNow(); }}
-                  onFlowStep={handleFlowStep}
+                  busy={loading}
+                  onSend={submit}
+                  onOpenPage={assistant.openPage}
+                  onFlowStep={assistant.openFlowStep}
+                  onPointAt={assistant.pointAt}
                 />
               ))
             )}
-            {loading && (
+            {loading && !writingText && (
               <div className={`${styles.message} ${styles.messageAssistant}`}>
-                <TypingIndicator />
+                <TypingIndicator statusKey={streamStatusKey(streaming?.tool)} />
               </div>
             )}
           </div>
@@ -1223,7 +343,7 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {}, 
                 rows={2}
                 disabled={loading}
               />
-              <button type="button" onClick={() => send()} disabled={loading || !input.trim()} aria-label={t("AiFloatingChat.sendMessageAriaLabel")}>
+              <button type="button" onClick={() => submit()} disabled={loading || !input.trim()} aria-label={t("AiFloatingChat.sendMessageAriaLabel")}>
                 <MIcon name="arrow_upward" size={20} />
               </button>
             </div>

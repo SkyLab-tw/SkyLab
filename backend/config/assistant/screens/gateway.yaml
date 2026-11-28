@@ -1,0 +1,348 @@
+# 閘道 VM（/gateway）
+id: gateway
+path: /gateway
+title: 閘道 VM
+access: admin
+order: 400
+purpose: 管理對外流量經過的 Gateway VM：平台全程透過 SSH 管理它，可以一鍵安裝 nginx（Port 轉發、機器網域與平台入口）與 WireGuard VPN、設定管理員自備的 HTTPS 憑證、讓主系統自己經 Gateway 以網域對外，並查看服務狀態與日誌。
+when_to_use: 第一次接上 Gateway VM、在 Gateway 上安裝或重裝服務、設定或換新 HTTPS 憑證、讓平台本身用網域與 HTTPS 對外，或檢查 nginx 與 WireGuard VPN 的狀態與日誌。
+sections:
+  - 連線設定
+  - 安裝服務
+  - HTTPS 憑證
+  - 平台入口
+  - nginx
+  - WireGuard VPN
+  - 服務狀態
+features:
+  - 頁面分成「連線設定」「安裝服務」「HTTPS 憑證」「平台入口」「nginx」「WireGuard VPN」六個分頁；畫面太窄放不下時，排不下的分頁會收進「更多」，點開再選，選中的分頁一定排在外面。
+  - 「連線設定」：填 Host / IP、SSH Port 與 SSH 使用者後按「儲存設定」；按「測試連線」會用已儲存的設定實際 SSH 連一次，改了欄位要先儲存。
+  - 「連線設定」：按「重新產生 Keypair」產生平台專用的金鑰，再按「複製」把公鑰加到 Gateway 的 ~/.ssh/authorized_keys；Gateway 重灌或換機後 host key 變了，按「重設 Host Key」。
+  - 其他分頁要等 Host / IP 已儲存、Keypair 已產生才能用，否則顯示「尚未設定 Gateway 連線」（「安裝服務」分頁顯示「請先在「連線設定」填入 Gateway IP 並產生 SSH 金鑰」），按「前往連線設定」回去設定。
+  - 「安裝服務」：確認安裝參數後按「一鍵安裝」（nginx 或 WireGuard 已裝過時按鈕是「重新安裝」），確認後會在 Gateway 背景安裝 nginx、WireGuard 與監控 exporter、重寫 nginx.conf 並啟用 UFW，約需數分鐘、可以離開此頁；安裝中「安裝日誌」每 3 秒更新，安裝完成後會自動把網域與 Port 轉發規則同步回 Gateway。
+  - 「安裝服務」：顯示安裝狀態（尚未安裝、安裝中、安裝完成、安裝失敗、安裝中斷）、nginx／WireGuard／UFW 是否已安裝、作業系統與上次安裝的起訖時間。SSH 帳號必須是 root 或能免密碼 sudo 才能安裝；安裝完成後可以按「同步規則到 Gateway」手動再同步一次規則；按「套用偵測值」把安裝參數換回平台依 Gateway 網卡與 IP 管理設定推出的預設值。
+  - 「HTTPS 憑證」：系統不會自動簽發憑證，請自行簽好放到 Gateway 主機上，填「憑證路徑（fullchain）」與「私鑰路徑」後按「儲存並套用」，會先在 Gateway 上檢查通過才套用；換新憑證但路徑不變時按「重新套用」；兩個路徑都清空再儲存會改用自簽憑證。
+  - 「HTTPS 憑證」：「Gateway 上的憑證」顯示到期日、私鑰是否相符、憑證涵蓋的名稱與使用中的 HTTPS 網域，有問題時列出警告；按「重新整理」重新檢查。
+  - 「平台入口」：勾選「讓 SkyLab 主系統經 Gateway 的 nginx 對外」，填主系統網域與 Gateway 連得到的部署機位址，可以先按「測試上游」；按「儲存並套用」會先從 Gateway 連一次主系統，連不到就不套用，套用後 nginx 只重新載入、進行中的連線不中斷。
+  - 「平台入口」：網域在 Cloudflare 管理的 zone 內、而且 Cloudflare 的 API Token 與預設 DNS 目標都已設定時，儲存後會自動把 DNS 紀錄指到預設 DNS 目標（Gateway），否則 DNS 要自己改；其他要手動完成的事列在「啟用後還要手動完成」。
+  - 「平台入口」：取消勾選啟用再按「儲存並套用」會先跳「停用平台入口」確認，停用後從這個網域就連不到 SkyLab，SkyLab 在 Cloudflare 建的 DNS 紀錄也會一併刪除。
+  - 「nginx」：查看服務狀態，按「啟動」「停止」「重啟」「重新載入」控制 nginx（停止會中斷所有轉發）；編輯器只開放 /etc/nginx/nginx.conf，按「寫入設定檔」（或 Ctrl+S）會先在 Gateway 跑 nginx -t，不通過就還原，寫入後不會自動生效，要再按「重新載入」或「重啟」。
+  - 「nginx」：SkyLab 自動產生的轉發規則（/etc/nginx/skylab/http.conf、stream.conf）不在這裡改，也不開放編輯。
+  - 「nginx」「HTTPS 憑證」「平台入口」有尚未儲存的變更時，切換分頁會先跳「切換分頁」確認，按「捨棄變更」才會切走。
+  - 「WireGuard VPN」：查看服務狀態、有效授權連線、已載入 Peer、3 分鐘內握手數、接收／傳送流量與「VPN 設定摘要」，可以「啟動」「停止」「重啟」服務；這個分頁不能編輯 WireGuard 設定，也不會回傳 Gateway 私鑰或 Peer 公鑰。
+  - 「nginx」與「WireGuard VPN」分頁都會顯示服務日誌（最近 100 行），每 10 秒自動更新。
+elements:
+  - id: gateway.ssh_connection
+    role: list
+    label: SSH 連線設定
+    help: 平台要透過 SSH 管理 Gateway VM 上的服務。填 Host / IP、SSH Port、SSH 使用者後按「儲存設定」。
+    section: 連線設定
+  - id: gateway.host
+    role: text
+    label: Host / IP
+    help: Gateway VM 的 IP 或主機名稱，例：192.168.100.143。
+    constraints:
+      - 必填
+    section: 連線設定
+  - id: gateway.ssh_port
+    role: number
+    label: SSH Port
+    help: Gateway 的 SSH Port，預設 22。
+    constraints:
+      - 1–65535
+    section: 連線設定
+  - id: gateway.ssh_user
+    role: text
+    label: SSH 使用者
+    help: 留空會存成 root。要從「安裝服務」安裝時，這個帳號必須是 root 或能免密碼 sudo。
+    section: 連線設定
+  - id: gateway.test_connection
+    role: button
+    label: 測試連線
+    help: 用已儲存的設定實際 SSH 連一次，改了欄位要先按「儲存設定」。Host / IP 已儲存、Keypair 已產生才能按。
+    section: 連線設定
+  - id: gateway.save_connection
+    role: button
+    label: 儲存設定
+    help: 儲存 Host / IP、SSH Port 與 SSH 使用者。
+    section: 連線設定
+  - id: gateway.ssh_public_key
+    role: readonly
+    label: SSH 公鑰
+    help: 把這把公鑰加入 Gateway VM 的 ~/.ssh/authorized_keys，平台才能透過 SSH 管理服務；按「複製」複製公鑰。還沒產生時顯示「尚未產生 Keypair」。
+    section: 連線設定
+  - id: gateway.copy_public_key
+    role: button
+    label: 複製
+    help: 把 SSH 公鑰複製到剪貼簿。
+    section: 連線設定
+  - id: gateway.regenerate_keypair
+    role: button
+    label: 重新產生 Keypair
+    help: 產生平台專用的新金鑰對。已經有金鑰時會先確認：舊 Keypair 立即失效，新公鑰加入 ~/.ssh/authorized_keys 之前平台都連不上 Gateway VM。
+    section: 連線設定
+  - id: gateway.reset_host_key
+    role: button
+    label: 重設 Host Key
+    help: 清除平台記錄的 Gateway VM SSH host key，下次連線重新記錄；只在 Gateway VM 重灌或更換機器、host key 變更導致連線被拒時使用。host key 不是因為預期的變更而不符時，可能是中間人攻擊，要先查明原因。按下後會先確認。
+    section: 連線設定
+  - id: gateway.install_start
+    role: button
+    label: 一鍵安裝
+    help: 確認後在 Gateway 背景安裝 nginx、WireGuard 與監控 exporter，重寫 nginx.conf 並啟用 UFW（先放行 SSH）；原有設定先備份到 /root/skylab-backups，nginx 重啟期間既有的轉發連線會中斷。約需數分鐘，可以離開此頁，完成後自動把網域與 Port 轉發規則同步回 Gateway。
+    constraints:
+      - SSH 帳號必須是 root 或能免密碼 sudo
+      - 安裝參數都要通過檢查
+    section: 安裝服務
+  - id: gateway.install_reinstall
+    role: button
+    label: 重新安裝
+    help: nginx 或 WireGuard 已經裝過時，「一鍵安裝」會改成這個按鈕，做的事相同。
+    section: 安裝服務
+  - id: gateway.install_sync_rules
+    role: button
+    label: 同步規則到 Gateway
+    help: 安裝完成後才出現；把平台上的網域與 Port 轉發規則重新寫回 Gateway。
+    section: 安裝服務
+  - id: gateway.install_use_detected
+    role: button
+    label: 套用偵測值
+    help: 把安裝參數換回平台推出的預設值：網卡與 SNAT 位址依 Gateway 的網卡與「IP 管理」裡的 Gateway VM IP 判斷，Port 轉發範圍取「IP 管理」的對外 port 配號池。
+    section: 安裝服務
+  - id: gateway.install_ingress_interface
+    role: select
+    label: 對外網卡（WireGuard 入口）
+    help: Gateway 上接外網、讓 WireGuard 用戶端連進來的網卡；選項會列出每張網卡的 IPv4。
+    constraints:
+      - 必選
+      - 不能和 VM 內網網卡是同一張
+    section: 安裝服務
+  - id: gateway.install_vm_interface
+    role: select
+    label: VM 內網網卡
+    help: Gateway 上接機器內網的網卡；換網卡時會自動把那張網卡的第一個 IPv4 帶進 SNAT 位址。
+    constraints:
+      - 必選
+      - 不能和對外網卡是同一張
+    section: 安裝服務
+  - id: gateway.install_snat_address
+    role: text
+    label: SNAT 位址（VM 內網網卡上的 IP）
+    help: 例：10.10.0.2。
+    constraints:
+      - 必須是 IPv4 位址
+    section: 安裝服務
+  - id: gateway.install_listen_port
+    role: number
+    label: WireGuard 監聽 Port（UDP）
+    constraints:
+      - 1–65535 的整數
+      - 不能落在 Port 轉發範圍內
+    section: 安裝服務
+  - id: gateway.install_forward_start
+    role: number
+    label: Port 轉發起始
+    help: Gateway 用來轉發到機器的 Port 範圍起點。
+    constraints:
+      - 1–65535 的整數
+      - 不能大於 Port 轉發結束
+    section: 安裝服務
+  - id: gateway.install_forward_end
+    role: number
+    label: Port 轉發結束
+    help: Gateway 用來轉發到機器的 Port 範圍終點。
+    constraints:
+      - 1–65535 的整數
+      - 不能小於 Port 轉發起始
+    section: 安裝服務
+  - id: gateway.install_monitoring_sources
+    role: text
+    label: 監控放行來源（Prometheus 主機 IP／CIDR，逗號分隔）
+    help: 允許抓取 Gateway 監控 exporter 的來源，例：192.168.100.20, 10.0.0.0/24。可留空。
+    constraints:
+      - 只能填 IP 或 CIDR，多筆用逗號或空白分隔
+    section: 安裝服務
+  - id: gateway.install_log
+    role: readonly
+    label: 安裝日誌
+    help: Gateway 上安裝腳本的輸出；安裝中每 3 秒更新。還沒裝過時顯示「（尚無安裝紀錄）」。
+    section: 安裝服務
+  - id: gateway.certificate
+    role: list
+    label: HTTPS 憑證
+    help: 系統不會自動簽發憑證：請自行簽好（建議涵蓋整個網域的萬用憑證）放到 Gateway 主機上，再填憑證（fullchain）與私鑰的完整路徑。平台入口與所有機器網域共用這張；儲存時會在 Gateway 上檢查檔案、私鑰配對與到期日。還沒設定時標示「未設定（使用自簽憑證）」。
+    section: HTTPS 憑證
+  - id: gateway.cert_path
+    role: text
+    label: 憑證路徑（fullchain）
+    help: Gateway 主機上 fullchain 憑證檔的完整路徑，建議放在 /etc/ssl/skylab/，例：/etc/ssl/skylab/fullchain.pem。
+    constraints:
+      - 以 / 開頭的完整路徑，只能用英數字與 . _ @ + = , -，不可含空白、分號或引號
+      - 不能有 . 或 .. 的路徑段，最長 512 字元
+      - 要和私鑰路徑一起填，或一起清空
+    section: HTTPS 憑證
+  - id: gateway.cert_key_path
+    role: text
+    label: 私鑰路徑
+    help: Gateway 主機上私鑰檔的完整路徑，例：/etc/ssl/skylab/privkey.pem；私鑰建議只給 root 讀。
+    constraints:
+      - 以 / 開頭的完整路徑，只能用英數字與 . _ @ + = , -，不可含空白、分號或引號
+      - 不能有 . 或 .. 的路徑段，最長 512 字元
+      - 要和憑證路徑一起填，或一起清空
+    section: HTTPS 憑證
+  - id: gateway.cert_save
+    role: button
+    label: 儲存並套用
+    help: 先在 Gateway 上檢查檔案讀得到、是有效的 PEM、私鑰與憑證相符、還沒過期（平台入口已啟用並開 HTTPS 時還要涵蓋平台網域），通過才儲存並套用到 nginx；表單有修改才能按。兩個路徑都清空再儲存會先確認，之後所有 HTTPS 網域改用自簽憑證；平台入口已啟用並開 HTTPS 時不能清空。
+    section: HTTPS 憑證
+  - id: gateway.cert_reapply
+    role: button
+    label: 重新套用
+    help: 已設定憑證而且表單沒修改時出現；換新憑證但路徑不變時按，會重新檢查並套用。
+    section: HTTPS 憑證
+  - id: gateway.cert_status
+    role: readonly
+    label: Gateway 上的憑證
+    help: 經 SSH 檢查目前的憑證：到期日、私鑰是否與憑證相符、憑證涵蓋的名稱、使用中的 HTTPS 網域。已過期、剩不到 14 天、私鑰不符、檔案讀不到，或有 HTTPS 網域不在涵蓋範圍內時會列出警告。
+    section: HTTPS 憑證
+  - id: gateway.platform_entry
+    role: list
+    label: 平台入口
+    help: 讓 SkyLab 主系統自己也經 Gateway 的 nginx，以網域和 HTTPS 對外。填主系統網域與 Gateway 連得到的部署機位址；儲存時會先從 Gateway 測試連線，連不到就不套用。開 HTTPS 前要先在「HTTPS 憑證」分頁設定好涵蓋這個網域的憑證。網域在 Cloudflare 管理的 zone 內時，儲存後會自動把 DNS 指到預設 DNS 目標（Gateway）。
+    section: 平台入口
+  - id: gateway.platform_entry_enable
+    role: toggle
+    label: 讓 SkyLab 主系統經 Gateway 的 nginx 對外
+    help: 勾選才會套用到 Gateway；不勾時按「儲存並套用」只把欄位存成草稿。已啟用時取消勾選再儲存就是停用，會先確認。
+    section: 平台入口
+  - id: gateway.platform_domain
+    role: text
+    label: 主系統網域
+    help: 使用者連進 SkyLab 的網域，例：skylab.example.com。
+    constraints:
+      - 勾選啟用時必填
+      - 要填完整網域（至少兩段）
+      - 不能是已經發布給機器使用的網域
+    section: 平台入口
+  - id: gateway.platform_upstream_host
+    role: text
+    label: 主系統位址（Gateway 連得到的部署機）
+    help: Gateway 要轉送過去的 SkyLab 部署機，例：192.168.100.20。
+    constraints:
+      - 勾選啟用時必填
+      - IPv4 位址或主機名稱，不含 Port
+    section: 平台入口
+  - id: gateway.platform_upstream_port
+    role: number
+    label: 主系統 Port
+    help: 部署機上 SkyLab 的入口 Port，預設 8082。
+    constraints:
+      - 1–65535
+    section: 平台入口
+  - id: gateway.platform_https
+    role: toggle
+    label: 啟用 HTTPS（使用「HTTPS 憑證」分頁設定的憑證）
+    help: 預設勾選。勾選時要先在「HTTPS 憑證」分頁設定憑證，還沒設定會提示並可按「前往 HTTPS 憑證」；憑證必須涵蓋主系統網域。
+    section: 平台入口
+  - id: gateway.platform_entry_proxied
+    role: toggle
+    label: 經由 Cloudflare Proxy（橘色雲）
+    help: 勾選後 SkyLab 建的 DNS 紀錄會設成橘色雲，使用者先連到 Cloudflare 再轉到 Gateway，Gateway 的 IP 不會公開，並改從 CF-Connecting-IP 取得使用者 IP。Gateway 開 HTTPS 時，Cloudflare 的 SSL/TLS 模式要設成「完整（嚴格）」；免費方案單次上傳上限 100 MB。網域不在 Cloudflare 管理的 zone 內時要自己到 Cloudflare 切成橘色雲。不勾就是 DNS only（灰色雲）。
+    section: 平台入口
+  - id: gateway.platform_entry_test
+    role: button
+    label: 測試上游
+    help: 從 Gateway 連一次填好的主系統位址與 Port，確認通不通，不會儲存。主系統位址或 Port 還沒填好時不能按。
+    section: 平台入口
+  - id: gateway.platform_entry_save
+    role: button
+    label: 儲存並套用
+    help: 勾選啟用時，先從 Gateway 連一次主系統（開 HTTPS 時也檢查憑證），通過才寫進 Gateway 的 nginx 並重新載入，進行中的連線不會中斷。表單有修改，或 Gateway 上的設定與這裡不一致時才能按。
+    section: 平台入口
+  - id: gateway.platform_entry_status
+    role: readonly
+    label: Gateway 套用狀態
+    help: Gateway 上實際套用的網域、轉送目標、DNS 紀錄、憑證、Gateway 到主系統的連線，以及後端看到的來源 IP 與通訊協定。標示「與 Gateway 不一致」時按「儲存並套用」重新寫入；後端看到的來源 IP 若是 Gateway，要在部署機 .env 設定 SKYLAB_TRUSTED_PROXY。
+    section: 平台入口
+  - id: gateway.platform_todo
+    role: readonly
+    label: 啟用後還要手動完成
+    help: 列出平台不會替你做的事：DNS 指向 Gateway（網域不在 Cloudflare 管理的 zone 內時）、在部署機 .env 設定 SKYLAB_TRUSTED_PROXY 並重啟 nginx 容器、把 FRONTEND_HOST、Google 登入的授權來源與 Turnstile 的網域清單改成新的 https 網址，以及保留從內網或 VPN 直連部署機的備援。
+    section: 平台入口
+  - id: gateway.nginx_save_config
+    role: button
+    label: 寫入設定檔
+    help: 把編輯器裡的 /etc/nginx/nginx.conf 寫回 Gateway（也可以按 Ctrl+S）。寫入前會跑 nginx -t，不通過就還原；寫入後不會自動生效，要再按「重新載入」或「重啟」。有修改時才能按。
+    section: nginx
+  - id: gateway.nginx_reload_config
+    role: button
+    label: 重新載入
+    help: 設定檔讀取失敗時出現，重新讀取服務狀態、設定檔與日誌。讀取失敗期間編輯與寫入都會停用，避免覆蓋 Gateway 上的檔案。
+    section: nginx
+  - id: gateway.action_start
+    role: button
+    label: 啟動
+    help: 啟動服務（nginx 與 WireGuard VPN 分頁都有）。
+    section: 服務狀態
+  - id: gateway.action_stop
+    role: button
+    label: 停止
+    help: 停止服務；停止 nginx 會中斷所有轉發。
+    section: 服務狀態
+  - id: gateway.action_restart
+    role: button
+    label: 重啟
+    help: 先停止再啟動服務。
+    section: 服務狀態
+  - id: gateway.action_reload
+    role: button
+    label: 重新載入
+    help: 只有「nginx」分頁有；讓 nginx 重新讀取設定（reload），寫入設定檔後要按這個才會生效。
+    section: 服務狀態
+  - id: gateway.service_logs
+    role: readonly
+    label: 服務日誌（最近 100 行）
+    help: 顯示服務最近 100 行日誌，每 10 秒自動更新；「nginx」與「WireGuard VPN」分頁都有。
+    section: 服務狀態
+  - id: gateway.status_running
+    role: readonly
+    label: 運行中
+    help: 服務狀態徽章：服務正在執行。
+    section: 服務狀態
+  - id: gateway.status_stopped
+    role: readonly
+    label: 已停止
+    help: 服務狀態徽章：服務沒有在執行。
+    section: 服務狀態
+  - id: gateway.status_unavailable
+    role: readonly
+    label: 無法取得狀態
+    help: 平台連不到 Gateway VM，讀不到服務狀態。
+    section: 服務狀態
+  - id: gateway.wg_authorized_sessions
+    role: readonly
+    label: 有效授權連線
+    help: 平台上還沒到期的 WireGuard 授權工作階段數。有已到期、等待清理的工作階段時會另外提示。
+    section: WireGuard VPN
+  - id: gateway.wg_live_peers
+    role: readonly
+    label: 已載入 Peer
+    help: Gateway 的 WireGuard 介面目前載入的 Peer 數。
+    section: WireGuard VPN
+  - id: gateway.wg_recent_handshakes
+    role: readonly
+    label: 3 分鐘內握手
+    help: 最近 3 分鐘內有握手的 Peer 數。
+    section: WireGuard VPN
+  - id: gateway.wg_overview
+    role: readonly
+    label: VPN 設定摘要
+    help: 通道模式、介面、Systemd 服務、公開端點、用戶端網段、VM 網段、工作階段期限、Peer 自動同步與監聽 Port；只能看、不能在這裡改。即時狀態讀不到時標示「即時狀態暫時無法取得」。
+    section: WireGuard VPN
+related:
+  - path: /domain
+    when: 要接上 Cloudflare、設定預設 DNS 目標或手動調整 DNS 紀錄
+  - path: /ip-management
+    when: 要設定機器網段、Gateway VM IP 與對外 port 配號池
+  - path: /firewall
+    when: 要替某台機器開 Port 轉發或用網址發布服務（Gateway 上的轉發規則從那裡產生，不在這裡改）

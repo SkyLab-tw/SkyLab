@@ -35,15 +35,13 @@ def list_student_weekly_tasks(
     session: Session,
     *,
     user_id: uuid.UUID,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
 ) -> list[CourseWeeklyTaskStudent]:
-    teaching_class = course_service.get_student_class_for_path(
+    teaching_class = course_service.get_student_class_or_404(
         session,
         user_id=user_id,
-        path_id=path_id,
+        class_id=class_id,
     )
-    if teaching_class is None:
-        return []
 
     weeks = session.exec(
         select(TeachingClassWeek)
@@ -72,7 +70,7 @@ def list_student_weekly_tasks(
     assignments = ai_assignment_service.list_student_ai_assignments(
         session,
         user_id=user_id,
-        path_id=path_id,
+        class_id=class_id,
     )
     assignments_by_session = {
         assignment.session_id: assignment
@@ -154,20 +152,19 @@ def get_student_weekly_task_pdf(
     session: Session,
     *,
     user_id: uuid.UUID,
-    path_id: uuid.UUID,
+    class_id: uuid.UUID,
     week_id: uuid.UUID,
     file_id: uuid.UUID,
 ) -> tuple[Path, str]:
-    teaching_class = course_service.get_student_class_for_path(
+    teaching_class = course_service.get_student_class_or_404(
         session,
         user_id=user_id,
-        path_id=path_id,
+        class_id=class_id,
     )
     week = session.get(TeachingClassWeek, week_id)
     task_file = session.get(TeachingClassTaskFile, file_id)
     if (
-        teaching_class is None
-        or week is None
+        week is None
         or week.class_id != teaching_class.id
         or week.status not in VISIBLE_WEEK_STATUSES
         or task_file is None

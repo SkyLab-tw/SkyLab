@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -193,24 +194,23 @@ def _completed_job() -> SimpleNamespace:
 
 
 @pytest.fixture
-def published_calls(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
-    calls: list[bool] = []
+def no_topology(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         class_status_service.class_network_service,
         "apply_class_topology",
         lambda _session, class_id: [],
     )
-    monkeypatch.setattr(
-        class_status_service.course_service,
-        "ensure_class_path",
-        lambda _session, *, teaching_class, published=False: calls.append(published),
-    )
-    return calls
 
 
-def _class_session(*, status, reservation):
+def _class_session(*, status, reservation, first_active_at=None):
     job = _completed_job()
-    item = SimpleNamespace(id=uuid.uuid4(), status=status, updated_at=None, name="C")
+    item = SimpleNamespace(
+        id=uuid.uuid4(),
+        status=status,
+        updated_at=None,
+        name="C",
+        first_active_at=first_active_at,
+    )
     session = _FakeSession(
         teaching_class=item,
         nodes=[SimpleNamespace(batch_job_id=job.id)],
@@ -220,7 +220,7 @@ def _class_session(*, status, reservation):
     return session, item
 
 
-def test_first_activation_publishes_the_course_shell(published_calls) -> None:
+def test_first_activation_opens_the_class_to_students(no_topology) -> None:
     reservation = SimpleNamespace(status="reserved")
     session, item = _class_session(
         status=TeachingClassStatus.provisioning, reservation=reservation
@@ -230,26 +230,28 @@ def test_first_activation_publishes_the_course_shell(published_calls) -> None:
 
     assert item.status == TeachingClassStatus.active
     assert reservation.status == "consumed"
-    assert published_calls == [True]
+    assert item.first_active_at is not None
 
 
-def test_reactivation_after_restart_keeps_teacher_unpublish(published_calls) -> None:
-    """重啟後快取清空、或補學生後再上線：不可把老師取消發布的課程重新公開。"""
+def test_reactivation_keeps_the_first_activation_time(no_topology) -> None:
+    """重啟後快取清空、或補學生後再上線：第一次可上課的時間不可被改寫。"""
+    opened_at = datetime(2026, 9, 1, 1, 0, tzinfo=UTC)
     reservation = SimpleNamespace(status="consumed")
     session, item = _class_session(
-        status=TeachingClassStatus.provisioning, reservation=reservation
+        status=TeachingClassStatus.provisioning,
+        reservation=reservation,
+        first_active_at=opened_at,
     )
     class_status_service._APPLIED_TOPOLOGY.pop(item.id, None)
 
     class_status_service.recompute(session=session, class_id=item.id)
 
     assert item.status == TeachingClassStatus.active
-    assert published_calls == [False]
+    assert item.first_active_at == opened_at
 
 
-def test_legacy_class_without_reservation_only_publishes_on_transition(
-    published_calls,
-) -> None:
+def test_active_class_without_a_time_gets_one_on_recompute(no_topology) -> None:
+    """沒有預留紀錄、也沒記到時間的舊班級：重算時補上，學生才看得到課。"""
     session, item = _class_session(
         status=TeachingClassStatus.active, reservation=None
     )
@@ -257,4 +259,4 @@ def test_legacy_class_without_reservation_only_publishes_on_transition(
 
     class_status_service.recompute(session=session, class_id=item.id)
 
-    assert published_calls == [False]
+    assert item.first_active_at is not None

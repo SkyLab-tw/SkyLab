@@ -1,5 +1,5 @@
 /**
- * 教學課程相關頁面的專屬導覽：課程管理（CMS）、教學環境列表與編輯器、班級管理、建立班級精靈。
+ * 教學課程相關頁面的專屬導覽：教學環境列表與編輯器、班級管理、建立班級精靈。
  * 導覽只示範不產生副作用：會存檔、送出、建立的按鈕一律只指著說明，不用 activateSelector 去點。
  */
 
@@ -8,56 +8,6 @@
 const TPL_EDITOR_TO_MACHINES = '[data-guide="course-tpl-editor-to-machines"], [data-guide="course-tpl-editor-view-machines"]';
 
 export const TEACHING_COURSE_GUIDES = {
-  "course-cms": {
-    titleKey: "UserGuide.courseCms.title",
-    /* 導覽會切到「學生進度」分頁，結束時切回預設的「內容編輯」 */
-    cleanupSelector: '[data-guide-tab="course-cms-tab-editor"]',
-    steps: [
-      {
-        selector: '[data-page-guide="header"]',
-        titleKey: "UserGuide.courseCms.intro.title",
-        textKey: "UserGuide.courseCms.intro.text",
-      },
-      {
-        selector: '[data-guide="course-cms-tree"]',
-        activateSelector: '[data-guide-tab="course-cms-tab-editor"]',
-        titleKey: "UserGuide.courseCms.tree.title",
-        textKey: "UserGuide.courseCms.tree.text",
-      },
-      {
-        selector: '[data-guide="course-cms-add-path"]',
-        activateSelector: '[data-guide-tab="course-cms-tab-editor"]',
-        titleKey: "UserGuide.courseCms.addPath.title",
-        textKey: "UserGuide.courseCms.addPath.text",
-      },
-      {
-        selector: '[data-guide="course-cms-workspace"]',
-        activateSelector: '[data-guide-tab="course-cms-tab-editor"]',
-        titleKey: "UserGuide.courseCms.workspace.title",
-        textKey: "UserGuide.courseCms.workspace.text",
-      },
-      {
-        selector: '[data-guide-tab="course-cms-tab-progress"]',
-        activateSelector: '[data-guide-tab="course-cms-tab-progress"]',
-        titleKey: "UserGuide.courseCms.progressTab.title",
-        textKey: "UserGuide.courseCms.progressTab.text",
-      },
-      {
-        selector: '[data-guide="course-cms-progress-toolbar"]',
-        activateSelector: '[data-guide-tab="course-cms-tab-progress"]',
-        deferred: true,
-        titleKey: "UserGuide.courseCms.progressToolbar.title",
-        textKey: "UserGuide.courseCms.progressToolbar.text",
-      },
-      {
-        selector: '[data-guide="course-cms-progress"]',
-        activateSelector: '[data-guide-tab="course-cms-tab-progress"]',
-        deferred: true,
-        titleKey: "UserGuide.courseCms.progressTable.title",
-        textKey: "UserGuide.courseCms.progressTable.text",
-      },
-    ],
-  },
   "course-templates": {
     titleKey: "UserGuide.courseTemplates.title",
     steps: [

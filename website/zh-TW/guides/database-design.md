@@ -65,6 +65,7 @@ schema 維持在第三正規化（3NF）。每個階段各解決一類問題：
 | 快照欄位：`spec_change_requests.current_*`、`deletion_requests.name / node / resource_type`、`mining_incidents.node / resource_type`、`vm_requests.vmid` | 記錄申請或事件建立當下的狀態；來源之後可能改變或消失 | 只寫一次、之後不更新；它們是歷史紀錄，不是快取。 |
 | `nat_rule.vm_ip`、`reverse_proxy_rule.vm_ip` | 已對照 IP 配發紀錄驗證過、並寫進 Gateway 的位址。若改成每次重新推導，就會再次信任 guest agent 回報的 IP，Gateway 同步也會依賴 Proxmox 連得上。`vmid → vm_ip` 在設計上本來就不成立。 | 建立時由 `publish_target_policy` 驗證。 |
 | `teaching_class_machine_nodes`（從課程環境節點複製） | 班級會調整版本的節點，例如把 `disk_gb` 拉到範本的大小、記下自己的建機工作 | 班級切換課程版本時整批重建。 |
+| `teaching_classes.first_active_at` | 班級第一次進入「可以上課」的時間。有值之後，名單上的學生就看得到這門課，之後班級狀態怎麼變（補機器、部分失敗、封存）都不影響，所以無法由目前的 `status` 推導 | 只在還沒有值時由 `mark_class_active`（`class_status_service`）寫入一次，之後不再變動。 |
 | `class_capacity_reservations` 的總量 | 保留量是某個時間點做出的承諾 | 重新保留時整批替換。 |
 | 逐節點的 `proxmox_storages` | Proxmox storage 清單的同步副本，以 `(node_name, storage)` 為鍵供放置查詢使用 | 每次同步連線時由 `upsert_storages`（`repositories/proxmox_storage.py`）整批改寫，保留使用者設定、刪掉已消失的 storage；共享 storage 的設定由 `update_storage_settings` 一次套用到所有節點。 |
 | `ai_api_credentials.api_key_name / rate_limit` | 核發金鑰時從申請單複製，之後可以單獨修改，所以是金鑰自己的屬性 | 不相依於申請單。 |

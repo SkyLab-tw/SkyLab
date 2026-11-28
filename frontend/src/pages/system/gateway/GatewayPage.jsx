@@ -212,7 +212,7 @@ function ConnectionTab({ config, onConfigChange }) {
         </div>
         <div className={styles.formGrid}>
           <label className={styles.field}>
-            <span>Host / IP *</span>
+            <span>{t("GatewayPage.hostLabel")}</span>
             <input
               value={form.host}
               onChange={(e) => set("host", e.target.value)}
@@ -221,7 +221,7 @@ function ConnectionTab({ config, onConfigChange }) {
             />
           </label>
           <label className={styles.field}>
-            <span>SSH Port</span>
+            <span>{t("GatewayPage.sshPort")}</span>
             <input
               type="number"
               min={1}
@@ -273,7 +273,7 @@ function serviceActions(t, { reload = false } = {}) {
     { action: "stop",    label: t("GatewayPage.actionStop"),    icon: "stop" },
     { action: "restart", label: t("GatewayPage.actionRestart"), icon: "restart_alt" },
   ];
-  if (reload) actions.push({ action: "reload", label: "Reload", icon: "refresh" });
+  if (reload) actions.push({ action: "reload", label: t("GatewayPage.actionReload"), icon: "refresh" });
   return actions;
 }
 
@@ -686,7 +686,7 @@ export default function GatewayPage() {
     <div className={styles.page}>
       <PageHeader title={t("GatewayPage.pageTitle")} />
 
-      {/* 頁面分頁放標題下方（全站頁面分頁同一個位置）；切換前若設定檔有未存修改，handleTabSelect 會先跳確認 */}
+      {/* 頁面分頁放標題下方（全站頁面分頁同一個位置）；切換前若這個分頁有未存修改（設定檔、憑證路徑、平台入口），handleTabSelect 會先跳確認 */}
       <Tabs
         className={styles.pageTabs}
         ariaLabel={t("GatewayPage.tabsAriaLabel")}
@@ -699,6 +699,7 @@ export default function GatewayPage() {
           buttonProps: GUIDE_TAB_PROPS[tab.key],
         }))}
       />
+
 
       <div className={styles.content} data-guide="gateway-content">
         {loading ? (

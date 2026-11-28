@@ -145,7 +145,6 @@ def _settings(user: str) -> ProxmoxSettings:
         password="secret",
         verify_ssl=False,
         iso_storage="local",
-        data_storage="local-lvm",
         api_timeout=10,
         task_check_interval=1,
         pool_name="SkyLab",

@@ -1,0 +1,144 @@
+# 帳號設定（/account）
+id: account
+path: /account
+title: 帳號設定
+access: all
+order: 110
+purpose: 修改個人資料與密碼、設定兩步驟驗證、刪除帳號，調整介面外觀，查看版本與授權資訊並送出使用者回饋。
+when_to_use: 要改姓名、Email、頭像或密碼，設定兩步驟驗證，調整介面配色與明暗模式，回報問題或建議，或刪除帳號。
+sections:
+  - 個人資料
+  - 變更密碼
+  - 兩步驟驗證
+  - 刪除帳號
+  - 外觀
+  - 關於
+features:
+  - 頁面分成「個人資料」「外觀」「關於」三個分頁；變更密碼、兩步驟驗證與刪除帳號都在「個人資料」分頁。視窗太窄排不下時，放不下的分頁收進「更多」選單；寫到一半的回饋還沒送出就換分頁，會先確認要不要離開。
+  - 「個人資料」：按「編輯」修改姓名與頭像網址後按「儲存」；不是用 Google 或 LDAP 登入的帳號也能改 Email，要到新信箱點驗證連結才會生效，生效前仍用原本的 Email。Google 或 LDAP 登入的帳號 Email 由登入服務管理，不能在這裡改。頭像也可以直接選圖片或拖曳到上傳區，不必先按「編輯」。
+  - 「變更密碼」：填目前密碼、新密碼與確認新密碼後按「更新密碼」；新密碼 8 到 128 個字元，要同時有大寫英文字母、小寫英文字母、數字與特殊符號，且不能和目前密碼相同。「目前密碼」欄沒有顯示密碼的按鈕，「新密碼」與「確認新密碼」可以按「顯示密碼」核對輸入。
+  - 「兩步驟驗證」：尚未啟用時按「綁定驗證 App」用 Authenticator 掃 QR code；已啟用時可以按「停用兩步驟驗證」，但管理員要求啟用的帳號無法自行停用，要重設請聯絡管理員。
+  - 「刪除帳號」：按「刪除帳號」後在確認視窗輸入「刪除」才能按「確定刪除」。
+  - 「外觀」：「色彩」選主色、背景色（跟隨主色或自訂）與背景花色，可以上傳圖片當背景；「介面」選風格（毛玻璃、液態玻璃，淺色模式另有白底、深色模式另有黑底）與明暗模式（淺色、深色、系統）；「配色主題」一鍵套用整組主色與背景。外觀設定只存在這個瀏覽器。
+  - 「外觀」分頁的「重設為系統預設值」會先確認，再把主色、背景、介面風格與明暗模式還原；有上傳背景圖時也會一併刪除。
+  - 「關於」：版本、建置時間、授權說明，以及授權、原始碼與第三方授權的連結和前端開源元件清單；「使用者回饋」可以直接寫給管理員。
+elements:
+  - id: account.tab_profile
+    role: list
+    label: 個人資料
+    help: 這個分頁同時包含變更密碼、兩步驟驗證與刪除帳號。
+    section: 個人資料
+  - id: account.full_name
+    role: text
+    label: 姓名
+    help: 按「編輯」後才能改，改完按「儲存」。
+    constraints:
+      - 最多 30 字
+    section: 個人資料
+  - id: account.email
+    role: text
+    label: Email
+    help: 按「編輯」後才能改，Google 或 LDAP 登入的帳號不能改；改完會寄驗證信到新信箱，點連結後才生效。Google 或 LDAP 登入的帳號顯示「此帳號的 Email 由登入服務管理」。
+    section: 個人資料
+  - id: account.avatar_url
+    role: text
+    label: 頭像網址
+    help: 按「編輯」後可填圖片網址；也可以直接上傳圖片當頭像。
+    constraints:
+      - 以 http:// 或 https:// 開頭，或以 / 開頭
+    section: 個人資料
+  - id: account.change_password
+    role: list
+    label: 變更密碼
+    help: 填目前密碼、新密碼與確認新密碼後按「更新密碼」。
+    section: 變更密碼
+  - id: account.current_password
+    role: text
+    label: 目前密碼
+    help: 只用來確認是你本人，輸入時一律隱藏，沒有顯示密碼的按鈕；沒填就按「更新密碼」會標紅並跳到這一欄，密碼不對時會提示錯誤。
+    constraints:
+      - 必填
+    section: 變更密碼
+    sensitive: true
+  - id: account.new_password
+    role: text
+    label: 新密碼
+    help: 輸入時會即時標出哪幾條規則已符合；按「更新密碼」時沒符合的規則會標紅。
+    constraints:
+      - 8 到 128 個字元
+      - 要有大寫英文字母、小寫英文字母、數字與特殊符號
+      - 不能和目前密碼相同
+      - 「確認新密碼」要與新密碼一致
+    section: 變更密碼
+    sensitive: true
+  - id: account.two_factor
+    role: readonly
+    label: 兩步驟驗證
+    help: 顯示「已啟用」或「尚未啟用」；啟用後登入時除了密碼還要輸入 Authenticator App 的驗證碼。
+    section: 兩步驟驗證
+  - id: account.delete_account
+    role: list
+    label: 刪除帳號
+    help: 刪除後無法再登入與使用服務、AI API 金鑰會被撤銷，使用量、申請與稽核紀錄會保留；帳號無法復原，它的 Email 也不能再拿來註冊。仍持有已開通的資源時系統會拒絕刪除。
+    section: 刪除帳號
+  - id: account.tab_appearance
+    role: list
+    label: 外觀
+    help: 調整主色、背景、介面風格、明暗模式與配色主題；設定只存在這個瀏覽器。
+    section: 外觀
+  - id: account.appearance_reset
+    role: button
+    label: 重設為系統預設值
+    help: 只在「外觀」分頁出現，確認後主色、背景、介面風格與明暗模式回到預設，已上傳的背景圖也會刪除。
+    section: 外觀
+  - id: account.tab_about
+    role: list
+    label: 關於
+    help: 版本、建置時間、授權說明與連結、前端開源元件清單，以及使用者回饋。
+    section: 關於
+  - id: account.feedback
+    role: textarea
+    label: 使用者回饋
+    help: 在「關於」分頁選類型（問題回報／功能建議／其他）、寫下內容後按「送出回饋」，只有管理員看得到，不需要 GitHub 帳號。
+    constraints:
+      - 至少 5 字
+      - 最多 2000 字
+    section: 關於
+dialogs:
+  - id: totp-enable
+    title: 綁定 Google Authenticator
+    opened_by: 綁定驗證 App
+    purpose: 讓登入時多一道驗證碼保護帳號。
+    fields:
+      - label: QR code
+        help: 用 Google Authenticator、Microsoft Authenticator 或 Authy 掃描；無法掃描時改用手動輸入金鑰（可按「複製金鑰」）。
+      - label: App 顯示的 6 位數驗證碼
+        help: 輸入 App 顯示的 6 位數驗證碼後按「啟用兩步驟驗證」完成綁定。
+        required: true
+    notes:
+      - 驗證碼錯誤時，請確認手機時間正確後再試一次。
+  - id: totp-disable
+    title: 停用兩步驟驗證
+    opened_by: 停用兩步驟驗證
+    purpose: 停用後登入只需要密碼。
+    fields:
+      - label: 驗證碼
+        help: 輸入 Authenticator App 目前顯示的 6 位數驗證碼，再按「確認停用」。
+        required: true
+    notes:
+      - 管理員要求啟用兩步驟驗證的帳號，「停用兩步驟驗證」按鈕無法點選。
+  - id: delete-account
+    title: 確定要刪除帳號嗎？
+    opened_by: 刪除帳號
+    purpose: 永久刪除帳號，無法復原。
+    fields:
+      - label: 確認文字
+        help: 照提示輸入「刪除」才能按「確定刪除」。
+        required: true
+    notes:
+      - 仍持有已開通的資源時系統會拒絕刪除，請先清除資源。
+      - 管理員不能刪除自己的帳號；名下還有班級的老師也無法刪除。
+      - 被系統拒絕時會跳出錯誤訊息並關閉確認視窗。
+related:
+  - path: /my-resources
+    when: 刪除帳號前要先刪掉自己的機器

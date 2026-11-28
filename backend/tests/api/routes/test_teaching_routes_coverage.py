@@ -18,6 +18,7 @@ from app.api.routes import quick_practice as qp_route
 from app.api.routes import rubric as rubric_route
 from app.api.routes import teacher_judge_files as tj_files_route
 from app.api.routes import teacher_judge_scripts as tj_scripts_route
+from app.exceptions import NotFoundError
 from app.models import TeachingClass
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
 
@@ -245,25 +246,6 @@ def test_tj_files_routes_delegate_to_services(
 # ─── courses ─────────────────────────────────────────────────────────────────
 
 
-async def test_course_submit_rate_limit_without_reset_at_uses_window(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(courses_route, "get_redis", AsyncMock(return_value=None))
-    monkeypatch.setattr(
-        courses_route,
-        "check_rate_limit_by_key",
-        AsyncMock(return_value=(False, {"reset_at": None})),
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        await courses_route._enforce_submit_rate_limit(uuid.uuid4(), uuid.uuid4())
-
-    assert exc_info.value.status_code == 429
-    assert exc_info.value.headers == {
-        "Retry-After": str(courses_route._SUBMIT_WINDOW_SECONDS)
-    }
-
-
 def test_course_read_routes_delegate_to_services(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -276,8 +258,9 @@ def test_course_read_routes_delegate_to_services(
     monkeypatch.setattr(courses_route, "ai_assignment_service", ai_assignment_service)
     monkeypatch.setattr(courses_route, "weekly_task_service", weekly_task_service)
     session = MagicMock()
-    path_id = uuid.uuid4()
+    class_id = uuid.uuid4()
     assignment_id = uuid.uuid4()
+    run_id = uuid.uuid4()
 
     assert (
         courses_route.list_schedule(session=session, current_user=_USER)
@@ -288,52 +271,73 @@ def test_course_read_routes_delegate_to_services(
         is reminder_service.list_student_reminders.return_value
     )
     assert (
-        courses_route.list_paths(session=session, current_user=_USER)
-        is course_service.list_published_paths.return_value
+        courses_route.list_classes(session=session, current_user=_USER)
+        is course_service.list_student_classes.return_value
+    )
+    course_service.list_student_classes.assert_called_once_with(
+        session, user_id=_USER.id
     )
     assert (
-        courses_route.get_path(session=session, current_user=_USER, path_id=path_id)
-        is course_service.get_path_detail.return_value
+        courses_route.get_class(
+            session=session, current_user=_USER, class_id=class_id
+        )
+        is course_service.get_student_class_detail.return_value
+    )
+    course_service.get_student_class_detail.assert_called_once_with(
+        session, user_id=_USER.id, class_id=class_id
     )
     assert (
         courses_route.list_ai_assignments(
-            session=session, current_user=_USER, path_id=path_id
+            session=session, current_user=_USER, class_id=class_id
         )
         is ai_assignment_service.list_student_ai_assignments.return_value
     )
+    ai_assignment_service.list_student_ai_assignments.assert_called_once_with(
+        session, user_id=_USER.id, class_id=class_id
+    )
     assert (
         courses_route.list_weekly_tasks(
-            session=session, current_user=_USER, path_id=path_id
+            session=session, current_user=_USER, class_id=class_id
         )
         is weekly_task_service.list_student_weekly_tasks.return_value
+    )
+    weekly_task_service.list_student_weekly_tasks.assert_called_once_with(
+        session, user_id=_USER.id, class_id=class_id
     )
     assert (
         courses_route.update_ai_assignment_completion(
             session=session,
             current_user=_USER,
-            path_id=path_id,
+            class_id=class_id,
             assignment_id=assignment_id,
             body=SimpleNamespace(item_id="item-1", completed=True),
         )
         is ai_assignment_service.update_student_completion.return_value
     )
+    ai_assignment_service.update_student_completion.assert_called_once_with(
+        session,
+        user_id=_USER.id,
+        class_id=class_id,
+        assignment_id=assignment_id,
+        item_id="item-1",
+        completed=True,
+    )
     assert (
         courses_route.get_ai_check(
             session=session,
             current_user=_USER,
-            path_id=path_id,
+            class_id=class_id,
             assignment_id=assignment_id,
-            run_id=uuid.uuid4(),
+            run_id=run_id,
         )
         is ai_assignment_service.get_student_ai_check.return_value
     )
-    room_id = uuid.uuid4()
-    assert (
-        courses_route.get_room(session=session, current_user=_USER, room_id=room_id)
-        is course_service.get_room_student_detail.return_value
-    )
-    course_service.get_room_student_detail.assert_called_once_with(
-        session, user_id=_USER.id, room_id=room_id
+    ai_assignment_service.get_student_ai_check.assert_called_once_with(
+        session,
+        user_id=_USER.id,
+        class_id=class_id,
+        assignment_id=assignment_id,
+        run_id=run_id,
     )
 
 
@@ -356,14 +360,14 @@ def test_course_pdf_routes_return_inline_file_responses(
     weekly = courses_route.get_weekly_task_pdf(
         session=MagicMock(),
         current_user=_USER,
-        path_id=uuid.uuid4(),
+        class_id=uuid.uuid4(),
         week_id=uuid.uuid4(),
         file_id=uuid.uuid4(),
     )
     source = courses_route.get_ai_assignment_source_document(
         session=MagicMock(),
         current_user=_USER,
-        path_id=uuid.uuid4(),
+        class_id=uuid.uuid4(),
         assignment_id=uuid.uuid4(),
     )
 
@@ -374,43 +378,24 @@ def test_course_pdf_routes_return_inline_file_responses(
         assert response.headers["content-disposition"].startswith("inline")
 
 
-def test_course_practice_machines_without_linked_class_is_empty(
+def test_course_practice_machines_hides_a_class_the_student_cannot_see(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     course_service = MagicMock()
-    course_service.get_student_class_for_path.return_value = None
+    course_service.get_student_class_or_404.side_effect = NotFoundError("no such course")
     monkeypatch.setattr(courses_route, "course_service", course_service)
     session = MagicMock()
+    class_id = uuid.uuid4()
 
-    assert (
+    with pytest.raises(NotFoundError):
         courses_route.list_practice_machines(
-            session=session, current_user=_USER, path_id=uuid.uuid4()
+            session=session, current_user=_USER, class_id=class_id
         )
-        == []
+
+    course_service.get_student_class_or_404.assert_called_once_with(
+        session, user_id=_USER.id, class_id=class_id
     )
     session.exec.assert_not_called()
-
-
-async def test_course_submit_answer_broadcasts_progress_event(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    path_id = uuid.uuid4()
-    progress_service = MagicMock()
-    progress_service.submit_answer.return_value = ("result", path_id, {"e": 1})
-    broadcast = AsyncMock()
-    monkeypatch.setattr(courses_route, "_enforce_submit_rate_limit", AsyncMock())
-    monkeypatch.setattr(courses_route, "progress_service", progress_service)
-    monkeypatch.setattr(courses_route.course_progress_hub, "broadcast", broadcast)
-
-    result = await courses_route.submit_answer(
-        session=MagicMock(),
-        current_user=_USER,
-        question_id=uuid.uuid4(),
-        data=SimpleNamespace(answer="flag{x}"),
-    )
-
-    assert result == "result"
-    broadcast.assert_awaited_once_with(path_id, {"e": 1})
 
 
 # ─── course_environments ─────────────────────────────────────────────────────

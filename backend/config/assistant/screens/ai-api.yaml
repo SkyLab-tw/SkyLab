@@ -1,0 +1,128 @@
+# AI API（/ai-api）
+id: ai-api
+path: /ai-api
+title: AI API
+access: all
+order: 140
+purpose: 申請與管理 AI API 金鑰、直接跟模型聊天、查詢申請紀錄，開啟 API 快速開始看串接範例，以及查看個人 token 用量。
+when_to_use: 想在自己的程式或專題裡呼叫平台提供的 AI 模型，需要 API 金鑰，或想直接跟模型聊天、查看自己的用量。
+sections:
+  - API 金鑰
+  - API 聊天
+  - 申請紀錄
+  - 我的用量
+features:
+  - 申請金鑰：按「申請金鑰」填金鑰名稱、申請目的與有效期限後送出，畫面會切到「申請紀錄」；管理員核准後金鑰會出現在「API 金鑰」分頁。有待審的申請時頁面會自動更新，審核結果出來會跳提示。
+  - 「API 金鑰」分頁只列使用中的金鑰（分頁上的數字就是使用中的數量）；已過期、已替換或已停用的金鑰收起來，按「顯示已失效的金鑰（N）」才列出。
+  - 點金鑰名稱開啟「API Key 詳細資料」，可以複製完整 API Key、金鑰名稱與 Base URL，按「複製 cURL 指令」複製一行查模型的指令，也能看狀態、建立時間、到期時間與速率限制；失效的金鑰不顯示完整金鑰。
+  - 每把金鑰的「更多操作」選單有「重新命名」「重新產生金鑰」「刪除」；重新產生與刪除都會先確認。
+  - 「API 快速開始」開啟串接說明：複製連線資訊、查可用的模型、執行範例（Responses 或 Chat Completions，JavaScript、Python、Bash（macOS／Linux）、CMD（Windows））；出錯時展開「遇到錯誤？」對照 401、429、413、502。
+  - 「API 聊天」用你使用中的金鑰直接跟模型對話：選模型（有多把金鑰時也可以選金鑰）、按「新對話」開新的、在「本機對話」切換或刪除舊對話；Enter 送出、Shift + Enter 換行，回覆途中可以按「停止等待」。紀錄只保存在這個瀏覽器。沒有使用中的金鑰時會出現「API 金鑰」欄位，貼上金鑰按「套用金鑰」才能聊。
+  - 「申請紀錄」列出每次申請的金鑰名稱、申請用途、狀態（待審核、已通過、已拒絕）、申請時間、審核時間與審核意見；還沒審核的申請在審核時間顯示「尚未處理」，被拒絕的原因寫在審核意見。分頁上的數字是待審核的申請數，沒有待審時不顯示數字。
+  - 「我的用量」選 7 天、30 天或 90 天，看總呼叫次數、輸入與輸出 Tokens、逐日用量與各模型統計；「細項紀錄」逐筆列出呼叫，點一筆展開看 Request ID、請求類型、總 Tokens、處理時間與錯誤訊息。紀錄每頁 50 筆，超過一頁時用分頁列換頁（上一頁、下一頁、點頁碼，頁數多時在「前往 N 頁」輸入頁碼），分頁列也寫出共幾筆；換統計期間會回到第一頁。
+elements:
+  # 申請金鑰視窗的欄位
+  - id: aiapi.key_name
+    role: text
+    label: 金鑰名稱
+    help: 給自己辨認用的名稱，例如：課程專案用、測試用、我的 App。
+    constraints:
+      - 必填
+      - 最多 20 字
+    section: API 金鑰
+  - id: aiapi.purpose
+    role: textarea
+    label: 申請目的
+    help: 說明要拿這把金鑰做什麼，審核時會看這一欄。
+    constraints:
+      - 至少 10 字
+      - 最多 2000 字
+    section: API 金鑰
+  - id: aiapi.duration
+    role: select
+    label: 金鑰有效期限
+    help: 學生可選 1 天、7 天、30 天或 90 天（預設 30 天）；教師與管理員可選 1 天、7 天、30 天或永不過期（預設永不過期）。
+    section: API 金鑰
+  # 金鑰清單上的動作（2026-10 起「顯示／隱藏」改為點金鑰名稱開詳細資料）
+  - id: aiapi.key_detail
+    role: button
+    label: API Key 詳細資料
+    help: 點金鑰名稱開啟，可查看及複製完整 API Key、Base URL，以及複製 cURL 指令。
+    section: API 金鑰
+  - id: aiapi.action_rename
+    role: button
+    label: 重新命名
+    help: 在「更多操作」選單裡，只有使用中的金鑰有；名稱不能空白、最多 20 字，按 Enter 儲存、Esc 取消。
+    section: API 金鑰
+  - id: aiapi.action_refresh
+    role: button
+    label: 重新產生金鑰
+    help: 在「更多操作」選單裡，確認後產生新的 API Key，舊的立即失效；已過期的金鑰不能重新產生，要重新申請。
+    section: API 金鑰
+  - id: aiapi.action_delete
+    role: button
+    label: 刪除
+    help: 在「更多操作」選單裡，確認後這把金鑰不再顯示，也無法發起新的呼叫；已接受的呼叫會完成並記錄用量。
+    section: API 金鑰
+  - id: aiapi.usage_overview
+    role: chart
+    label: API 用量
+    help: 只統計用你的金鑰發出的呼叫：總呼叫次數、輸入與輸出 Tokens、逐日 Tokens 用量與各模型統計。
+    section: 我的用量
+  - id: aiapi.usage_records
+    role: list
+    label: 細項紀錄
+    help: 統計期間內用你的金鑰發出的每一筆呼叫：日期、模型、API Key 來源、輸入與輸出 Tokens、狀態（成功或失敗）；點一筆展開看 Request ID、請求類型、總 Tokens、處理時間，失敗的另外顯示錯誤訊息。期間內沒有呼叫時顯示「這段期間沒有 API 呼叫」。
+    constraints:
+      - 每頁 50 筆；只有一頁時不顯示分頁列。
+      - 換統計期間（7 天、30 天、90 天）會回到第一頁。
+    section: 我的用量
+  - id: aiapi.docs
+    role: button
+    label: API 快速開始
+    help: 點開會跳出視窗，提供 Base URL、查模型的指令，以及 Responses 與 Chat Completions 兩種範例程式。
+    section: API 金鑰
+  - id: aiapi.chat_new
+    role: button
+    label: 新對話
+    help: 在「API 聊天」開一段新的對話；舊對話留在「本機對話」清單。
+    section: API 聊天
+  - id: aiapi.chat_model
+    role: select
+    label: 模型
+    help: 選擇要對話的模型，沒選模型不能送出；切換後下一則回覆就用新的模型。
+    section: API 聊天
+dialogs:
+  - id: apply-key
+    title: 申請金鑰
+    opened_by: 申請金鑰
+    purpose: 送出 AI API 金鑰申請，由管理員審核。
+    fields:
+      - label: 金鑰名稱
+        help: 給自己辨認用，例如：課程專案用、測試用、我的 App；最多 20 字。
+        required: true
+      - label: 申請目的
+        help: 說明要拿金鑰做什麼，至少 10 字，審核時會看這一欄。
+        required: true
+      - label: 金鑰有效期限
+        help: 學生可選 1 天、7 天、30 天或 90 天；教師與管理員可選 1 天、7 天、30 天或永不過期。
+    notes:
+      - 按「送出申請」後畫面會切到「申請紀錄」，審核通過後金鑰才會出現在「API 金鑰」。
+  - id: quick-start
+    title: API 快速開始
+    opened_by: API 快速開始
+    purpose: 串接說明：複製連線資訊、查可用的模型、執行範例程式。
+    fields:
+      - label: 複製連線資訊
+        help: Base URL 與 API Key；有多把可用金鑰時可以選一把，按複製才取回完整金鑰。還沒有可用金鑰時要先申請。
+      - label: 查可用的模型
+        help: 複製指令到終端機執行，回傳清單裡的 id 就是範例裡的 MODEL_NAME。
+      - label: 執行範例
+        help: 選 API 類型（Responses 或 Chat Completions）與程式語言（JavaScript、Python、Bash（macOS／Linux）、CMD（Windows）），複製範例程式。
+    notes:
+      - 遇到 401 代表金鑰錯誤、過期或已被替換；429 是請求太頻繁；413 是輸入內容太長；502 是模型服務暫時沒回應。
+related:
+  - path: /my-resources
+    when: 要在自己的機器上跑串接 AI 的程式
+  - path: /ai-api-review
+    when: （管理員）要審核別人送來的金鑰申請

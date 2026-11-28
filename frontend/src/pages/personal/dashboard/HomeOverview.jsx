@@ -37,9 +37,9 @@ function useRecentUse(userId) {
 /**
  * 學生首頁：機器用單層玻璃卡（MachineCard：狀態、名稱、終端與動作列），
  * 快速練習用資料夾（QuickTemplateFolder：一台機器一張紙，構圖取自複刻的 folder-card），
- * 課堂用票券（CourseTicket）：票面寫上課時間地點，票根的條碼是練習進度。
+ * 課堂用票券（CourseTicket）：票面寫上課時間地點。
  */
-export default function HomeOverview({ paths, resources, resourcesError, coursesError, templates,
+export default function HomeOverview({ courses, resources, resourcesError, coursesError, templates,
   templatesLoading, templatesError, openingMachineId, onOpenMachine, todayLabel, userId = null,
   shuttingDownId = null, onShutdownMachine }) {
   const { t } = useTranslation("personal");
@@ -70,11 +70,11 @@ export default function HomeOverview({ paths, resources, resourcesError, courses
     <section className={styles.section} aria-labelledby="joined-courses-title" data-guide="home-schedule">
       {/* 沒有課程時「查看所有課程」只會點到同樣是空的列表，先不放；讀取失敗時留著當作另一條路 */}
       <SectionHeading id="joined-courses-title" title={t("HomeOverview.joinedCourses")}
-        action={paths.length || coursesError ? t("HomeOverview.allCourses") : null} onAction={goToCourses} />
+        action={courses.length || coursesError ? t("HomeOverview.allCourses") : null} onAction={goToCourses} />
       {coursesError ? <EmptyPanel icon="cloud_off" title={t("StudentHomePage.errorTitle")} />
-        : paths.length ? <div className={styles.courseGrid}>
-          {paths.map((path) => <CourseTicket key={path.id} path={path}
-            onOpen={() => navigate(`/courses/${path.id}`, { state: { from: "/dashboard" } })} />)}
+        : courses.length ? <div className={styles.courseGrid}>
+          {courses.map((course) => <CourseTicket key={course.id} course={course}
+            onOpen={() => navigate(`/courses/${course.id}`, { state: { from: "/dashboard" } })} />)}
         </div> : <EmptyPanel icon="school" title={t("StudentHomePage.noPublishedCoursesTitle")} />}
     </section>
 

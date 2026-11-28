@@ -128,6 +128,32 @@ test("a failed first load shows the error; a failed reload after a write keeps t
   expect(host.textContent).not.toContain("reload failed");
 });
 
+test("a machine you cannot manage says why: class machine, quick practice, or no permission", async () => {
+  fw.getVmRules.mockResolvedValue([]);
+  fw.getVmOptions.mockResolvedValue({ enable: 1 });
+  /* 只有學生看自己的課堂機才叫他找班級老師；快速練習機與其他沒有管理權的機器各有自己的說法 */
+  const cases = [
+    [{ vmid: 11, name: "cls-1", machine_kind: "teaching_class", teaching_class_name: "資安實務" }, "RulesPanel.readOnlyHint"],
+    [{ vmid: 12, name: "qp-1", machine_kind: "quick_practice" }, "RulesPanel.readOnlyHintQuickPractice"],
+    [{ vmid: 13, name: "old-1", machine_kind: "teaching_class" }, "RulesPanel.readOnlyHintNoPermission"],
+    [{ vmid: 14, name: "bare" }, "RulesPanel.readOnlyHintNoPermission"],
+  ];
+  const hintKeys = () => [...host.querySelectorAll("p")]
+    .map((p) => p.textContent.match(/RulesPanel\.readOnlyHint\w*/)?.[0])
+    .filter(Boolean);
+
+  for (const [node, expected] of cases) {
+    await renderPanel(node, { canManage: false });
+    await flush();
+    expect(hintKeys()).toEqual([expected]);
+    expect([...host.querySelectorAll("button")].some((b) => b.textContent.includes("RulesPanel.addRule"))).toBe(false);
+  }
+
+  await renderPanel({ vmid: 15, name: "mine" });
+  await flush();
+  expect(hintKeys()).toEqual([]);
+});
+
 test("adding a connection reloads this VM and asks the page to refresh the topology", async () => {
   fw.getVmRules.mockResolvedValue([]);
   fw.getVmOptions.mockResolvedValue({ enable: 1 });

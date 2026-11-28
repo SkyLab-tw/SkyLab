@@ -50,13 +50,11 @@ class ProxmoxSettings:
     password: str
     verify_ssl: bool
     iso_storage: str
-    data_storage: str
     api_timeout: int
     task_check_interval: int
     pool_name: str
     ca_cert: str | None = None
     gateway_ip: str | None = None
-    local_subnet: str | None = None
     default_node: str | None = None
     connection_id: int | None = None
     connection_name: str | None = None
@@ -113,13 +111,11 @@ def _load_proxmox_settings(connection_id: int | None) -> ProxmoxSettings:
         password=conn_password,
         verify_ssl=connection.verify_ssl,
         iso_storage=connection.iso_storage,
-        data_storage=connection.data_storage,
         api_timeout=connection.api_timeout,
         task_check_interval=connection.task_check_interval,
         pool_name=connection.pool_name,
         ca_cert=connection.ca_cert,
         gateway_ip=connection.gateway_ip,
-        local_subnet=connection.local_subnet,
         default_node=connection.default_node,
         connection_id=connection.id,
         connection_name=connection.name,

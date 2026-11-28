@@ -61,7 +61,7 @@ The Base URL ends with `/api/v1/ai-proxy`. The examples use the official OpenAI 
 3. Type a question and press Enter (Shift + Enter for a new line), or click **Send**. The reply appears as it is generated; click **Stop waiting** to stop it.
 4. Click **New conversation** to start over. Previous conversations are listed under **Local conversations**; click one to reopen it, or the delete icon to remove it.
 
-If you have no usable key, the tab shows a **Campus API key** field where you can paste a key and click **Use key**.
+If you have no usable key, the tab shows an **API key** field where you can paste a key and click **Use key**.
 
 Conversations are stored only in this browser. They do not move to other devices and are lost when you clear the browser data. Calls made here count toward your usage like any other call.
 

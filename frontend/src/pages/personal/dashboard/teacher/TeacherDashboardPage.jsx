@@ -140,7 +140,7 @@ export default function TeacherDashboardPage() {
     [demoMode],
   );
 
-  /* 班級清單與班級管理、課程 CMS 共用同一份快取（背景 30 秒刷新）；示範模式不打 API */
+  /* 班級清單與班級管理共用同一份快取（背景 30 秒刷新）；示範模式不打 API */
   const classesQuery = useTeachingClassesQuery({ enabled: !demoMode, select: selectDashboardClasses });
   const classes = demoClasses ?? classesQuery.data ?? EMPTY;
   /* 首載失敗後背景輪詢重試期間維持失敗畫面，不閃回整頁載入中（見 useQueryView） */

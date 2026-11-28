@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from app.ai.navigation.catalog import resolve_user_role
+from app.ai.assistant.catalog import resolve_user_role
 from app.ai.utils import mentions
 from app.models.user import UserRole
 

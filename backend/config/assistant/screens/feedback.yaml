@@ -1,0 +1,45 @@
+# 使用者回饋（/feedback）
+id: feedback
+path: /feedback
+title: 使用者回饋
+access: admin
+order: 320
+purpose: 查看使用者從「帳號設定 › 關於」送出的問題回報與建議，標記已處理或刪除。
+when_to_use: 想看使用者從「帳號設定 › 關於」送來的問題回報與建議，或處理完要標記、清掉舊回饋。
+sections:
+  - 回饋清單
+features:
+  - 預設只列「待處理」，可切到「已處理」或「全部」，也可以用類型（問題回報、功能建議、其他）篩選；篩選後沒有結果時按「清除篩選」回到待處理、全部類型。
+  - 每頁 20 筆，分頁列顯示「共 N 筆」，按上一頁、下一頁或頁碼換頁；頁數超過 7 頁（或畫面很窄）時可以在「前往 __ 頁」輸入頁碼直接跳過去。換篩選會回到第一頁；把最後一頁的回饋都處理掉時會自動退回前一頁。
+  - 每則顯示類型、送出者（帳號已刪除時顯示「已刪除的帳號」）、時間、版本與完整內容；已處理的另標「已處理」，並寫出誰在什麼時候標記。
+  - 「標記已處理」記下處理人與時間；已處理的可按「改回待處理」還原。
+  - 「刪除」會先確認，刪除後無法復原，送出的人不會收到通知。
+elements:
+  - id: feedback.status_filter
+    role: select
+    label: 處理狀態
+    help: 選項是「待處理」「已處理」「全部」；預設只看待處理。
+    section: 回饋清單
+  - id: feedback.category_filter
+    role: select
+    label: 回饋類型
+    help: 預設是「全部類型」，可選問題回報、功能建議、其他。
+    section: 回饋清單
+  - id: feedback.mark_resolved
+    role: button
+    label: 標記已處理
+    help: 看過並處理後標記，會記下處理人與時間；可用「改回待處理」還原。
+    section: 回饋清單
+  - id: feedback.reopen
+    role: button
+    label: 改回待處理
+    help: 已處理的回饋才有這個按鈕，按下後回到待處理。
+    section: 回饋清單
+  - id: feedback.delete
+    role: button
+    label: 刪除
+    help: 會先跳出「刪除這則回饋？」確認；刪除後無法復原，送出的人不會收到通知。
+    section: 回饋清單
+related:
+  - path: /account
+    when: 自己也要送回饋：帳號設定「關於」分頁

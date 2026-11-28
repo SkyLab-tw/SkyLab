@@ -132,8 +132,7 @@
   background: color-mix(in srgb, var(--color-danger) 12%, transparent);
 }
 
-.status_archived,
-.status_retired {
+.status_archived {
   color: var(--color-text-muted);
   background: var(--color-hover);
 }

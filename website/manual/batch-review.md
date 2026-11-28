@@ -26,7 +26,7 @@ Administrators only. Teachers submit the batches from their class (see [Class Se
 ### Find a batch
 
 1. Type in the search box (**Search batch, applicant or course**). It matches the batch name, applicant name and email, course name, resource type and status.
-2. In the list, a graduation-cap icon marks a class batch and a server icon marks a single batch that is not tied to a class.
+2. Every row in the list is a class batch, marked with a graduation-cap icon.
 3. Each row shows the number of VMs and the applicant, with the status badge and submission time on the right. Rows are sorted newest first.
 4. Machine nodes from the same class with the same status are merged into one row, titled "class name · N nodes". Approving or rejecting that row handles the whole class at once.
 
@@ -35,7 +35,7 @@ Administrators only. Teachers submit the batches from their class (see [Class Se
 ### Look at a batch
 
 1. Click a batch in the list. The panel on the right shows:
-   - **Request Type**: **Class Batch** or **Single Batch**.
+   - **Request Type**: **Class Batch**.
    - **Course**, **Resource Type** (VM / LXC) and **VM Count**.
    - **Spec / Summary** and **OS / Template**. When the class has several machine nodes with different specs or templates, each one is listed.
    - **Submitted At** and **Applicant Email**.

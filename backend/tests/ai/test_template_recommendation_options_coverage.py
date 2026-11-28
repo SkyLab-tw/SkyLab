@@ -158,6 +158,7 @@ def _catalog_item(**overrides: Any) -> SimpleNamespace:
         "cores": 2,
         "memory_mb": 2048,
         "disk_gb": 20,
+        "requires_gpu": False,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
@@ -172,7 +173,10 @@ def test_application_templates_cache_success_and_cached(
 
     def fake_catalog(*, session: Any) -> list[SimpleNamespace]:
         calls.append(1)
-        return [_catalog_item(), _catalog_item(pve_vmid=7001, description="x")]
+        return [
+            _catalog_item(),
+            _catalog_item(pve_vmid=7001, description="x", requires_gpu=True),
+        ]
 
     monkeypatch.setattr(
         options_service.template_service, "list_student_catalog", fake_catalog
@@ -180,6 +184,8 @@ def test_application_templates_cache_success_and_cached(
     items = options_service.get_application_templates_cached(object())
     assert items[0]["description"] == ""
     assert items[1]["description"] == "x"
+    # 規劃挑來源時要知道哪些範本需要 GPU
+    assert [item["requires_gpu"] for item in items] == [False, True]
     clock.value += 10
     again = options_service.get_application_templates_cached(object())
     assert again == items

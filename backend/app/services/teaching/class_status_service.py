@@ -29,7 +29,6 @@ from app.models import (
 )
 from app.models.base import get_datetime_utc
 from app.schemas.teaching_class import ClassResourceUsageItem
-from app.services.course import course_service
 from app.services.teaching import class_network_service
 
 logger = logging.getLogger(__name__)
@@ -102,32 +101,23 @@ def activate_class(
 
 
 def mark_class_active(session: Session, item: TeachingClass) -> None:
-    """班級轉成可上課；課程殼只在「第一次上線」時自動發布。
+    """班級轉成可上課；第一次上線時記下時間，學生端從此看得到這門課。
 
-    recompute 會在程序重啟、補學生、重試之後再次走到這裡。若每次都把課程殼
-    設回 published，老師在課程管理頁刻意取消發布的內容就會被悄悄重新公開。
-    容量預留在班級第一次上線時才轉成 consumed，之後除了撤回（當時還沒有任何
-    機器）之外不會再回到 reserved，所以拿它當「是否第一次上線」的判斷；
-    沒有預留紀錄的舊班級退回「之前不是 active」。呼叫端負責 commit。
+    recompute 會在程序重啟、補學生、重試之後再次走到這裡，``first_active_at``
+    只在還沒有值時寫入，之後不再變動。容量預留在班級第一次上線時轉成
+    consumed。呼叫端負責 commit。
     """
-    was_active = item.status == TeachingClassStatus.active
     item.status = TeachingClassStatus.active
+    if item.first_active_at is None:
+        item.first_active_at = get_datetime_utc()
     reservation = session.exec(
         select(ClassCapacityReservation).where(
             ClassCapacityReservation.class_id == item.id
         )
     ).first()
     if reservation is not None:
-        first_activation = reservation.status != "consumed"
         reservation.status = "consumed"
         session.add(reservation)
-    else:
-        first_activation = not was_active
-    course_service.ensure_class_path(
-        session,
-        teaching_class=item,
-        published=first_activation,
-    )
 
 
 def recompute(*, session: Session, class_id: uuid.UUID) -> TeachingClass | None:

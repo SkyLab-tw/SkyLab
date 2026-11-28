@@ -31,7 +31,6 @@ def _settings(**overrides: Any) -> ProxmoxSettings:
         "password": "pw",
         "verify_ssl": False,
         "iso_storage": "iso-store",
-        "data_storage": "local-lvm",
         "api_timeout": 20,
         "task_check_interval": 1,
         "pool_name": "SkyLab",
@@ -324,15 +323,16 @@ def test_resolve_target_storage_falls_back_to_first_compatible(
     assert ops.resolve_target_storage("pve1", None, required_content="images") == "ssd"
 
 
-def test_resolve_target_storage_without_named_storage_uses_configured_name(
+def test_resolve_target_storage_without_usable_storage_reports_what_was_asked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(ops, "list_node_storages", lambda _n: [{"content": "images"}])
-    monkeypatch.setattr(
-        ops, "get_proxmox_settings_for_node", lambda _n: _settings(data_storage="cfg")
-    )
-    with pytest.raises(BadRequestError, match="'cfg'.*Node storages: none"):
+    with pytest.raises(
+        BadRequestError, match="Requested storage: None.*Node storages: none"
+    ):
         ops.resolve_target_storage("pve1", None, required_content="images")
+    with pytest.raises(BadRequestError, match="Requested storage: 'missing'"):
+        ops.resolve_target_storage("pve1", "missing", required_content="images")
 
 
 # ---------------------------------------------------------------------------

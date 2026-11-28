@@ -1,0 +1,102 @@
+# 我的申請（/my-requests）
+id: my-requests
+path: /my-requests
+title: 我的申請
+access: all
+order: 70
+purpose: 管理你的虛擬機與容器申請、規格調整與延期申請，並追蹤審核與建立進度。
+when_to_use: 要申請新機器，或想知道申請審核到哪、為什麼被退回、開通失敗怎麼辦。
+sections:
+  - 申請清單
+  - 審核狀態
+  - 撤銷與重試
+  - 規格調整申請
+features:
+  - 按「申請資源」開啟申請表單；還沒有任何申請時按「立即申請」。
+  - 每筆申請列出資源、系統、帳號、規格、GPU、申請原因、申請時間、預約期間與狀態；被拒絕時狀態旁有留言圖示，滑過可以看到審核者填的原因。
+  - 視窗較窄時表格會自動收欄：申請清單依序收起 GPU、申請時間、帳號、申請原因、系統、規格、預約期間，收起的內容改用小字列在「資源」欄與「狀態」欄裡；「規格調整申請」依序收起申請原因、申請時間、套用時間、變更內容，改列在「機器」欄與「狀態」欄裡。資源（機器）、狀態與操作三欄一律保留。
+  - 機器還沒建立的申請（審核中、已核准、開通中、開通失敗）可以按「撤銷」（會先確認，撤銷後無法復原）；開通失敗的申請可以按「重試」重新開通。
+  - 狀態是「機器異常」的申請（機器已建立但之後的處理失敗）不能重試，改按「前往我的資源」開機或刪除那台機器。
+  - 「規格調整申請」列出規格調整與延長到期日的申請；規格調整核准後由你自己按「套用」，執行中的虛擬機會先關機、套用新規格後再自動開機，套用失敗或中斷時可以「重新套用」。審核中、或已核准但還沒套用（含套用失敗、中斷）的申請可以「撤銷」，套用中的不能撤銷。狀態旁的圖示滑過可以看審核備註或套用失敗的原因；機器被刪除時申請會自動取消，圖示說明「機器已刪除，申請已自動取消。」
+  - 機器已刪除或已轉成範本的申請不會再列出來。
+elements:
+  - id: myreq.status_pending
+    role: readonly
+    label: 審核中
+    section: 審核狀態
+  - id: myreq.status_approved
+    role: readonly
+    label: 已核准
+    help: 已核准、還沒開始建立機器（預約的開始時間還沒到或等排程器處理）。
+    section: 審核狀態
+  - id: myreq.status_rejected
+    role: readonly
+    label: 已拒絕
+    help: 被退回時狀態旁有留言圖示，滑過可以看到審核者填的原因。
+    section: 審核狀態
+  - id: myreq.status_cancelled
+    role: readonly
+    label: 已取消
+    section: 審核狀態
+  - id: myreq.status_expired
+    role: readonly
+    label: 已過期
+    section: 審核狀態
+  - id: myreq.status_provisioning
+    role: readonly
+    label: 開通中
+    section: 申請清單
+  - id: myreq.status_provisioned
+    role: readonly
+    label: 已開通
+    section: 申請清單
+  - id: myreq.status_provision_failed
+    role: readonly
+    label: 開通失敗
+    help: 機器沒有建起來，可以按「重試」或「撤銷」。
+    section: 申請清單
+  - id: myreq.status_waiting_resources
+    role: readonly
+    label: 等待資源釋出
+    help: 機器已經建立，但目前暫時開不了機（例如 GPU 記憶體不足），系統會持續重試；滑過狀態旁的圖示看原因。
+    section: 申請清單
+  - id: myreq.status_machine_error
+    role: readonly
+    label: 機器異常
+    help: 機器已建立，但之後的處理失敗；這筆申請不能重試，請到「我的資源」開機或刪除這台機器。
+    section: 申請清單
+  - id: myreq.retry
+    role: button
+    label: 重試
+    help: 開通失敗、機器還沒建立的申請可以重新送進開通流程。
+    section: 撤銷與重試
+  - id: myreq.cancel
+    role: button
+    label: 撤銷
+    help: 機器還沒建立的申請（審核中、已核准、開通中、開通失敗）才能撤銷；規格調整與延期申請在審核中、或已核准但還沒套用（含套用失敗、套用中斷）時也可以撤銷，套用中的不行。
+    section: 撤銷與重試
+  - id: myreq.spec_requests
+    role: list
+    label: 規格調整申請
+    help: 規格調整與延長到期日的申請；狀態有審核中、已核准 · 待套用、套用中、已套用、套用失敗、套用中斷、已拒絕、已取消。
+    section: 規格調整申請
+  - id: myreq.apply
+    role: button
+    label: 套用
+    help: 規格調整核准後按這裡套用；會先確認（「關機並套用」），過程約 1～3 分鐘機器無法使用。延期申請核准後立即生效，不需要套用。
+    section: 規格調整申請
+dialogs:
+  - id: error-log
+    title: 錯誤記錄
+    opened_by: 查看錯誤記錄
+    purpose: 看開通失敗或機器異常的申請的原始錯誤訊息，可以「複製」給維運人員。
+    access: admin
+    notes:
+      - 視窗標題會帶上申請的資源名稱。
+related:
+  - path: /my-resources
+    when: 申請已開通，要開始使用機器
+  - path: /quick-create
+    when: 老師已經準備好練習環境，不想等審核
+  - path: /jobs
+    when: 想看開通任務的詳細進度

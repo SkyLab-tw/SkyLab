@@ -4,6 +4,7 @@
  * 顯示防火牆選項與規則清單，自訂規則可就地停用／刪除，
  * 「新增規則」開共用的 ConnectionDialog（鎖定這台 VM）。
  * SkyLab: 受管規則上鎖，只能由連線／拓撲管理（與資源詳情的 FirewallCard 同規則）。
+ * node 除了 vmid、name，還要帶 machine_kind 與 teaching_class_name：沒有管理權時靠它們說明原因。
  */
 
 import { useState } from "react";
@@ -21,6 +22,7 @@ import MIcon from "../MIcon";
 import Switch from "../Switch/Switch";
 import LoadingState from "../LoadingState/LoadingState";
 import ConnectionDialog from "../ConnectionDialog/ConnectionDialog";
+import { readOnlyNodeReason } from "../ConnectionDialog/topologyNodes";
 import useDialogPresence from "../../hooks/useDialogPresence";
 import { useToast } from "../../hooks/useToast";
 import { useConfirm } from "../ConfirmDialog/ConfirmProvider";
@@ -28,6 +30,13 @@ import { useAuth } from "../../contexts/AuthContext";
 import { isAdminUser } from "../../utils/roles";
 
 const EMPTY = Object.freeze([]);
+
+/* 唯讀的原因與拓撲圖拉線被擋時同一套判斷（readOnlyNodeReason），這裡只對應到面板自己的說法 */
+const READ_ONLY_HINT_KEYS = {
+  class: "RulesPanel.readOnlyHint",
+  quick_practice: "RulesPanel.readOnlyHintQuickPractice",
+  no_permission: "RulesPanel.readOnlyHintNoPermission",
+};
 
 function Badge({ label, variant }) {
   return <span className={`${styles.badge} ${styles[`badge_${variant}`]}`}>{label}</span>;
@@ -100,7 +109,8 @@ export default function RulesPanel({ node, onClose, onChanged, closing = false, 
   async function handleDelete(rule) {
     const ok = await confirm({
       title: t("RulesPanel.deleteRuleTitle"),
-      message: t("RulesPanel.deleteRuleMessage", { pos: rule.pos }),
+      /* rule.pos 是 Proxmox 的 0 起算位置，顯示給人看從 1 開始（資源詳情的防火牆卡同一套編號） */
+      message: t("RulesPanel.deleteRuleMessage", { pos: rule.pos + 1 }),
       danger: true,
     });
     if (!ok) return;
@@ -154,11 +164,11 @@ export default function RulesPanel({ node, onClose, onChanged, closing = false, 
         </div>
       </div>
 
-      {/* 學生的課堂機：規則看得到，但只有班級老師能改 */}
+      {/* 規則看得到但不能改：課堂機找班級老師、快速練習機不開放調整、其他只說沒有管理權 */}
       {!canManage && (
         <p className={styles.readOnlyHint}>
           <MIcon name="lock" size={14} />
-          {t("RulesPanel.readOnlyHint")}
+          {t(READ_ONLY_HINT_KEYS[readOnlyNodeReason(node)])}
         </p>
       )}
 
@@ -201,7 +211,7 @@ export default function RulesPanel({ node, onClose, onChanged, closing = false, 
                     key={rule.pos}
                     className={`${styles.ruleRow} ${rule.enable === 0 ? styles.disabled : ""}`}
                   >
-                    <span className={styles.rulePos}>#{rule.pos}</span>
+                    <span className={styles.rulePos}>#{rule.pos + 1}</span>
                     <Badge label={rule.type?.toUpperCase() ?? "—"} variant={rule.type === "in" ? "blue" : "orange"} />
                     {rule.enable === 0
                       ? <Badge label={t("RulesPanel.ruleDisabled")} variant="danger" />

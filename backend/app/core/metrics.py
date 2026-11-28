@@ -342,7 +342,7 @@ def _route_template(scope: Scope) -> str:
 
 _AI_GENERATION_POST_PATHS = frozenset({
     "/ai-proxy/chat/completions", "/ai-proxy/completions", "/ai-proxy/responses",
-    "/ai/navigation/resolve", "/ai/contextual-help/explain", "/ai/pve-log/chat",
+    "/ai/assistant/chat", "/ai/pve-log/chat",
     "/ai/template-recommendation/chat", "/ai/template-recommendation/recommend",
     "/teaching-classes/{teaching_class_id}/judge/sessions/{session_id}/messages",
 })

@@ -32,10 +32,8 @@ def _create(session: Session, name: str = "機房A", **overrides):
         "api_timeout": 30,
         "pool_name": "SkyLab",
         "iso_storage": "local",
-        "data_storage": "local-lvm",
         "task_check_interval": 2,
         "gateway_ip": "10.0.0.1",
-        "local_subnet": "10.0.0.0/24",
         "default_node": "pve1",
         "enabled": True,
         "is_default": True,
@@ -83,7 +81,7 @@ def test_update_connection_password_and_ca_cert_semantics(db: Session) -> None:
 
 
 def test_update_connection_clears_optional_text_fields(db: Session) -> None:
-    conn = _create(db)
+    conn = _create(db, backup_storage="pbs-main")
 
     conn_repo.update_connection(
         db, conn.id, updates={"gateway_ip": None, "default_node": ""}
@@ -91,7 +89,7 @@ def test_update_connection_clears_optional_text_fields(db: Session) -> None:
 
     assert conn.gateway_ip is None
     assert conn.default_node is None
-    assert conn.local_subnet == "10.0.0.0/24"  # 沒帶到就不動
+    assert conn.backup_storage == "pbs-main"  # 沒帶到就不動
 
 
 def test_backup_storage_defaults_to_disabled_and_can_be_set_and_cleared(

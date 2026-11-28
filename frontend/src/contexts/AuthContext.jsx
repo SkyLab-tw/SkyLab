@@ -13,7 +13,8 @@ import {
   restoreStoredSession,
 } from "../services/authSession";
 import { unsubscribePush } from "../services/webPush";
-import { AiContextualHelpService } from "../services/aiContextualHelp";
+import { AiAssistantService } from "../services/aiAssistant";
+import { clearAssistantChats } from "../utils/assistantChatStorage";
 import { queryClient } from "../queries/queryClient";
 
 const AuthContext = createContext(null);
@@ -66,9 +67,13 @@ export function AuthProvider({ children }) {
 
   /** 登出或換 session 時清掉依身分快取的資料，免得下一個帳號沿用上一個的內容。 */
   const syncIdentityCaches = useCallback((sessionId) => {
-    if (cachedSessionRef.current === sessionId) return;
+    const previous = cachedSessionRef.current;
+    /* AI 助手的對話存在 sessionStorage，重新整理後要還在：重新整理後第一次還原 session
+       （previous 還是 null）不清，確定沒有登入身分（登出、token 失效）或同一個分頁換了帳號才清 */
+    if (sessionId === null || (previous !== null && previous !== sessionId)) clearAssistantChats();
+    if (previous === sessionId) return;
     cachedSessionRef.current = sessionId;
-    AiContextualHelpService.resetSurfaces();
+    AiAssistantService.resetSurfaces();
     /* TanStack Query 的伺服器資料快取（機器清單、申請單…）同樣綁身分 */
     queryClient.clear();
   }, []);

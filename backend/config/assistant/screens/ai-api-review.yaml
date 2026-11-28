@@ -1,0 +1,102 @@
+# AI API 審核（/ai-api-review）
+id: ai-api-review
+path: /ai-api-review
+title: AI API 審核
+access: admin
+order: 420
+purpose: 審核使用者在 AI API 頁送出的金鑰申請；通過後系統立刻核發一把金鑰（base_url 與 api_key）給申請者。
+when_to_use: 有使用者申請 AI API 金鑰，要決定通過或拒絕，或要回頭查已經審核過的申請。
+sections:
+  - 待審核
+  - 已通過
+  - 已拒絕
+  - 全部
+features:
+  - 依狀態切換「待審核」「已通過」「已拒絕」「全部」，分頁上的數字是各狀態的筆數；每個分頁最多顯示最新 100 筆，清單每 30 秒自動重新整理。
+  - 每筆待審核的申請按「通過」或「拒絕」會先開確認視窗，可以填審核備註再送出；通過後系統立刻核發金鑰給申請者，效期從核准當下起算（依申請時選的期限）。
+  - 審核後不能更改；已審核的申請在「操作」欄改為顯示審核備註。
+  - 批量審核：勾選多筆待審核的申請（按住 Shift 點選可以連選一段；已經勾了至少一筆時，點待審申請的整列也是勾選），按「通過」或「拒絕」會跳出「通過 N 筆申請？」或「拒絕 N 筆申請？」確認，可以填一段共用的審核備註；沒成功的那幾筆會保留勾選，原因寫在該筆申請的「狀態」欄。只有待審核的申請能勾，沒有待審申請的分頁不會出現勾選框。
+  - 「用途」超過 60 個字會截斷，按「通過」或「拒絕」開啟的視窗會列出完整用途。
+elements:
+  - id: aireview.col_applicant
+    role: table
+    label: 申請者
+    help: 申請者的姓名與 Email。
+    section: 待審核
+  - id: aireview.col_key_name
+    role: table
+    label: 金鑰名稱
+    section: 待審核
+  - id: aireview.col_purpose
+    role: table
+    label: 用途
+    help: 申請者填的使用目的，審核主要看這一欄；超過 60 個字會截斷，完整內容在通過或拒絕的確認視窗裡。
+    section: 待審核
+  - id: aireview.col_status
+    role: table
+    label: 狀態
+    help: 待審核、已通過或已拒絕；批量審核沒成功的申請會在這裡標出失敗原因。
+    section: 全部
+  - id: aireview.col_applied_at
+    role: table
+    label: 申請時間
+    section: 待審核
+  - id: aireview.col_reviewed_at
+    role: table
+    label: 審核時間
+    help: 還沒審核的申請顯示「尚未審核」。
+    section: 已通過
+  - id: aireview.col_actions
+    role: table
+    label: 操作
+    help: 待審核的申請顯示「通過」「拒絕」；已審核的改為顯示審核備註（沒有備註顯示「—」）。
+    section: 待審核
+  - id: aireview.comment
+    role: textarea
+    label: 審核備註
+    help: 通過或拒絕時可以留的備註，申請者會在自己的 AI API 頁看到；拒絕時寫上原因能讓申請者知道下一步。批量審核時這段備註會寫進每一筆申請。
+    constraints:
+      - 選填
+      - 最多 2000 字
+    section: 待審核
+  - id: aireview.approve
+    role: button
+    label: 通過
+    help: 先開確認視窗；通過後系統會直接核發可用的 base_url 與 api_key 給申請者。勾選多筆後按這個是批量通過。
+    section: 待審核
+  - id: aireview.reject
+    role: button
+    label: 拒絕
+    help: 先開確認視窗；勾選多筆後按這個是批量拒絕。
+    section: 待審核
+  - id: aireview.not_reviewed
+    role: readonly
+    label: 尚未審核
+    help: 「審核時間」欄在申請還沒審核時顯示這個字。
+    section: 待審核
+dialogs:
+  - id: approve
+    title: 通過 AI API 申請
+    opened_by: 通過
+    purpose: 確認申請者、金鑰名稱、申請時間與用途後通過；通過後系統立刻核發金鑰給申請者。
+    fields:
+      - label: 審核備註
+        help: 可留空，最多 2000 字。
+    notes:
+      - 按「確認通過」送出。
+      - 金鑰效期從核准當下起算，依申請時選的期限。
+      - 平台的 AI API 對外網址還沒設定，或申請者目前的身分不能使用申請的期限（例如學生申請永久）時會無法通過，只能拒絕後請對方重新申請。
+  - id: reject
+    title: 拒絕 AI API 申請
+    opened_by: 拒絕
+    purpose: 拒絕這筆申請。
+    fields:
+      - label: 審核備註
+        help: 可留空，最多 2000 字；寫上原因能讓申請者知道下一步。
+    notes:
+      - 按「確認拒絕」送出。
+related:
+  - path: /ai-api-keys
+    when: 要管理已核發的金鑰
+  - path: /ai-monitoring
+    when: 要看 AI 用量、錯誤率與模型運行狀態

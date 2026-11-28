@@ -1,0 +1,180 @@
+# 機器範本（/templates）
+id: templates
+path: /templates
+title: 機器範本
+access: staff
+order: 150
+purpose: 把設定好的母機轉成範本。可見範圍設為「全部可見」後，學生就能在申請表單的資源設定裡選用。
+when_to_use: 已經在一台機器裝好課程要用的軟體，想讓學生直接選用；或要更新、克隆、刪除既有範本。
+sections:
+  - 範本清單
+  - 建立與轉換
+  - 可見範圍
+  - 版本
+features:
+  - 按「從 VM 建立範本」把裝好環境的母機轉成範本。
+  - 每個範本的「更多操作」選單（⋮）：「克隆開通」複製出可用的機器（只有狀態是「就緒」的範本能按）；「使用手冊（數量）」下載附件，範本有附件時才出現。
+  - 「編輯 / 可見範圍」、「重新轉換」、「開始更新循環」、「刪除範本」只有範本的擁有者與管理員看得到；別人的範本只能克隆與看使用手冊。
+  - 可見範圍設為「全部可見」後，就緒的範本會出現在學生申請表單的範本選項裡；「私人」只有擁有者與管理員看得到。
+  - 要更新範本內容：「開始更新循環」會複製出一台暫存母機，登記在範本擁有者的資源列表；改完回來按「完成更新（轉為新版）」，確認「完成更新並轉為新版範本？」後按「關機並轉換」，暫存母機會關機並成為新版範本、版本號加一；不改了就按「取消更新循環」，暫存母機會被回收。這幾個動作送出、還在處理時，選單裡的更新循環與「重新轉換」選項會暫時不能按。
+  - 轉換失敗（狀態「失敗」）時可以按「重新轉換」，確認「重新轉換為範本？」後按「關機並轉換」才會開始。
+  - 視窗較窄、表格放不下時會收欄：依序把「版本」「類型」「VMID」改寫在名稱那一格（例如「9001 · VM · v2」），再窄時把「可見範圍」改寫在狀態那一格。
+  - 「刪除範本」會在背景刪除，無法復原；更新循環中，或還有從它開出的機器、尚未開通的申請、未完成的批量建立、引用它的教學環境時，系統會拒絕刪除。
+elements:
+  - id: templates.col_vmid
+    role: table
+    label: VMID
+    section: 範本清單
+  - id: templates.col_type
+    role: table
+    label: 類型
+    help: VM 是虛擬機範本，LXC 是容器範本；只有 VM 範本能設定需要 GPU。
+    section: 範本清單
+  - id: templates.col_status
+    role: table
+    label: 狀態
+    help: 建立中（正在轉換）、就緒（可以克隆與給學生選用）、更新循環中、失敗（轉換沒有成功，錯誤訊息會跟範本名稱一起顯示，可以「重新轉換」）。
+    section: 範本清單
+  - id: templates.col_visibility
+    role: table
+    label: 可見範圍
+    help: 設為「全部可見」後，學生就能在申請表單的資源設定選用；「私人」只有擁有者與管理員看得到。
+    section: 可見範圍
+  - id: templates.col_version
+    role: table
+    label: 版本
+    help: 每完成一次更新循環，版本號加一。
+    section: 版本
+  - id: templates.pve_missing
+    role: readonly
+    label: PVE 不存在
+    help: 狀態是「就緒」的範本在 PVE 端找不到時，名稱那一格會標出這個警示；範本可能已被手動刪除。
+    section: 範本清單
+  - id: templates.password_unsettable
+    role: readonly
+    label: 密碼無法由平台設定
+    help: 這個範本沒有 cloud-init，開出來的機器沿用範本原本的帳號密碼，克隆時不能填登入密碼。用更新循環在範本裡裝好 cloud-init，完成更新後會自動解除。
+    section: 範本清單
+  - id: templates.more_actions
+    role: button
+    label: 更多操作
+    help: 每個範本的 ⋮ 按鈕，克隆、編輯、使用手冊、更新循環與刪除都收在這裡。
+    section: 範本清單
+  - id: templates.menu_clone
+    role: button
+    label: 克隆開通
+    help: 從這個範本複製出可以用的機器，一次 1 到 50 台；只有狀態是「就緒」的範本能按。
+    section: 建立與轉換
+  - id: templates.menu_edit
+    role: button
+    label: 編輯 / 可見範圍
+    help: 只有範本的擁有者與管理員看得到。
+    section: 可見範圍
+  - id: templates.menu_manual
+    role: button
+    label: 使用手冊
+    help: 查看與下載這個範本附的說明文件；選單上會顯示附件數量，沒有附件時不出現。
+    section: 範本清單
+  - id: templates.menu_retry
+    role: button
+    label: 重新轉換
+    help: 狀態是「失敗」時才出現；會先確認「重新轉換為範本？」，按「關機並轉換」後母機會先關機，再重新轉成範本，無法復原。
+    section: 建立與轉換
+  - id: templates.menu_start_cycle
+    role: button
+    label: 開始更新循環
+    help: 狀態是「就緒」時才出現。系統會複製出一台暫存母機，登記在範本擁有者的資源列表，改完再回來轉成新版。
+    section: 版本
+  - id: templates.menu_finish_cycle
+    role: button
+    label: 完成更新（轉為新版）
+    help: 更新循環中才出現。確認後暫存母機會關機，成為新版範本並汰換舊版，動作無法復原。
+    section: 版本
+  - id: templates.menu_cancel_cycle
+    role: button
+    label: 取消更新循環
+    help: 更新循環中才出現。暫存母機會被回收，範本回到原本的版本。
+    section: 版本
+  - id: templates.menu_delete
+    role: button
+    label: 刪除範本
+    help: PVE 端的範本磁碟會一併刪除，動作無法復原。更新循環中，或還有從這個範本開出的機器、尚未開通的申請、未完成的批量建立、引用它的教學環境時，系統會拒絕刪除。
+    section: 範本清單
+dialogs:
+  - id: create
+    title: 把 VM 轉為範本
+    opened_by: 從 VM 建立範本
+    purpose: 選一台已裝好環境的母機轉成範本。
+    fields:
+      - label: 來源機器
+        help: 選要轉換的 VM/LXC。老師只能選自己的機器，管理員可以選全部機器。
+        required: true
+      - label: 範本名稱
+        help: 例如 Ubuntu 22.04 + Docker 實驗環境；最多 255 字。
+        required: true
+      - label: 說明（選填）
+        help: 這個範本裝了什麼、適合哪些課程；最多 1000 字。
+      - label: 可見範圍
+        help: 「私人」或「全部可見」，預設私人。
+      - label: 這個範本需要 GPU
+        help: 用它開機器時一定要選一張 GPU；只有 VM 範本能設定，來源是 LXC 時不能勾。
+      - label: 自訂預設規格
+        help: 不勾選時沿用來源機器的 CPU 與記憶體；勾選後可設預設 CPU 核心數（1–8 核）與預設記憶體（0.5–32 GB）。
+      - label: 使用手冊 / 附件（選填，最多 10 個）
+        help: 支援 PDF、Office 文件、圖片、壓縮檔等，單檔 50MB 內；會在轉換開始後自動上傳。從這個範本開出的機器，擁有者也拿得到這些附件。
+    notes:
+      - 按「開始轉換」後會再確認一次「開始轉換為範本？」，按「關機並轉換」才會開始。
+      - 轉換會先把來源機關機，完成後原 VM 從資源列表移除、成為範本母機，無法再當一般機器開機使用。
+      - 轉換時會偵測來源機有沒有 cloud-init；沒有的話範本會標示「密碼無法由平台設定」，開出來的機器沿用範本內的帳號密碼。
+  - id: edit
+    title: 編輯範本
+    opened_by: 編輯 / 可見範圍
+    purpose: 修改範本的名稱、說明、可見範圍、GPU 需求、預設規格與附件。
+    fields:
+      - label: 範本名稱
+        required: true
+      - label: 說明（選填）
+      - label: 可見範圍
+        help: 設為「全部可見」，學生才能在申請表單選用。
+      - label: 這個範本需要 GPU
+        help: 只有 VM 範本能設定。
+      - label: 自訂預設規格
+        help: 勾選後可設預設 CPU 核心數（1–8 核）與預設記憶體（0.5–32 GB）；不勾選就沿用來源機器的規格。
+      - label: 使用手冊 / 附件（選填，最多 10 個）
+        help: 可以補傳或刪除附件，選好檔案就立即上傳，刪除也立即生效。
+    notes:
+      - 範本標示「密碼無法由平台設定」時，視窗裡會說明原因：用更新循環在範本裡裝好 cloud-init，完成更新後會自動解除。
+  - id: clone
+    title: 克隆範本
+    opened_by: 克隆開通
+    purpose: 從範本複製出可用的機器，系統會自動設好 IP 與防火牆。
+    fields:
+      - label: 主機名稱（選填）
+        help: 留空時使用範本名稱；一次開多台時會自動加上序號。
+      - label: 數量
+        help: 一次 1 到 50 台，超出範圍會自動調回。
+      - label: CPU 核心數
+        help: 1 到 8 核（範本預設規格更大時上限跟著放大）；預設值是範本的預設規格，沒有設定時是 2 核。
+      - label: 記憶體 (RAM)
+        help: 0.5 到 32 GB（範本預設規格更大時上限跟著放大）；預設值是範本的預設規格，沒有設定時是 2 GB。
+      - label: 硬碟空間
+        help: 跟隨範本，不可調整。
+      - label: 登入密碼（選填）
+        help: 留空由系統產生隨機密碼，可在資源頁查看；自己填的密碼平台不會保存，忘記只能重設。範本標示「密碼無法由平台設定」時沒有這一欄。
+      - label: GPU（此範本必須配置）
+        help: 範本需要 GPU 時才出現，一定要選一張可用的 GPU 才能送出；只列出與範本同叢集的 GPU，已滿的不能選。
+      - label: vGPU 規格
+        help: 選的 GPU 有 vGPU 規格時才出現，預設是記憶體最小、還建得出來的規格；標「（記憶體不足）」的不能選。
+      - label: 克隆完成後自動開機
+        help: 預設勾選。
+    notes:
+      - 自訂密碼至少 8 個字元、最多 64 個字元；Windows 範本的密碼還要包含大寫、小寫、數字、符號中至少三類，而且不能含帳號名稱 Admin。Windows 範本在輸入自訂密碼後會列出這些規則、符合的打勾；還有規則沒滿足時按送出會被擋下，並把沒滿足的項目標出來。
+      - 開出的台數與規格會計入你的資源配額，超過會被拒絕。
+      - 送出後進度在「背景任務」，完成的機器會出現在「我的資源」。
+related:
+  - path: /my-resources
+    when: 要先準備一台母機並裝好軟體，或要修改更新循環開出的暫存母機
+  - path: /course-template-management
+    when: 要把範本組成多台機器的教學環境給班級使用
+  - path: /jobs
+    when: 要看轉換、克隆或刪除的進度

@@ -8,7 +8,7 @@ describe("route guide catalog", () => {
       "/quick-create", "/quick-template/12", "/my-resources", "/my-resources/101", "/my-requests", "/account",
       "/resource-mgmt", "/resource-mgmt/101", "/request-review", "/gpu-mgmt", "/batch-review", "/templates",
       "/ai-api", "/ai-api-review", "/ai-api-keys", "/ai-monitoring",
-      "/course-cms", "/course-template-management", "/course-template-management/new",
+      "/course-template-management", "/course-template-management/new",
       "/course-template-management/template-1", "/class-management", "/class-setup",
       "/class-management/class-1", "/class-management/class-1/machines", "/class-management/class-1/ai",
       "/admin", "/pve-connections", "/scheduler", "/governance", "/ldap", "/storage",

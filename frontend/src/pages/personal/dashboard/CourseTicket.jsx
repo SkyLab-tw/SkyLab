@@ -9,6 +9,9 @@ import styles from "./CourseTicket.module.scss";
 const STATES = new Set(["now", "later", "available", "ended", "unscheduled"]);
 const DAY = 86_400_000;
 
+/* 票根的條碼固定畫這麼多條：它只是票券的花紋，條寬與間距由課程 id 決定，每門課不一樣 */
+const BARS = 24;
+
 /* 課表的 session_date 是課程時區（預設台北）的日曆日，今天也用同一個時區取 */
 function taipeiToday(now) {
   const [year, month, day] = taipeiDateKey(now).split("-").map(Number);
@@ -32,33 +35,32 @@ export function sessionDayLabel(sessionDate, now, lang) {
 
 /**
  * 課程票券（首頁「目前加入的課堂」與「我的課程」頁共用）：整張卡是一張票。兩側缺口與撕線把票面（何時、何地、誰教）和票根分開，
- * 票根上的條碼就是練習進度——一條一題，做完的在前（見 ticketBarcode）。
+ * 票根只有一排條碼當花紋（不代表進度）。
+ * 課程就是學生所在的班級：id 是班級 id、title 是班級名稱。
  * 時間地點欄位來自 /courses/schedule；沒有的資料（例如未設定教室）就不畫那一格。
  *
  * @param {boolean} [demo]      導覽專用的模擬課程：虛線外框＋「安全模擬」標籤（導覽文案有提到這兩個）
  * @param {string}  [guide]     整張票的 data-guide
  * @param {string}  [openGuide] 票根的 data-guide（導覽的「點進課程」步驟點這裡）
  */
-export default function CourseTicket({ path, onOpen, now = Date.now(), demo = false, guide, openGuide }) {
+export default function CourseTicket({ course, onOpen, now = Date.now(), demo = false, guide, openGuide }) {
   const { t, i18n } = useTranslation("personal");
-  const state = STATES.has(path.state) ? path.state : null;
+  const state = STATES.has(course.state) ? course.state : null;
   const statusText = demo ? t("StudentCoursesPage.guideDemoBadge")
     : state ? t(`CourseTicket.status.${state}`) : null;
-  const day = sessionDayLabel(path.session_date, now, i18n.language);
-  const start = formatTime(path.start_at, "");
-  const end = formatTime(path.end_at, "");
+  const day = sessionDayLabel(course.session_date, now, i18n.language);
+  const start = formatTime(course.start_at, "");
+  const end = formatTime(course.end_at, "");
   /* 老師沒有填姓名時後端回 email，這時不加稱謂 */
-  const teacher = !path.teacher ? ""
-    : path.teacher.includes("@") ? path.teacher
-      : t("CourseTicket.teacher", { name: path.teacher });
+  const teacher = !course.teacher ? ""
+    : course.teacher.includes("@") ? course.teacher
+      : t("CourseTicket.teacher", { name: course.teacher });
   const fields = [
     day && { key: "date", label: t("CourseTicket.date"), value: day },
     start && end && { key: "time", label: t("CourseTicket.time"), value: `${start}–${end}` },
-    path.location && { key: "room", label: t("CourseTicket.room"), value: path.location },
+    course.location && { key: "room", label: t("CourseTicket.room"), value: course.location },
   ].filter(Boolean);
-  const total = Math.max(0, Number(path.total_questions) || 0);
-  const completed = Math.min(Math.max(0, Number(path.completed_questions) || 0), total);
-  const bars = ticketBarcode(path.id, total, completed);
+  const bars = ticketBarcode(course.id, BARS, 0);
 
   return (
     <button type="button" className={styles.ticket} data-state={state ?? undefined} onClick={onOpen}
@@ -66,7 +68,7 @@ export default function CourseTicket({ path, onOpen, now = Date.now(), demo = fa
       <span className={styles.paper}>
         <span className={styles.main}>
           {statusText && <span className={styles.status}>{statusText}</span>}
-          <strong className={styles.title}>{path.title}</strong>
+          <strong className={styles.title}>{course.title}</strong>
           {teacher && <span className={styles.teacher}>{teacher}</span>}
           {fields.length > 0 && (
             <span className={styles.fields}>
@@ -81,24 +83,14 @@ export default function CourseTicket({ path, onOpen, now = Date.now(), demo = fa
         </span>
 
         <span className={styles.stub} data-guide={openGuide}>
-          {bars.length > 0 ? (
-            <>
-              <span className={styles.barcode} aria-hidden="true">
-                {bars.map((bar, index) => (
-                  <Fragment key={index}>
-                    <span className={bar.done ? styles.barDone : styles.bar} style={{ flexGrow: bar.width }} />
-                    {bar.gap > 0 && <span style={{ flexGrow: bar.gap }} />}
-                  </Fragment>
-                ))}
-              </span>
-              <span className={styles.count}>
-                <strong>{t("StudentCoursesPage.questions", { completed, total })}</strong>
-                <small>{completed >= total ? t("CourseTicket.allSolved") : t("CourseTicket.solved")}</small>
-              </span>
-            </>
-          ) : (
-            <span className={styles.empty}>{t("CourseTicket.noQuestions")}</span>
-          )}
+          <span className={styles.barcode} aria-hidden="true">
+            {bars.map((bar, index) => (
+              <Fragment key={index}>
+                <span className={styles.bar} style={{ flexGrow: bar.width }} />
+                {bar.gap > 0 && <span style={{ flexGrow: bar.gap }} />}
+              </Fragment>
+            ))}
+          </span>
         </span>
       </span>
     </button>

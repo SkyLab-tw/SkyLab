@@ -18,6 +18,14 @@ export const TemplatesService = {
     return apiGet("/api/v1/templates/catalog", options);
   },
 
+  /**
+   * 單一範本。比清單多一項 is_windows（true／false）：清單為了不逐筆打 PVE 不查，那裡是 null。
+   * 克隆視窗靠它在送出前對照 Windows 的密碼規則。
+   */
+  get(templateId, options) {
+    return apiGet(`/api/v1/templates/${templateId}`, options);
+  },
+
   /** 把現有 VM/LXC 轉為範本（背景任務） */
   create(body) {
     return apiPost("/api/v1/templates/", body);
@@ -33,7 +41,7 @@ export const TemplatesService = {
     return apiPost(`/api/v1/templates/${templateId}/retry`, {});
   },
 
-  /** 刪除範本（仍有 linked clone 子機時後端回 409） */
+  /** 刪除範本（更新循環中，或仍有克隆機、未開通的申請、未完成的批次建機、引用它的教學環境時後端回 409） */
   remove(templateId) {
     return apiDelete(`/api/v1/templates/${templateId}`);
   },

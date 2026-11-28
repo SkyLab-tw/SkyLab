@@ -7,25 +7,26 @@ import { taipeiDateKey } from "../taipeiDate";
 
 const defaultT = (key) => i18n.t(key, { ns: "personal" });
 
-/** 把任意進度值收斂成 0–100 的整數。 */
-export function toPercent(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.min(100, Math.round(number)));
-}
+/* 課表狀態的先後：正在上課 → 今天稍後 → 可課後練習 → 今天已結束 */
+const SCHEDULE_STATE_ORDER = { now: 0, later: 1, available: 2, ended: 3 };
 
 /**
- * 從課程或章節清單挑出「現在該做的那一個」。
- * 優先順序：進行中（0 < 進度 < 100）→ 尚未完成 → 第一筆。
+ * 網址沒有指定課程（或指定的不在我的課程裡）時，挑出「現在該看的那一門」。
+ * 依課表狀態挑：正在上課的優先，其次今天稍後、可課後練習、今天已結束，同狀態取開始時間較早的；
+ * 課表裡一門都對不上（例如都不在學期內）就取我的課程的第一門。
+ * courses 與 schedule 的 id 都是班級 id。
  */
-export function pickInProgress(items) {
-  const list = items ?? [];
-  return (
-    list.find((item) => toPercent(item.progress_percent) > 0 && toPercent(item.progress_percent) < 100)
-    ?? list.find((item) => toPercent(item.progress_percent) < 100)
-    ?? list[0]
-    ?? null
-  );
+export function pickCurrentCourse(courses, schedule) {
+  const list = courses ?? [];
+  const byId = new Map(list.map((course) => [String(course.id), course]));
+  const rank = (row) => SCHEDULE_STATE_ORDER[row.state] ?? Object.keys(SCHEDULE_STATE_ORDER).length;
+  const scheduled = (schedule ?? [])
+    .filter((row) => byId.has(String(row.id)))
+    .sort((left, right) => (
+      rank(left) - rank(right)
+      || String(left.start_at ?? "").localeCompare(String(right.start_at ?? ""))
+    ));
+  return (scheduled.length ? byId.get(String(scheduled[0].id)) : list[0]) ?? null;
 }
 
 /** 本週：上課日期在今天（含，台北日曆日）以前的最後一週；學期還沒開始時取第一週。 */

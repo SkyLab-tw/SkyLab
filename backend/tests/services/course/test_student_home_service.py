@@ -7,8 +7,6 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.models import (
-    CoursePath,
-    CoursePathStatus,
     Resource,
     TeachingClass,
     TeachingClassStatus,
@@ -28,8 +26,8 @@ from app.models.teacher_judge_script_artifact import (
 from app.models.teacher_judge_session import TeacherJudgeSession
 from app.services.course import ai_assignment_service, weekly_task_service
 from app.services.course.course_service import (
-    ensure_class_path,
-    list_published_paths,
+    get_student_class_detail,
+    list_student_classes,
     list_student_schedule,
 )
 from app.services.course.reminder_service import list_student_reminders
@@ -56,7 +54,8 @@ def _linked_class(
     teacher: User,
     student: User,
     session_date: date,
-) -> tuple[TeachingClass, CoursePath]:
+) -> TeachingClass:
+    """一個已經開放給學生（曾經可以上課）的班級，學生在名單上。"""
     teaching_class = TeachingClass(
         name="Linux 系統管理實務",
         code="linux-a",
@@ -69,30 +68,23 @@ def _linked_class(
         start_time=time(9),
         end_time=time(11),
         status=TeachingClassStatus.active,
-    )
-    path = CoursePath(
-        title="Linux 系統管理實務",
-        description="練習 Linux 權限與常用指令。",
-        created_by=teacher.id,
-        teaching_class_id=teaching_class.id,
-        status=CoursePathStatus.published,
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
     session.add(teacher)
     session.add(student)
     session.add(teaching_class)
-    session.add(path)
     session.commit()
     session.add(TeachingClassStudent(class_id=teaching_class.id, user_id=student.id))
     session.commit()
-    return teaching_class, path
+    return teaching_class
 
 
-def test_course_list_only_includes_published_courses_for_active_enrollments() -> None:
+def test_course_list_only_includes_opened_classes_for_active_enrollments() -> None:
     with _session() as session:
         teacher = _user("teacher@example.edu", UserRole.teacher)
         student = _user("student@example.edu", UserRole.student)
         other_student = _user("other@example.edu", UserRole.student)
-        teaching_class, own_path = _linked_class(
+        teaching_class = _linked_class(
             session, teacher=teacher, student=student, session_date=date(2026, 8, 25)
         )
         session.refresh(teaching_class)
@@ -108,37 +100,27 @@ def test_course_list_only_includes_published_courses_for_active_enrollments() ->
         session.add(
             TeachingClassStudent(class_id=other_class.id, user_id=other_student.id)
         )
-        other_path = CoursePath(
-            title="Other student's course",
-            created_by=teacher.id,
-            teaching_class_id=other_class.id,
-            status=CoursePathStatus.published,
-        )
-        session.add(other_path)
-        session.add(
-            CoursePath(
-                title="Unassigned published course",
-                created_by=teacher.id,
-                status=CoursePathStatus.published,
-            )
-        )
         session.commit()
 
+        own = list_student_classes(session, user_id=student.id)
+        assert [(row.id, row.title) for row in own] == [
+            (teaching_class.id, "Linux 系統管理實務")
+        ]
         assert [
-            row.id for row in list_published_paths(session, user_id=student.id)
-        ] == [own_path.id]
-        assert [
-            row.id for row in list_published_paths(session, user_id=other_student.id)
-        ] == [other_path.id]
-        assert list_published_paths(session, user_id=teacher.id) == []
+            row.id for row in list_student_classes(session, user_id=other_student.id)
+        ] == [other_class.id]
+        assert list_student_classes(session, user_id=teacher.id) == []
 
-        own_path.status = CoursePathStatus.draft
-        session.add(own_path)
+        # 班級還沒第一次可以上課：學生看不到這門課
+        opened_at = teaching_class.first_active_at
+        teaching_class.first_active_at = None
+        session.add(teaching_class)
         session.commit()
-        assert list_published_paths(session, user_id=student.id) == []
-        own_path.status = CoursePathStatus.published
-        session.add(own_path)
+        assert list_student_classes(session, user_id=student.id) == []
+        teaching_class.first_active_at = opened_at
+        session.add(teaching_class)
         session.commit()
+        assert len(list_student_classes(session, user_id=student.id)) == 1
 
         enrollment = session.exec(
             select(TeachingClassStudent).where(
@@ -148,7 +130,7 @@ def test_course_list_only_includes_published_courses_for_active_enrollments() ->
         enrollment.status = "removed"
         session.add(enrollment)
         session.commit()
-        assert list_published_paths(session, user_id=student.id) == []
+        assert list_student_classes(session, user_id=student.id) == []
 
 
 def test_schedule_uses_real_class_time_teacher_and_location() -> None:
@@ -156,7 +138,7 @@ def test_schedule_uses_real_class_time_teacher_and_location() -> None:
     teacher = _user("teacher@example.edu", UserRole.teacher)
     student = _user("student@example.edu", UserRole.student)
     local_date = date(2026, 8, 25)
-    _, path = _linked_class(
+    teaching_class = _linked_class(
         session,
         teacher=teacher,
         student=student,
@@ -170,7 +152,7 @@ def test_schedule_uses_real_class_time_teacher_and_location() -> None:
     )
 
     assert len(rows) == 1
-    assert rows[0].id == path.id
+    assert rows[0].id == teaching_class.id
     assert rows[0].state == "now"
     assert rows[0].teacher == "陳老師"
     assert rows[0].location == "電腦教室 A"
@@ -182,7 +164,7 @@ def test_schedule_keeps_active_course_visible_outside_its_class_day() -> None:
     teacher = _user("teacher@example.edu", UserRole.teacher)
     student = _user("student@example.edu", UserRole.student)
     monday = date(2026, 8, 24)
-    teaching_class, path = _linked_class(
+    teaching_class = _linked_class(
         session,
         teacher=teacher,
         student=student,
@@ -199,7 +181,7 @@ def test_schedule_keeps_active_course_visible_outside_its_class_day() -> None:
     )
 
     assert len(rows) == 1
-    assert rows[0].id == path.id
+    assert rows[0].id == teaching_class.id
     assert rows[0].state == "available"
     assert rows[0].label == "可課後練習"
     assert rows[0].session_date == date(2026, 8, 27)
@@ -213,7 +195,7 @@ def test_weekly_tasks_only_show_published_content_and_pdf(
     teacher = _user("teacher@example.edu", UserRole.teacher)
     student = _user("student@example.edu", UserRole.student)
     today = date(2026, 8, 25)
-    teaching_class, path = _linked_class(
+    teaching_class = _linked_class(
         session,
         teacher=teacher,
         student=student,
@@ -278,12 +260,12 @@ def test_weekly_tasks_only_show_published_content_and_pdf(
     rows = weekly_task_service.list_student_weekly_tasks(
         session,
         user_id=student.id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
     stored_path, filename = weekly_task_service.get_student_weekly_task_pdf(
         session,
         user_id=student.id,
-        path_id=path.id,
+        class_id=teaching_class.id,
         week_id=published.id,
         file_id=task_file.id,
     )
@@ -295,7 +277,7 @@ def test_weekly_tasks_only_show_published_content_and_pdf(
         ["確認權限模式", "確認檔案擁有者"] if active else []
     )
     assignments = ai_assignment_service.list_student_ai_assignments(
-        session, user_id=student.id, path_id=path.id
+        session, user_id=student.id, class_id=teaching_class.id
     )
     assert [item.title for row in assignments for item in row.items] == [
         item.title for item in rows[0].checkpoints
@@ -315,7 +297,7 @@ def test_weekly_tasks_hide_ai_extracted_items_before_script_is_approved() -> Non
     session = _session()
     teacher = _user("teacher@example.edu", UserRole.teacher)
     student = _user("student@example.edu", UserRole.student)
-    teaching_class, path = _linked_class(
+    teaching_class = _linked_class(
         session,
         teacher=teacher,
         student=student,
@@ -361,7 +343,7 @@ def test_weekly_tasks_hide_ai_extracted_items_before_script_is_approved() -> Non
     rows = weekly_task_service.list_student_weekly_tasks(
         session,
         user_id=student.id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
 
     assert len(rows) == 1
@@ -373,7 +355,7 @@ def test_weekly_tasks_show_published_pdf_without_ai_check() -> None:
     session = _session()
     teacher = _user("teacher@example.edu", UserRole.teacher)
     student = _user("student@example.edu", UserRole.student)
-    teaching_class, path = _linked_class(
+    teaching_class = _linked_class(
         session,
         teacher=teacher,
         student=student,
@@ -400,7 +382,7 @@ def test_weekly_tasks_show_published_pdf_without_ai_check() -> None:
     rows = weekly_task_service.list_student_weekly_tasks(
         session,
         user_id=student.id,
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
 
     assert len(rows) == 1
@@ -409,48 +391,12 @@ def test_weekly_tasks_show_published_pdf_without_ai_check() -> None:
     assert rows[0].checkpoints == []
 
 
-def test_class_course_shell_exists_without_tasks_and_publishes_with_class() -> None:
-    session = _session()
-    teacher = _user("teacher@example.edu", UserRole.teacher)
-    teaching_class = TeachingClass(
-        name="Operating Systems",
-        code="os-a",
-        term="2026-1",
-        owner_id=teacher.id,
-        start_date=date(2026, 8, 25),
-        end_date=date(2026, 12, 31),
-        weekday=1,
-        start_time=time(9),
-        end_time=time(11),
-    )
-    session.add(teacher)
-    session.add(teaching_class)
-    session.commit()
-
-    draft = ensure_class_path(session, teaching_class=teaching_class)
-    session.commit()
-
-    assert draft.teaching_class_id == teaching_class.id
-    assert draft.title == teaching_class.name
-    assert draft.status == CoursePathStatus.draft
-
-    published = ensure_class_path(
-        session,
-        teaching_class=teaching_class,
-        published=True,
-    )
-    session.commit()
-
-    assert published.id == draft.id
-    assert published.status == CoursePathStatus.published
-
-
 def test_reminders_derive_expiry_review_and_class_task() -> None:
     session = _session()
     teacher = _user("teacher@example.edu", UserRole.teacher)
     student = _user("student@example.edu", UserRole.student)
     today = date(2026, 8, 25)
-    teaching_class, path = _linked_class(
+    teaching_class = _linked_class(
         session,
         teacher=teacher,
         student=student,
@@ -508,63 +454,38 @@ def test_reminders_derive_expiry_review_and_class_task() -> None:
     assert next(row for row in rows if row.kind == "request_review").tone == "success"
     class_task = next(row for row in rows if row.kind == "class_task")
     assert "Checkpoint" in class_task.title
-    assert class_task.target == f"/dashboard/course/{path.id}"
+    assert class_task.target == f"/dashboard/course/{teaching_class.id}"
 
 
-def test_course_content_and_answers_require_active_enrollment() -> None:
-    """退選或別班的學生拿著 id 也不能讀路徑／房間內容或交答案。"""
+def test_class_content_requires_active_enrollment() -> None:
+    """退選或別班的學生拿著班級 id 也讀不到課程、每週任務與 AI 作業。"""
     from app.exceptions import NotFoundError
-    from app.models import CourseQuestion, CourseQuestionType, CourseRoom, CourseTask
-    from app.services.course import course_service, progress_service
 
     with _session() as session:
         teacher = _user("teacher@example.edu", UserRole.teacher)
         student = _user("student@example.edu", UserRole.student)
         outsider = _user("outsider@example.edu", UserRole.student)
         session.add(outsider)
-        _teaching_class, path = _linked_class(
+        teaching_class = _linked_class(
             session, teacher=teacher, student=student, session_date=date(2026, 8, 25)
         )
-        room = CourseRoom(path_id=path.id, title="Room 1")
-        session.add(room)
-        session.flush()
-        task = CourseTask(room_id=room.id, title="Task 1", content="secret steps")
-        session.add(task)
-        session.flush()
-        question = CourseQuestion(
-            task_id=task.id,
-            prompt="Read me",
-            question_type=CourseQuestionType.no_answer,
-        )
-        session.add(question)
-        session.commit()
 
-        assert (
-            course_service.get_path_detail(
-                session, user_id=student.id, path_id=path.id
-            ).id
-            == path.id
+        detail = get_student_class_detail(
+            session, user_id=student.id, class_id=teaching_class.id
         )
-        assert (
-            course_service.get_room_student_detail(
-                session, user_id=student.id, room_id=room.id
-            )
-            .tasks[0]
-            .content
-            == "secret steps"
-        )
+        assert (detail.id, detail.title) == (teaching_class.id, teaching_class.name)
 
+        readers = (
+            get_student_class_detail,
+            weekly_task_service.list_student_weekly_tasks,
+            ai_assignment_service.list_student_ai_assignments,
+        )
+        for read in readers:
+            with pytest.raises(NotFoundError):
+                read(session, user_id=outsider.id, class_id=teaching_class.id)
         with pytest.raises(NotFoundError):
-            course_service.get_path_detail(
-                session, user_id=outsider.id, path_id=path.id
-            )
-        with pytest.raises(NotFoundError):
-            course_service.get_room_student_detail(
-                session, user_id=outsider.id, room_id=room.id
-            )
-        with pytest.raises(NotFoundError):
-            progress_service.submit_answer(
-                session, user=outsider, question_id=question.id, answer=None
+            get_student_class_detail(
+                session, user_id=student.id, class_id=uuid.uuid4()
             )
 
         enrollment = session.exec(
@@ -575,11 +496,6 @@ def test_course_content_and_answers_require_active_enrollment() -> None:
         enrollment.status = "removed"
         session.add(enrollment)
         session.commit()
-        with pytest.raises(NotFoundError):
-            course_service.get_room_student_detail(
-                session, user_id=student.id, room_id=room.id
-            )
-        with pytest.raises(NotFoundError):
-            progress_service.submit_answer(
-                session, user=student, question_id=question.id, answer=None
-            )
+        for read in readers:
+            with pytest.raises(NotFoundError):
+                read(session, user_id=student.id, class_id=teaching_class.id)

@@ -249,7 +249,7 @@ AI 的資料來自三個地方，Prometheus 都自動抓，不必手動改 `prom
 |---|---|
 | `http_requests_total{method,path,status,workload}`、`http_request_duration_seconds{method,path,workload}` | 以 method／路由樣板分一般 API、AI 生成與 other；對不到路由仍為 `path="<unmatched>"`；HTTP duration 含 ASGI 收尾，上界 600 秒不是 timeout。 |
 | `http_requests_in_progress` | 處理中的請求數 |
-| `skylab_websocket_connections{kind}` | vnc／terminal／jobs／classroom／classroom_watch／course_progress |
+| `skylab_websocket_connections{kind}` | vnc／terminal／jobs／classroom／classroom_watch |
 | `skylab_scheduler_task_runs_total{loop,task,result}`、`skylab_scheduler_task_duration_seconds` | 排程任務執行次數與耗時 |
 | `skylab_scheduler_task_last_success_timestamp_seconds`、`skylab_scheduler_task_consecutive_failures` | 心跳 |
 | `skylab_scheduler_loop_last_tick_timestamp_seconds`、`skylab_scheduler_loop_is_leader` | 迴圈是否在跑、這個行程是不是 leader |

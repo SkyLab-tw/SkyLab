@@ -9,7 +9,7 @@ import { createTestQueryClient, withQueryClient } from "../../../queries/testing
 
 const mocks = vi.hoisted(() => ({
   listAll: vi.fn(),
-  review: vi.fn(),
+  reviewClass: vi.fn(),
   getRecurrencePreview: vi.fn(),
   confirm: vi.fn(),
   t: (key) => key,
@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../services/batchProvision", () => ({
   BatchProvisionService: {
     listAll: mocks.listAll,
-    review: mocks.review,
+    reviewClass: mocks.reviewClass,
     getRecurrencePreview: mocks.getRecurrencePreview,
   },
 }));
@@ -41,10 +41,13 @@ vi.mock("../../../components/SegmentedControl/SegmentedControl", () => ({
   ),
 }));
 
-function job(id, status, createdAt) {
+/* 批次一定屬於某個班級（後端 teaching_class_id 必填）；沒指定時每筆各自一個班級 */
+function job(id, status, createdAt, classId = `class-${id}`) {
   return {
     id,
     status,
+    teaching_class_id: classId,
+    teaching_class_name: `name-${classId}`,
     hostname_prefix: `prefix-${id}`,
     initiated_by_email: "teacher@example.edu",
     resource_type: "lxc",
@@ -131,7 +134,7 @@ describe("BatchReviewPage", () => {
       .mockReturnValueOnce(stale.promise)
       .mockResolvedValue([approvedJob]);
     mocks.confirm.mockResolvedValue(true);
-    mocks.review.mockResolvedValue({});
+    mocks.reviewClass.mockResolvedValue([]);
 
     await renderPage();
     await flush();
@@ -143,7 +146,8 @@ describe("BatchReviewPage", () => {
     await act(async () => { buttonByText("prefix-j1").click(); });
     await act(async () => { buttonByText("BatchReviewPage.approve").click(); });
     await flush();
-    expect(mocks.review).toHaveBeenCalledWith("j1", expect.objectContaining({ decision: "approved" }));
+    /* 審核一律以班級為單位：送的是班級 id，不是單一批次的 id */
+    expect(mocks.reviewClass).toHaveBeenCalledWith("class-j1", expect.objectContaining({ decision: "approved" }));
     expect(host.textContent).not.toContain("prefix-j1");
 
     await act(async () => { stale.resolve([pendingJob]); await refresh; });
@@ -188,6 +192,34 @@ describe("BatchReviewPage", () => {
     await flush();
     expect(host.textContent).not.toContain("pve down");
     expect(host.textContent).toContain("prefix-j1");
+  });
+
+  test("machine nodes of one class are reviewed as one row, and every row is a class batch", async () => {
+    mocks.listAll.mockResolvedValue([
+      job("n1", "pending_review", "2026-09-20T00:00:00Z", "class-web"),
+      job("n2", "pending_review", "2026-09-20T00:01:00Z", "class-web"),
+      job("solo", "pending_review", "2026-09-19T00:00:00Z", "class-db"),
+    ]);
+    mocks.confirm.mockResolvedValue(true);
+    mocks.reviewClass.mockResolvedValue([]);
+
+    await renderPage();
+    await flush();
+
+    const rows = [...host.querySelectorAll('[data-guide="batch-review-row"]')];
+    expect(rows).toHaveLength(2);
+    /* 兩個節點併成一列，標題用班級名稱；只有一個節點的班級用主機名稱前綴 */
+    expect(rows[0].textContent).toContain("BatchReviewPage.classGroupLabel");
+    expect(rows[1].textContent).toContain("prefix-solo");
+
+    await act(async () => { rows[1].click(); });
+    await flush();
+    const detail = host.querySelector('[data-guide="batch-review-detail"]');
+    expect(detail.textContent).toContain("BatchReviewPage.typeClassBatch");
+
+    await act(async () => { buttonByText("BatchReviewPage.reject").click(); });
+    await flush();
+    expect(mocks.reviewClass).toHaveBeenCalledWith("class-db", expect.objectContaining({ decision: "rejected" }));
   });
 
   test("recurrence preview loads on demand once and re-expanding reuses it", async () => {

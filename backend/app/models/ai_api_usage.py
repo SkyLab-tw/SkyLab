@@ -57,7 +57,7 @@ class AIAPIUsage(SQLModel, table=True):
     )
     model_name: str = Field(max_length=255)
     # api_key：chat_completion / completion / response；platform：chat / recommend /
-    # ai_nav / ai_help / pve_chat / teacher_judge_chat …
+    # ai_assistant / pve_chat / teacher_judge_chat …（舊紀錄另有 ai_nav / ai_help）
     call_type: str = Field(max_length=50)
     preset: str | None = Field(default=None, max_length=50)  # 範本推薦的 persona
     request_id: str | None = Field(default=None, max_length=255, index=True)

@@ -29,7 +29,6 @@ Everything a student can do, plus:
 - [Class workspace](/manual/class-workspace) — students, machines, monitoring, broadcast, weekly content
 - [AI Check](/manual/ai-judge) — checklists, generated scripts, running checks on student machines
 - [Teaching Environments](/manual/course-templates) — building and publishing multi-machine topologies; see also the [SOP](/guides/multi-machine-environment-sop)
-- [Course Management](/manual/course-cms) — learning paths, tasks and questions
 
 ## Administrators
 

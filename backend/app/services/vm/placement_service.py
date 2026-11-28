@@ -45,6 +45,18 @@ class CurrentPlacementSelection:
     plan: PlacementPlan
 
 
+class NoFeasibleReservationError(ValueError):
+    """重排預留時，有一張申請在它的時段內排不進任何節點。
+
+    繼承 ValueError，核准路徑原本攔 ValueError 的地方照舊有效；``request_id``
+    讓審核頁能分辨排不進去的是正在審的這張，還是時段重疊、先前已核准的另一張。
+    """
+
+    def __init__(self, request_id: uuid.UUID) -> None:
+        super().__init__(f"No feasible reservation exists for request {request_id}")
+        self.request_id = request_id
+
+
 _projected_share = placement_scorer.projected_share
 _node_balance_score = placement_scorer.node_balance_score
 
@@ -567,9 +579,7 @@ def rebuild_reserved_assignments(
             reserved_requests=reserved_so_far,
         )
         if not selection.node or not selection.plan.feasible:
-            raise ValueError(
-                f"No feasible reservation exists for request {request.id}"
-            )
+            raise NoFeasibleReservationError(request.id)
         request.assigned_node = selection.node
         request.placement_strategy_used = selection.strategy
         selections[request.id] = selection

@@ -10,7 +10,7 @@ vi.mock("react-i18next", async (original) => ({ ...await original(),
   useTranslation: () => ({ t: (key) => key, i18n: { language: "zh-TW" } }),
 }));
 let host, root;
-const defaults = { paths: [], resources: [], templates: [], templatesLoading: false,
+const defaults = { courses: [], resources: [], templates: [], templatesLoading: false,
   openingMachineId: null, onOpenMachine: vi.fn(), todayLabel: "9/17" };
 function Location() { const location = useLocation(); return <output data-create={Boolean(location.state?.create)}>{location.pathname}</output>; }
 async function render(props = {}) {
@@ -37,7 +37,7 @@ it("shows real empty states and hides all courses when there is no course", asyn
 });
 
 it("keeps all courses reachable once there are courses or the schedule failed to load", async () => {
-  await render({ paths: [{ id: "c1", title: "Linux 101", state: "upcoming", completed_questions: 0, total_questions: 3 }] });
+  await render({ courses: [{ id: "c1", title: "Linux 101", state: "upcoming" }] });
   await act(async () => allCoursesButton().click());
   expect(host.querySelector("output").textContent).toBe("/courses");
 
@@ -137,13 +137,11 @@ it("sends independent research straight to the request form, not the request lis
 it("prints each course as a ticket with only the schedule fields the API has", async () => {
   vi.useFakeTimers({ now: new Date("2026-09-30T15:22:00+08:00"), toFake: ["Date"] });
   try {
-    await render({ paths: [
+    await render({ courses: [
       { id: "course-1", title: "雲端系統實作", state: "now", teacher: "林致遠", location: "E301",
-        session_date: "2026-09-30", start_at: "2026-09-30T14:10:00+08:00", end_at: "2026-09-30T17:00:00+08:00",
-        total_questions: 24, completed_questions: 10 },
+        session_date: "2026-09-30", start_at: "2026-09-30T14:10:00+08:00", end_at: "2026-09-30T17:00:00+08:00" },
       { id: "course-2", title: "資料庫系統", state: "available", teacher: "db@campus.edu", location: null,
-        session_date: "2026-10-09", start_at: "2026-10-09T09:10:00+08:00", end_at: "2026-10-09T12:00:00+08:00",
-        total_questions: 0, completed_questions: 0 },
+        session_date: "2026-10-09", start_at: "2026-10-09T09:10:00+08:00", end_at: "2026-10-09T12:00:00+08:00" },
     ] });
   } finally {
     vi.useRealTimers();
@@ -155,9 +153,10 @@ it("prints each course as a ticket with only the schedule fields the API has", a
   expect(live.textContent).toContain("CourseTicket.teacher");
   expect(live.textContent).toContain("今天");
   expect(live.textContent).toContain("E301");
-  expect(live.textContent).toContain("CourseTicket.solved");
-  /* 條碼一題一條：24 條加上中間 23 個間隔 */
+  /* 票根只有條碼花紋（固定 24 條加上中間 23 個間隔），沒有題數或進度文字 */
   expect(live.querySelector('[aria-hidden="true"]').children).toHaveLength(47);
+  expect(live.textContent).not.toContain("StudentCoursesPage.questions");
+  expect(live.textContent).not.toContain("CourseTicket.solved");
 
   const practice = ticket("資料庫系統");
   expect(practice.textContent).toContain("CourseTicket.status.available");
@@ -165,8 +164,11 @@ it("prints each course as a ticket with only the schedule fields the API has", a
   expect(practice.textContent).toContain("db@campus.edu");
   expect(practice.textContent).not.toContain("CourseTicket.teacher");
   expect(practice.textContent).not.toContain("CourseTicket.room");
-  expect(practice.textContent).toContain("CourseTicket.noQuestions");
-  expect(practice.querySelector('[aria-hidden="true"]')).toBeNull();
+  expect(practice.textContent).not.toContain("CourseTicket.noQuestions");
+  /* 每張票都有條碼，花紋依課程 id 而不同 */
+  const pattern = (node) => [...node.querySelector('[aria-hidden="true"]').children].map((bar) => bar.style.flexGrow).join(",");
+  expect(practice.querySelector('[aria-hidden="true"]').children).toHaveLength(47);
+  expect(pattern(practice)).not.toBe(pattern(live));
 });
 
 it("files each quick-practice machine as a sheet in the environment's folder", async () => {
@@ -200,7 +202,7 @@ it("files each quick-practice machine as a sheet in the environment's folder", a
 it.each([
   ["course", "/courses/course-1"], ["template", "/quick-template/template-1"],
 ])("opens the selected %s", async (kind, destination) => {
-  await render({ paths: [{ id: "course-1", title: "Course title" }], templates: [{ id: "template-1", name: "Template title", nodes: [] }] });
+  await render({ courses: [{ id: "course-1", title: "Course title" }], templates: [{ id: "template-1", name: "Template title", nodes: [] }] });
   const label = kind === "course" ? "Course title" : "Template title";
   const button = [...host.querySelectorAll("button")].find((item) => item.textContent.includes(label));
   await act(async () => button.click());

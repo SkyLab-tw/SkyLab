@@ -23,8 +23,11 @@ MAX_MODEL_LABELS = 100
 OTHER_MODEL = "other"
 UNKNOWN_MODEL = "unknown"
 REQUEST_TYPES = frozenset({
-    "chat_completion", "completion", "response", "ai_nav", "ai_help",
-    "pve_chat", "pve_chat_adherence", "contextual_help_adherence",
+    "chat_completion", "completion", "response",
+    "ai_assistant", "ai_assistant_adherence",
+    # 2026-11 之前的導覽與畫面說明；歷史紀錄仍用這幾個類型
+    "ai_nav", "ai_help", "contextual_help_adherence",
+    "pve_chat", "pve_chat_adherence",
     "chat", "chat_adherence", "recommend", "recommend_adherence",
     "teacher_judge_chat",
 })

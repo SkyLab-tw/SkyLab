@@ -1,0 +1,60 @@
+# 儲存空間（/storage）
+# 原「系統設定」的分頁，2026-09 升格為系統管理底下的獨立頁面。
+# label 一律沿用畫面上的文字，help 取自各欄既有的 hint / placeholder / 確認訊息。
+id: storage
+path: /storage
+title: 儲存空間
+access: admin
+order: 370
+purpose: 各 Storage 的速度等級、使用者優先度與啟用狀態，放置時據此挑選磁碟。
+when_to_use: 要決定新機器的磁碟優先放在哪個 Storage，或暫停使用某個 Storage。
+sections:
+  - 儲存空間
+features:
+  - 清單：每個 Storage 一列，顯示名稱、所在節點（共享的顯示「共享 · N 節點」）、類型、已用／總容量（GB）與可放的內容（VM、LXC、ISO、Backup，都沒有時顯示「無用途」）；有多組 PVE 連線時另標連線名稱。
+  - 速度等級：每列的「速度等級」選 NVMe、SSD、HDD 或未知，選了立即儲存。
+  - 使用者優先度：每列的「使用者優先度」填 1 到 10（數字越小越優先），離開欄位或按 Enter 才儲存；不合法的值會還原成原本的數字。
+  - 啟用：取消「啟用」立即儲存，放置演算法不會再選這個 Storage。
+  - 共享 Storage 掛在多個節點上，變更會套用到同一叢集所有掛載的節點。
+  - 篩選與搜尋：用「全部」「啟用」「停用」切換（附數量），或在搜尋框找名稱、節點、連線名稱或類型。
+elements:
+  - id: storage.filter
+    role: select
+    label: Storage 狀態篩選
+    help: 選項是「全部」「啟用」「停用」，各附數量。
+    section: 儲存空間
+  - id: storage.search
+    role: text
+    label: 搜尋名稱、節點或類型
+    help: 也比對連線名稱；共享 Storage 比對它掛載的所有節點。
+    section: 儲存空間
+  - id: storage.speed_tier
+    role: select
+    label: 速度等級
+    help: NVMe / SSD / HDD / 未知，選了立即儲存。放置演算法挑選 Storage 時先比速度等級（NVMe 優先，依序 SSD、HDD、未知），再比磁碟爭用與使用者優先度。
+    section: 儲存空間
+  - id: storage.user_priority
+    role: number
+    label: 使用者優先度
+    help: 數字越小越優先；放置演算法在速度等級與磁碟爭用相近時用它決定選哪個 Storage。離開欄位或按 Enter 才儲存。
+    constraints:
+      - 1 到 10 的整數
+    section: 儲存空間
+  - id: storage.enable
+    role: toggle
+    label: 啟用
+    help: 切換後立即儲存；停用的 Storage 不會被放置演算法選用。
+    section: 儲存空間
+  - id: storage.shared
+    role: readonly
+    label: 共享
+    help: 顯示成「共享 · N 節點」。共享 Storage 同時掛在多個節點上，這裡的變更會套用到所有掛載節點。
+    section: 儲存空間
+  - id: storage.no_purpose
+    role: readonly
+    label: 無用途
+    help: 這個 Storage 在 PVE 上沒有開放 VM 磁碟、LXC、ISO 或備份任何一種內容。
+    section: 儲存空間
+related:
+  - path: /pve-connections
+    when: 清單少了 Storage 或容量過期，要重新同步連線

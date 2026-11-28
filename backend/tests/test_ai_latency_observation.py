@@ -11,7 +11,8 @@ import pytest
 from prometheus_client import CollectorRegistry, Counter, Histogram
 
 from app.ai import monitoring
-from app.ai.navigation import service as navigation
+from app.ai.assistant import service as assistant
+from app.ai.assistant.schemas import AssistantChatRequest
 from app.ai.pve_log import chat as pve
 from app.ai.role_contracts import AdherenceReason, AdherenceResult, AdherenceVerdict
 from app.core import metrics
@@ -64,12 +65,11 @@ def sample(registry, name, **labels):
 @pytest.mark.parametrize(
     ("method", "path", "expected"),
     [
-        ("POST", "/ai/navigation/resolve", "ai_generation"),
+        ("POST", "/ai/assistant/chat", "ai_generation"),
         ("POST", "/ai/pve-log/chat", "ai_generation"),
         ("POST", "/ai-proxy/chat/completions", "ai_generation"),
         ("POST", "/ai-proxy/completions", "ai_generation"),
         ("POST", "/ai-proxy/responses", "ai_generation"),
-        ("POST", "/ai/contextual-help/explain", "ai_generation"),
         ("POST", "/ai/template-recommendation/chat", "ai_generation"),
         ("POST", "/ai/template-recommendation/recommend", "ai_generation"),
         (
@@ -92,8 +92,10 @@ def sample(registry, name, **labels):
             "/teaching-classes/{teaching_class_id}/judge/sessions/{session_id}/scripts/{artifact_id}/runs",
             "general_api",
         ),
-        ("POST", "/ai/navigation/intake", "general_api"),
-        ("GET", "/ai/contextual-help/surfaces", "general_api"),
+        ("GET", "/ai/assistant/surfaces", "general_api"),
+        # 2026-11 移除的舊端點不再是生成類工作負載
+        ("POST", "/ai/navigation/resolve", "general_api"),
+        ("POST", "/ai/contextual-help/explain", "general_api"),
         ("GET", "/ai-proxy/models", "general_api"),
         ("POST", "/ai-api/requests", "general_api"),
         ("POST", "/ai/pve-log/ssh/confirm", "general_api"),
@@ -398,20 +400,37 @@ async def test_retried_admission_is_observed_once_per_logical_request(
     await admission.close()
 
 
-async def test_navigation_model_failure_keeps_fallback_and_records_reason(
+def _assistant_request() -> AssistantChatRequest:
+    return AssistantChatRequest(
+        messages=[{"role": "user", "content": "Where are my API keys?"}],
+        screen={"path": "/dashboard"},
+    )
+
+
+async def test_assistant_model_failure_keeps_fallback_and_records_reason(
     registry, monkeypatch, caplog
 ):
     async def failed(*args, **kwargs):
         raise httpx.ReadTimeout("private prompt must not enter summary")
 
-    monkeypatch.setattr(navigation.system_ai_env, "vllm_model_name", "test-model")
-    monkeypatch.setattr(navigation.navigation_client, "create_chat_completion", failed)
+    monkeypatch.setattr(assistant.system_ai_env, "vllm_model_name", "test-model")
+    monkeypatch.setattr(assistant.assistant_client, "stream_chat_completion", failed)
     with caplog.at_level("INFO"):
-        result = await navigation.resolve_navigation(
-            "Where are my API keys?",
+        result = await assistant.chat(
+            _assistant_request(),
             SimpleNamespace(id=None, role=UserRole.student, is_superuser=False),
         )
-    assert result is not None
+    assert result.degraded is True
+    assert (
+        sample(
+            registry,
+            "skylab_ai_workflows_total",
+            route="/ai/assistant/chat",
+            outcome="fallback",
+            terminal_reason="model_timeout",
+        )
+        == 1
+    )
     logs = [
         r for r in caplog.records if getattr(r, "event", None) == "ai_workflow_finished"
     ]
@@ -447,9 +466,9 @@ async def test_pve_multiround_metrics_and_phase_summary(registry, monkeypatch, c
             VLLM_REPETITION_PENALTY=1,
         ),
     )
-    monkeypatch.setattr(navigation.system_ai_env, "vllm_model_name", "test-model")
+    monkeypatch.setattr(assistant.system_ai_env, "vllm_model_name", "test-model")
     monkeypatch.setattr(
-        navigation.system_ai_env, "vllm_base_url", "http://model.invalid/v1"
+        assistant.system_ai_env, "vllm_base_url", "http://model.invalid/v1"
     )
     replies = iter(
         [
@@ -596,15 +615,13 @@ def test_observation_failure_preserves_response_exception_and_cancellation(
 
     monkeypatch.setattr(ai_metrics, "model_label", failed)
     if original is None:
-        with monitoring.AIWorkflowObservation("/ai/navigation/resolve", "test-model"):
+        with monitoring.AIWorkflowObservation("/ai/assistant/chat", "test-model"):
             result = "original response"
         assert result == "original response"
     else:
 
         def observe_failure() -> None:
-            with monitoring.AIWorkflowObservation(
-                "/ai/navigation/resolve", "test-model"
-            ):
+            with monitoring.AIWorkflowObservation("/ai/assistant/chat", "test-model"):
                 raise original
 
         with pytest.raises(type(original)) as caught:
@@ -612,24 +629,25 @@ def test_observation_failure_preserves_response_exception_and_cancellation(
         assert caught.value is original
 
 
-async def test_navigation_invalid_output_is_fallback(registry, monkeypatch, caplog):
+async def test_assistant_empty_output_is_fallback(registry, monkeypatch, caplog):
     async def invalid(*args, **kwargs):
-        return {"choices": [{"message": {"content": "invalid decision"}}]}
+        return {"choices": [{"message": {"content": "   "}}]}
 
-    monkeypatch.setattr(navigation.system_ai_env, "vllm_model_name", "test-model")
-    monkeypatch.setattr(navigation.navigation_client, "create_chat_completion", invalid)
+    monkeypatch.setattr(assistant.system_ai_env, "vllm_model_name", "test-model")
+    monkeypatch.setattr(assistant.assistant_client, "stream_chat_completion", invalid)
     with caplog.at_level("INFO"):
-        result = await navigation.resolve_navigation(
-            "Where are my API keys?",
+        result = await assistant.chat(
+            _assistant_request(),
             SimpleNamespace(id=None, role=UserRole.student, is_superuser=False),
         )
-    assert result is not None
+    assert result.degraded is True
     record = next(
         r for r in caplog.records if getattr(r, "event", None) == "ai_workflow_finished"
     )
-    assert (record.outcome, record.terminal_reason) == (
+    assert (record.route, record.outcome, record.terminal_reason) == (
+        "/ai/assistant/chat",
         "fallback",
-        "invalid_or_failed_model",
+        "empty_reply",
     )
 
 

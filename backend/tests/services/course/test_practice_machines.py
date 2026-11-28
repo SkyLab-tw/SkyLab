@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
 
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.api.routes.courses import list_practice_machines
-from app.models.course import CoursePath, CoursePathStatus
 from app.models.teaching_class import (
     TeachingClass,
     TeachingClassMachineNode,
@@ -36,14 +35,8 @@ def test_student_gets_every_assigned_course_machine_in_role_order(monkeypatch) -
         weekday=1,
         start_time=time(9),
         end_time=time(11),
+        first_active_at=datetime(2026, 8, 1, tzinfo=UTC),
     )
-    path = CoursePath(
-        title="Linux",
-        status=CoursePathStatus.published,
-        created_by=teacher_id,
-        teaching_class_id=teaching_class.id,
-    )
-    session.add(path)
     session.add(teaching_class)
     session.commit()
 
@@ -94,7 +87,7 @@ def test_student_gets_every_assigned_course_machine_in_role_order(monkeypatch) -
     machines = list_practice_machines(
         session=session,
         current_user=SimpleNamespace(id=student_id),  # type: ignore[arg-type]
-        path_id=path.id,
+        class_id=teaching_class.id,
     )
 
     assert [machine.name for machine in machines] == ["操作主機", "資料庫主機"]

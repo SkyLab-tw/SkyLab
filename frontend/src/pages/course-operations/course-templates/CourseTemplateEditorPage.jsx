@@ -91,6 +91,14 @@ const MEMORY_RANGE = [1, 64];
 const LXC_DISK_RANGE = [1, 1000];
 const VM_DISK_RANGE = [10, 1000];
 
+/** 發布時後端 EnvironmentCreate／EnvironmentNodeIn 的上限（backend/app/schemas/course_environment.py）；
+    前端先擋，改一邊要改另一邊。 */
+const MAX_MACHINES = 3;
+const MAX_CONNECTIONS = 6;
+const MAX_PUBLICATIONS = 6;
+const MACHINE_NAME_MAX_LENGTH = 255;
+const MACHINE_ROLE_MAX_LENGTH = 120;
+
 /** 一條連線實際授予的方向：單向一個，雙向兩個。 */
 function edgeGrants(edge) {
   const pairs = [[edge.source, edge.target]];
@@ -173,7 +181,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
   /* 畫布配色跟防火牆頁一樣跟著主題；沒有 provider（測試）就當淺色 */
   const theme = useContext(ThemeContext)?.theme ?? "light";
   const sourceOptions = sourceMode === "template" ? pveTemplates : (customType === "lxc" ? lxcImages : vmImages);
-  const atLimit = value.length >= 3;
+  const atLimit = value.length >= MAX_MACHINES;
   /* 對話框的機器清單：模板沒有 vmid，只認 node key */
   const dialogNodes = useMemo(() => value.map((node) => ({ key: String(node.id), vmid: null, name: node.name })), [value]);
 
@@ -258,6 +266,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
       }));
       const duplicatePort = items.find((item) => others.some((other) => other.nodeKey === item.nodeKey && Number(other.port) === Number(item.port) && other.protocol === item.protocol));
       if (duplicatePort) return { ok: false, error: { text: t("CourseTemplateEditorPage.duplicatePublicationPort", { port: duplicatePort.port }) } };
+      if (others.length + items.length > MAX_PUBLICATIONS) return { ok: false, error: { text: t("CourseTemplateEditorPage.tooManyPublications", { max: MAX_PUBLICATIONS }) } };
       /* 網址前綴可以重複：開課時每條發布各自接一串不同的亂碼，不會撞網域 */
       onPublicationsChange([...others, ...items]);
       selectPublication(items[0].id);
@@ -278,6 +287,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
       }));
       const overlapping = added.find((edge, index) => overlapsExistingEdge(edge, [...edges, ...added.slice(0, index)]));
       if (overlapping) return { ok: false, error: { text: t("CourseTemplateEditorPage.overlappingEdgeNotice") } };
+      if (edges.length + added.length > MAX_CONNECTIONS) return { ok: false, error: { text: t("CourseTemplateEditorPage.tooManyConnections", { max: MAX_CONNECTIONS }) } };
       setTopologyNotice("");
       onEdgesChange([...edges, ...added]);
       selectEdge(added[0].id);
@@ -563,8 +573,8 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
                 <div><strong>{selectedNode.sourceType === "custom" ? t("CourseTemplateEditorPage.sourceCustomSpec") : t("CourseTemplateEditorPage.sourceExistingTemplate")}</strong><small>{selectedNode.type === "lxc" ? t("CourseTemplateEditorPage.typeContainerLxc") : t("CourseTemplateEditorPage.typeVm")}</small></div>
                 {!locked && <button type="button" className={styles.inspectorTitleAction} onClick={() => removeMachine(selectedNode.id)}>{t("CourseTemplateEditorPage.removeNodeBtn")}</button>}
               </div>
-              <label>{t("CourseTemplateEditorPage.fieldName")}<input disabled={locked} value={selectedNode.name} onChange={(event) => patchNode(selectedNode.id, { name: event.target.value })} /></label>
-              <label>{t("CourseTemplateEditorPage.fieldRole")}<input disabled={locked} value={selectedNode.role} onChange={(event) => patchNode(selectedNode.id, { role: event.target.value })} /></label>
+              <label>{t("CourseTemplateEditorPage.fieldName")}<input disabled={locked} maxLength={MACHINE_NAME_MAX_LENGTH} value={selectedNode.name} onChange={(event) => patchNode(selectedNode.id, { name: event.target.value })} /></label>
+              <label>{t("CourseTemplateEditorPage.fieldRole")}<input disabled={locked} maxLength={MACHINE_ROLE_MAX_LENGTH} value={selectedNode.role} onChange={(event) => patchNode(selectedNode.id, { role: event.target.value })} /></label>
               <div className={styles.inspectorSliders}>
                 <label><span className={styles.sliderLabel}>CPU<em>{t("CourseTemplateEditorPage.cpuValue", { count: selectedNode.cpu })}</em></span><input disabled={specLocked} type="range" step="1" min={Math.min(cpuRange[0], selectedNode.cpu)} max={Math.max(cpuRange[1], selectedNode.cpu)} value={selectedNode.cpu} onChange={(event) => patchNode(selectedNode.id, { cpu: Number(event.target.value) })} /></label>
                 <label><span className={styles.sliderLabel}>RAM<em>{t("CourseTemplateEditorPage.memoryValue", { count: selectedNode.memory })}</em></span><input disabled={specLocked} type="range" step="1" min={Math.min(memoryRange[0], selectedNode.memory)} max={Math.max(memoryRange[1], selectedNode.memory)} value={selectedNode.memory} onChange={(event) => patchNode(selectedNode.id, { memory: Number(event.target.value) })} /></label>
@@ -910,7 +920,14 @@ export default function CourseTemplateEditorPage() {
       return false;
     }
     if (template.nodes.length === 0) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.needAtLeastOneMachineReason")); return false; }
-    if (template.nodes.length > 3) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.maxThreeMachinesReason")); return false; }
+    if (template.nodes.length > MAX_MACHINES) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.maxThreeMachinesReason")); return false; }
+    /* 以下幾項後端發布時也會擋；先在這裡說清楚是哪一台、哪一項 */
+    const unnamedIndex = template.nodes.findIndex((node) => !String(node.name ?? "").trim());
+    if (unnamedIndex >= 0) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.machineNameRequiredReason", { index: unnamedIndex + 1 })); return false; }
+    const roleless = template.nodes.find((node) => !String(node.role ?? "").trim());
+    if (roleless) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.machineRoleRequiredReason", { name: String(roleless.name).trim() })); return false; }
+    if ((template.edges ?? []).length > MAX_CONNECTIONS) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.tooManyConnections", { max: MAX_CONNECTIONS })); return false; }
+    if ((template.publications ?? []).length > MAX_PUBLICATIONS) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.tooManyPublications", { max: MAX_PUBLICATIONS })); return false; }
     if (invalidTopology) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.fixPortReason")); return false; }
     return true;
   }

@@ -90,7 +90,8 @@ function ReviewDialog({ open, onClose, request, action, onDone }) {
         <div className={styles.dialogInfo}>
           <div>{t("AiApiReviewPage.dialogApplicant", { value: request.user_full_name || request.user_email })}</div>
           <div>{t("AiApiReviewPage.dialogKeyName", { value: request.api_key_name })}</div>
-          <div>{t("AiApiReviewPage.dialogAppliedAt", { value: formatDateTime(request.created_at, t("AiApiReviewPage.notReviewed")) })}</div>
+          {/* 申請時間取不到時用預設的「—」；「尚未審核」是審核時間欄的說法，放在這裡意思不對 */}
+          <div>{t("AiApiReviewPage.dialogAppliedAt", { value: formatDateTime(request.created_at) })}</div>
           <div className={styles.dialogPurpose}>{t("AiApiReviewPage.dialogPurpose", { value: request.purpose })}</div>
         </div>
         <textarea

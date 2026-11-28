@@ -23,7 +23,7 @@
   "FirewallPage.clearFocus": "選択を解除",
   "FirewallPage.noMatch": "条件に合うマシンがありません",
   "FirewallPage.internetLines": "インターネット回線",
-  "FirewallPage.hint": "ノードをドラッグして移動、ノード右側から別のノードへドラッグして接続を作成、ノードをクリックしてファイアウォールルールを表示、接続をクリックして公開内容を表示",
+  "FirewallPage.hint": "ノードをドラッグして移動、ノードの縁から別のノードへドラッグして接続を作成、ノードをクリックしてファイアウォールルールを表示、接続をクリックして公開内容を表示",
   "FirewallPage.legendInbound": "外部公開",
   "FirewallPage.legendOutbound": "外部接続",
   "FirewallPage.legendInternal": "内部通信",

@@ -92,11 +92,9 @@ class ProxmoxConnectionPublic(BaseModel):
     api_timeout: int
     pool_name: str
     iso_storage: str
-    data_storage: str
     backup_storage: str | None = None
     task_check_interval: int
     gateway_ip: str | None = None
-    local_subnet: str | None = None
     default_node: str | None = None
     enabled: bool
     is_default: bool
@@ -118,11 +116,9 @@ class ProxmoxConnectionCreate(BaseModel):
     api_timeout: int = Field(default=30, ge=1, le=300)
     pool_name: str = Field(default=DEFAULT_PROXMOX_POOL_NAME, max_length=255)
     iso_storage: str = Field(default="local", max_length=255)
-    data_storage: str = Field(default="local-lvm", max_length=255)
     backup_storage: str | None = Field(default=None, max_length=255)
     task_check_interval: int = Field(default=2, ge=1, le=60)
     gateway_ip: str | None = None
-    local_subnet: str | None = None
     default_node: str | None = None
     enabled: bool = True
     is_default: bool = False
@@ -151,11 +147,9 @@ class ProxmoxConnectionUpdateIn(BaseModel):
     api_timeout: int | None = Field(default=None, ge=1, le=300)
     pool_name: str | None = Field(default=None, max_length=255)
     iso_storage: str | None = Field(default=None, max_length=255)
-    data_storage: str | None = Field(default=None, max_length=255)
     backup_storage: str | None = Field(default=None, max_length=255)
     task_check_interval: int | None = Field(default=None, ge=1, le=60)
     gateway_ip: str | None = None
-    local_subnet: str | None = None
     default_node: str | None = None
     enabled: bool | None = None
     is_default: bool | None = None

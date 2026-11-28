@@ -51,7 +51,7 @@ If you are over quota, the environment is full, you already have an active pract
 
 1. In **My Resources**, the environment appears as one group row labelled **Quick Practice Environment**, with "`<n>` machines · managed as a group" and how many are running.
 2. Click the row to expand it and see each machine. Follow the creation progress there; open a machine to use its console.
-3. Students also find the machines under **Recently used machines** on the home page, where **Enter Machine** opens the console directly.
+3. Students also find the machines under **My machines** on the home page, where **Enter Machine** opens the console directly.
 
 ![Reach the machines (numbers match the steps above)](/manual-shots/en/quick-practice/s04.webp)
 

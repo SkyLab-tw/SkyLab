@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   assignmentsUntilToday,
   buildPracticeMachines,
+  pickCurrentCourse,
   pickCurrentWeek,
-  pickInProgress,
   practiceMachineActionLabel,
-  toPercent,
 } from "./studentDashboard";
 
 describe("assignmentsUntilToday", () => {
@@ -57,40 +56,50 @@ describe("practiceMachineActionLabel", () => {
   });
 });
 
-describe("toPercent", () => {
-  it("把進度收斂到 0–100 的整數，非數值視為 0", () => {
-    expect(toPercent(42.4)).toBe(42);
-    expect(toPercent(-5)).toBe(0);
-    expect(toPercent(180)).toBe(100);
-    expect(toPercent(null)).toBe(0);
-    expect(toPercent("abc")).toBe(0);
-  });
-});
+describe("pickCurrentCourse", () => {
+  const courses = [
+    { id: "ended", title: "已結束" },
+    { id: "later", title: "稍後" },
+    { id: "now", title: "上課中" },
+    { id: "idle", title: "學期外" },
+  ];
 
-describe("pickInProgress", () => {
-  it("優先挑進行中的項目", () => {
-    const picked = pickInProgress([
-      { id: "done", progress_percent: 100 },
-      { id: "doing", progress_percent: 40 },
-      { id: "fresh", progress_percent: 0 },
+  it("優先挑正在上課的課程，不管它在清單或課表裡排第幾", () => {
+    const picked = pickCurrentCourse(courses, [
+      { id: "ended", state: "ended", start_at: "2026-09-29T01:00:00Z" },
+      { id: "later", state: "later", start_at: "2026-09-29T06:00:00Z" },
+      { id: "now", state: "now", start_at: "2026-09-29T03:00:00Z" },
     ]);
 
-    expect(picked.id).toBe("doing");
+    expect(picked.id).toBe("now");
   });
 
-  it("沒有進行中的項目時退回第一個尚未完成的", () => {
-    const picked = pickInProgress([
-      { id: "done", progress_percent: 100 },
-      { id: "fresh", progress_percent: 0 },
+  it("沒有正在上課的就依序挑今天稍後、可課後練習、今天已結束", () => {
+    expect(pickCurrentCourse(courses, [
+      { id: "ended", state: "ended", start_at: "2026-09-29T01:00:00Z" },
+      { id: "later", state: "later", start_at: "2026-09-29T06:00:00Z" },
+    ]).id).toBe("later");
+    expect(pickCurrentCourse(courses, [
+      { id: "ended", state: "ended", start_at: "2026-09-29T01:00:00Z" },
+      { id: "idle", state: "available", start_at: "2026-10-01T01:00:00Z" },
+    ]).id).toBe("idle");
+  });
+
+  it("同狀態取開始時間較早的那一門", () => {
+    const picked = pickCurrentCourse(courses, [
+      { id: "later", state: "later", start_at: "2026-09-29T08:00:00Z" },
+      { id: "now", state: "later", start_at: "2026-09-29T06:00:00Z" },
     ]);
 
-    expect(picked.id).toBe("fresh");
+    expect(picked.id).toBe("now");
   });
 
-  it("全部完成時退回第一筆，空清單回 null", () => {
-    expect(pickInProgress([{ id: "a", progress_percent: 100 }]).id).toBe("a");
-    expect(pickInProgress([])).toBeNull();
-    expect(pickInProgress(undefined)).toBeNull();
+  it("課表裡不在我的課程裡的列不算；課表對不上時取清單第一門，空清單回 null", () => {
+    expect(pickCurrentCourse(courses, [{ id: "other", state: "now" }]).id).toBe("ended");
+    expect(pickCurrentCourse(courses, []).id).toBe("ended");
+    expect(pickCurrentCourse(courses, undefined).id).toBe("ended");
+    expect(pickCurrentCourse([], [{ id: "now", state: "now" }])).toBeNull();
+    expect(pickCurrentCourse(undefined, undefined)).toBeNull();
   });
 });
 

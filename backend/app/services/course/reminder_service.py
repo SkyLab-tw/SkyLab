@@ -10,8 +10,6 @@ from sqlmodel import Session, select
 
 from app.core.i18n import t
 from app.models import (
-    CoursePath,
-    CoursePathStatus,
     Resource,
     TeachingClass,
     TeachingClassStudent,
@@ -130,17 +128,17 @@ def list_student_reminders(
         )
 
     task_rows = session.exec(
-        select(TeachingClassWeek, TeachingClass, CoursePath)
+        select(TeachingClassWeek, TeachingClass)
         .join(TeachingClass, TeachingClassWeek.class_id == TeachingClass.id)
         .join(
             TeachingClassStudent,
             TeachingClassStudent.class_id == TeachingClass.id,
         )
-        .join(CoursePath, CoursePath.teaching_class_id == TeachingClass.id)
         .where(
             TeachingClassStudent.user_id == user_id,
             TeachingClassStudent.status == "active",
-            CoursePath.status == CoursePathStatus.published,
+            # 班級第一次可以上課之後，學生端才看得到這門課
+            TeachingClass.first_active_at.is_not(None),
             TeachingClassWeek.status.in_(["published", "completed"]),
             TeachingClassWeek.session_date >= today,
             TeachingClassWeek.session_date <= today + timedelta(days=2),
@@ -148,7 +146,7 @@ def list_student_reminders(
         )
         .order_by(TeachingClassWeek.session_date)
     ).all()
-    for week, teaching_class, path in task_rows:
+    for week, teaching_class in task_rows:
         label = _date_label(week.session_date, today)
         reminders.append(
             CourseReminderStudent(
@@ -166,7 +164,7 @@ def list_student_reminders(
                     week=week.week_number,
                 ),
                 time_label=label,
-                target=f"/dashboard/course/{path.id}",
+                target=f"/dashboard/course/{teaching_class.id}",
                 occurred_at=datetime.combine(
                     week.session_date,
                     teaching_class.start_time,

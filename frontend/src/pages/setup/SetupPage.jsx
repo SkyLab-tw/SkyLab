@@ -60,7 +60,6 @@ const EMPTY_PROXMOX_FORM = {
   api_timeout: "30",
   pool_name: "SkyLab",
   iso_storage: "local",
-  data_storage: "local-lvm",
   default_node: "",
 };
 
@@ -348,7 +347,6 @@ function ProxmoxStep({ alreadyDone, onSaved, onSkip, onBack, onNext }) {
   const stale = Boolean(testResult?.success) && connectionSignature(form) !== testedSignature;
   const tested = Boolean(testResult?.success) && !stale;
   const isoStorages = useMemo(() => (testResult?.storages ?? []).filter((s) => s.can_iso), [testResult]);
-  const dataStorages = useMemo(() => (testResult?.storages ?? []).filter((s) => s.can_vm), [testResult]);
 
   async function handleTest() {
     setError("");
@@ -358,17 +356,15 @@ function ProxmoxStep({ alreadyDone, onSaved, onSkip, onBack, onNext }) {
       setTestResult(result);
       setTestedSignature(connectionSignature(form));
       if (result.success) {
-        // 用偵測到的資料帶入預設值：主節點、第一個能放 ISO／磁碟的 storage
+        // 用偵測到的資料帶入預設值：主節點、第一個能放 ISO 的 storage
+        // （機器磁碟放哪個 storage 之後在「儲存空間」頁設定，這裡不問）
         const primary = result.nodes.find((n) => n.is_primary) ?? result.nodes[0];
         const iso = result.storages.find((s) => s.can_iso && s.storage === "local")
           ?? result.storages.find((s) => s.can_iso);
-        const data = result.storages.find((s) => s.can_vm && s.storage === "local-lvm")
-          ?? result.storages.find((s) => s.can_vm);
         setForm((prev) => ({
           ...prev,
           default_node: pickDefaultNode(prev.default_node, result.nodes),
           iso_storage: iso?.storage ?? prev.iso_storage,
-          data_storage: data?.storage ?? prev.data_storage,
           name: prev.name || (result.is_cluster ? "cluster" : primary?.name || prev.host),
         }));
       }
@@ -394,7 +390,6 @@ function ProxmoxStep({ alreadyDone, onSaved, onSkip, onBack, onNext }) {
         name: form.name.trim(),
         pool_name: form.pool_name.trim() || "SkyLab",
         iso_storage: form.iso_storage.trim() || "local",
-        data_storage: form.data_storage.trim() || "local-lvm",
         default_node: form.default_node.trim() || null,
         is_default: true,
         enabled: true,
@@ -596,21 +591,6 @@ function ProxmoxStep({ alreadyDone, onSaved, onSkip, onBack, onNext }) {
                 <>
                   <input value={form.iso_storage} onChange={(e) => set("iso_storage", e.target.value)} disabled={busy} />
                   <small className={styles.fieldHint}>{t("SetupPage.noIsoStorage")}</small>
-                </>
-              )}
-            </label>
-            <label className={styles.field}>
-              <span>{t("SetupPage.dataStorage")}</span>
-              {dataStorages.length > 0 ? (
-                <select value={form.data_storage} onChange={(e) => set("data_storage", e.target.value)} disabled={busy}>
-                  {dataStorages.map((s) => (
-                    <option key={`${s.storage}-${s.nodes.join(",")}`} value={s.storage}>{storageLabel(s, t)}</option>
-                  ))}
-                </select>
-              ) : (
-                <>
-                  <input value={form.data_storage} onChange={(e) => set("data_storage", e.target.value)} disabled={busy} />
-                  <small className={styles.fieldHint}>{t("SetupPage.noDataStorage")}</small>
                 </>
               )}
             </label>

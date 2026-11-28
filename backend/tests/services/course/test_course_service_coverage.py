@@ -1,4 +1,4 @@
-"""Coverage tests for app.services.course.course_service (CRUD, publishing, student views)."""
+"""Coverage tests for app.services.course.course_service (student class views)."""
 
 from __future__ import annotations
 
@@ -9,32 +9,17 @@ from datetime import UTC, date, datetime, time, timedelta
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from app.exceptions import BadRequestError, NotFoundError
+from app.exceptions import NotFoundError
 from app.models import (
-    CoursePath,
-    CoursePathStatus,
-    CourseQuestion,
-    CourseQuestionType,
-    CourseRoom,
-    CourseTask,
     TeachingClass,
     TeachingClassStatus,
     TeachingClassStudent,
     User,
     UserRole,
 )
-from app.models.course import CourseDifficulty
-from app.schemas.course import (
-    CoursePathCreate,
-    CoursePathUpdate,
-    CourseQuestionCreate,
-    CourseQuestionUpdate,
-    CourseRoomCreate,
-    CourseRoomUpdate,
-    CourseTaskCreate,
-    CourseTaskUpdate,
-)
-from app.services.course import course_service, flag_service
+from app.services.course import course_service
+
+OPENED_AT = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -62,6 +47,9 @@ def _class(
     weekday: int,
     timezone: str = "Asia/Taipei",
     name: str = "Class",
+    first_active_at: datetime | None = OPENED_AT,
+    status: TeachingClassStatus = TeachingClassStatus.active,
+    created_at: datetime | None = None,
 ) -> TeachingClass:
     item = TeachingClass(
         name=name,
@@ -75,8 +63,11 @@ def _class(
         start_time=time(9),
         end_time=time(11),
         timezone=timezone,
-        status=TeachingClassStatus.active,
+        status=status,
+        first_active_at=first_active_at,
     )
+    if created_at is not None:
+        item.created_at = created_at
     session.add(item)
     session.commit()
     return item
@@ -87,372 +78,118 @@ def _enroll(session: Session, teaching_class: TeachingClass, user: User) -> None
     session.commit()
 
 
-def _published_path(
-    session: Session, *, owner: User, teaching_class: TeachingClass | None
-) -> CoursePath:
-    path = CoursePath(
-        title="Path",
-        created_by=owner.id,
-        teaching_class_id=teaching_class.id if teaching_class else None,
-        status=CoursePathStatus.published,
-    )
-    session.add(path)
-    session.commit()
-    return path
-
-
-# ── get_*_or_404 / _touch_path ─────────────────────────────────────────────
-
-
-def test_get_or_404_helpers_raise_for_missing_rows(session: Session) -> None:
-    missing = uuid.uuid4()
-    with pytest.raises(NotFoundError):
-        course_service.get_path_or_404(session, missing)
-    with pytest.raises(NotFoundError):
-        course_service.get_room_or_404(session, missing)
-    with pytest.raises(NotFoundError):
-        course_service.get_task_or_404(session, missing)
-    with pytest.raises(NotFoundError):
-        course_service.get_question_or_404(session, missing)
-    # Touching a missing path is a no-op.
-    course_service._touch_path(session, missing)
-
-
-# ── Path CRUD ──────────────────────────────────────────────────────────────
-
-
-def test_path_crud_lifecycle(session: Session) -> None:
-    teacher = _user(session, "t@example.edu", UserRole.teacher)
-    other = _user(session, "o@example.edu", UserRole.teacher)
-    cls = _class(
+def _term_class(session: Session, owner: User, code: str, **kwargs) -> TeachingClass:
+    return _class(
         session,
-        owner_id=teacher.id,
-        code="c1",
+        owner_id=owner.id,
+        code=code,
         start_date=date(2026, 8, 1),
         end_date=date(2026, 12, 31),
         weekday=0,
-        name="Linux",
+        **kwargs,
     )
 
-    created = course_service.create_path(
-        session,
-        user_id=teacher.id,
-        data=CoursePathCreate(
-            title="Linux Path", description="d", teaching_class_id=cls.id
-        ),
-    )
-    assert created.teaching_class_name == "Linux"
-    assert created.room_count == 0
-    assert created.status == CoursePathStatus.draft
 
-    unlinked = course_service.create_path(
-        session, user_id=other.id, data=CoursePathCreate(title="Free")
-    )
-    assert unlinked.teaching_class_name is None
-
-    # Linking a second path to the same class is rejected.
-    with pytest.raises(BadRequestError):
-        course_service.create_path(
-            session,
-            user_id=teacher.id,
-            data=CoursePathCreate(title="Dup", teaching_class_id=cls.id),
-        )
-
-    all_paths = course_service.list_paths(session)
-    assert {p.id for p in all_paths} == {created.id, unlinked.id}
-    own = course_service.list_paths(session, owner_id=teacher.id)
-    assert [p.id for p in own] == [created.id]
-
-    updated = course_service.update_path(
-        session,
-        path_id=created.id,
-        data=CoursePathUpdate(title="Renamed", description="new"),
-    )
-    assert updated.title == "Renamed"
-    assert updated.description == "new"
-    assert updated.teaching_class_id == cls.id
-
-    # Re-asserting the same class is allowed (excluding itself).
-    same = course_service.update_path(
-        session,
-        path_id=created.id,
-        data=CoursePathUpdate(teaching_class_id=cls.id),
-    )
-    assert same.teaching_class_id == cls.id
-
-    # The other path cannot steal the linked class.
-    with pytest.raises(BadRequestError):
-        course_service.update_path(
-            session,
-            path_id=unlinked.id,
-            data=CoursePathUpdate(teaching_class_id=cls.id),
-        )
-
-    # Explicitly unlinking via None.
-    unlinked_now = course_service.update_path(
-        session,
-        path_id=created.id,
-        data=CoursePathUpdate(teaching_class_id=None),
-    )
-    assert unlinked_now.teaching_class_id is None
-
-    published = course_service.set_path_published(
-        session, path_id=created.id, published=True
-    )
-    assert published.status == CoursePathStatus.published
-    drafted = course_service.set_path_published(
-        session, path_id=created.id, published=False
-    )
-    assert drafted.status == CoursePathStatus.draft
-
-    course_service.delete_path(session, path_id=unlinked.id)
-    assert session.get(CoursePath, unlinked.id) is None
+# ── Which classes a student can see ────────────────────────────────────────
 
 
-def test_ensure_class_path_creates_and_publishes(session: Session) -> None:
-    teacher = _user(session, "t@example.edu", UserRole.teacher)
-    cls = _class(
-        session,
-        owner_id=teacher.id,
-        code="c1",
-        start_date=date(2026, 8, 1),
-        end_date=date(2026, 12, 31),
-        weekday=0,
-    )
-    draft = course_service.ensure_class_path(session, teaching_class=cls)
-    assert draft.status == CoursePathStatus.draft
-    again = course_service.ensure_class_path(session, teaching_class=cls)
-    assert again.id == draft.id
-    assert again.status == CoursePathStatus.draft
-    published = course_service.ensure_class_path(
-        session, teaching_class=cls, published=True
-    )
-    assert published.id == draft.id
-    assert published.status == CoursePathStatus.published
-
-    cls2 = _class(
-        session,
-        owner_id=teacher.id,
-        code="c2",
-        start_date=date(2026, 8, 1),
-        end_date=date(2026, 12, 31),
-        weekday=0,
-    )
-    fresh = course_service.ensure_class_path(
-        session, teaching_class=cls2, published=True
-    )
-    assert fresh.status == CoursePathStatus.published
-
-
-# ── Room / task / question CRUD ───────────────────────────────────────────
-
-
-def test_room_task_question_crud(session: Session) -> None:
-    teacher = _user(session, "t@example.edu", UserRole.teacher)
-    path = course_service.create_path(
-        session, user_id=teacher.id, data=CoursePathCreate(title="P")
-    )
-
-    with pytest.raises(NotFoundError):
-        course_service.list_rooms(session, path_id=uuid.uuid4())
-    with pytest.raises(NotFoundError):
-        course_service.create_room(
-            session, data=CourseRoomCreate(path_id=uuid.uuid4(), title="R")
-        )
-
-    room = course_service.create_room(
-        session,
-        data=CourseRoomCreate(path_id=path.id, title="Room B", order=2),
-    )
-    room_a = course_service.create_room(
-        session,
-        data=CourseRoomCreate(path_id=path.id, title="Room A", order=1),
-    )
-    assert room.task_count == 0
-    listed = course_service.list_rooms(session, path_id=path.id)
-    assert [r.id for r in listed] == [room_a.id, room.id]
-
-    updated_room = course_service.update_room(
-        session,
-        room_id=room.id,
-        data=CourseRoomUpdate(
-            title="Room B2",
-            description="desc",
-            difficulty=CourseDifficulty.hard,
-            category="net",
-            order=5,
-        ),
-    )
-    assert updated_room.title == "Room B2"
-    assert updated_room.difficulty == CourseDifficulty.hard
-    assert updated_room.category == "net"
-    assert updated_room.order == 5
-    untouched = course_service.update_room(
-        session, room_id=room.id, data=CourseRoomUpdate()
-    )
-    assert untouched.title == "Room B2"
-
-    # Tasks
-    with pytest.raises(NotFoundError):
-        course_service.list_tasks(session, room_id=uuid.uuid4())
-    task = course_service.create_task(
-        session, data=CourseTaskCreate(room_id=room.id, title="T1", content="c")
-    )
-    assert course_service.list_tasks(session, room_id=room.id)[0].id == task.id
-    assert course_service.list_rooms(session, path_id=path.id)[1].task_count == 1
-    updated_task = course_service.update_task(
-        session,
-        task_id=task.id,
-        data=CourseTaskUpdate(title="T2", content="c2", order=3),
-    )
-    assert (updated_task.title, updated_task.content, updated_task.order) == (
-        "T2",
-        "c2",
-        3,
-    )
-    same_task = course_service.update_task(
-        session, task_id=task.id, data=CourseTaskUpdate()
-    )
-    assert same_task.title == "T2"
-
-    # Questions
-    with pytest.raises(NotFoundError):
-        course_service.list_questions(session, task_id=uuid.uuid4())
-    with pytest.raises(BadRequestError):
-        course_service.create_question(
-            session,
-            data=CourseQuestionCreate(task_id=task.id, prompt="q", flag=None),
-        )
-    with pytest.raises(BadRequestError):
-        course_service.create_question(
-            session,
-            data=CourseQuestionCreate(task_id=task.id, prompt="q", flag="   "),
-        )
-    flag_q = course_service.create_question(
-        session,
-        data=CourseQuestionCreate(task_id=task.id, prompt="flag?", flag="FLAG{x}"),
-    )
-    stored = session.get(CourseQuestion, flag_q.id)
-    assert stored is not None
-    assert stored.flag_hash == flag_service.hash_flag("FLAG{x}")
-    read_q = course_service.create_question(
-        session,
-        data=CourseQuestionCreate(
-            task_id=task.id,
-            prompt="read",
-            question_type=CourseQuestionType.no_answer,
-            order=1,
-        ),
-    )
-    stored_read = session.get(CourseQuestion, read_q.id)
-    assert stored_read is not None
-    assert stored_read.flag_hash is None
-    listed_q = course_service.list_questions(session, task_id=task.id)
-    assert [q.id for q in listed_q] == [flag_q.id, read_q.id]
-
-    # update_question: blank flag rejected
-    with pytest.raises(BadRequestError):
-        course_service.update_question(
-            session, question_id=flag_q.id, data=CourseQuestionUpdate(flag="  ")
-        )
-    session.rollback()
-    # switching a no_answer question to flag without a flag is rejected
-    with pytest.raises(BadRequestError):
-        course_service.update_question(
-            session,
-            question_id=read_q.id,
-            data=CourseQuestionUpdate(question_type=CourseQuestionType.flag),
-        )
-    session.rollback()
-    # full update with a new flag
-    changed = course_service.update_question(
-        session,
-        question_id=flag_q.id,
-        data=CourseQuestionUpdate(prompt="new?", flag="FLAG{y}", points=50, order=9),
-    )
-    assert (changed.prompt, changed.points, changed.order) == ("new?", 50, 9)
-    refreshed = session.get(CourseQuestion, flag_q.id)
-    assert refreshed is not None
-    assert refreshed.flag_hash == flag_service.hash_flag("FLAG{y}")
-    # switching to no_answer clears the hash
-    to_read = course_service.update_question(
-        session,
-        question_id=flag_q.id,
-        data=CourseQuestionUpdate(question_type=CourseQuestionType.no_answer),
-    )
-    assert to_read.question_type == CourseQuestionType.no_answer
-    cleared = session.get(CourseQuestion, flag_q.id)
-    assert cleared is not None
-    assert cleared.flag_hash is None
-
-    # deletions
-    course_service.delete_question(session, question_id=read_q.id)
-    assert session.get(CourseQuestion, read_q.id) is None
-    course_service.delete_task(session, task_id=task.id)
-    assert session.get(CourseTask, task.id) is None
-    course_service.delete_room(session, room_id=room_a.id)
-    assert session.get(CourseRoom, room_a.id) is None
-
-
-# ── Student views ─────────────────────────────────────────────────────────
-
-
-def test_get_student_class_for_path(session: Session) -> None:
+def test_list_student_classes_newest_first_and_only_opened(session: Session) -> None:
     teacher = _user(session, "t@example.edu", UserRole.teacher)
     student = _user(session, "s@example.edu")
-    unlinked = _published_path(session, owner=teacher, teaching_class=None)
-    assert (
-        course_service.get_student_class_for_path(
-            session, user_id=student.id, path_id=unlinked.id
-        )
-        is None
+    older = _term_class(
+        session, teacher, "older", name="Linux", created_at=datetime(2026, 7, 1, tzinfo=UTC)
     )
-    cls = _class(
+    newer = _term_class(
+        session, teacher, "newer", name="Network", created_at=datetime(2026, 7, 20, tzinfo=UTC)
+    )
+    not_opened = _term_class(
         session,
-        owner_id=teacher.id,
-        code="c1",
-        start_date=date(2026, 8, 1),
-        end_date=date(2026, 12, 31),
-        weekday=0,
+        teacher,
+        "planning",
+        first_active_at=None,
+        status=TeachingClassStatus.provisioning,
     )
-    _enroll(session, cls, student)
-    linked = _published_path(session, owner=teacher, teaching_class=cls)
-    found = course_service.get_student_class_for_path(
-        session, user_id=student.id, path_id=linked.id
-    )
-    assert found is not None and found.id == cls.id
+    not_enrolled = _term_class(session, teacher, "other")
+    for item in (older, newer, not_opened):
+        _enroll(session, item, student)
 
-    summaries = course_service.list_published_paths(session, user_id=student.id)
-    assert [s.id for s in summaries] == [linked.id]
-    assert summaries[0].total_questions == 0
-    assert summaries[0].progress_percent == 0.0
+    rows = course_service.list_student_classes(session, user_id=student.id)
+    assert [(row.id, row.title) for row in rows] == [
+        (newer.id, "Network"),
+        (older.id, "Linux"),
+    ]
+    assert not_enrolled.id not in {row.id for row in rows}
 
 
-def test_get_published_path_and_enrollment_guards(session: Session) -> None:
+def test_opened_class_stays_visible_after_its_status_changes(session: Session) -> None:
+    """補機器、部分失敗或封存都不會讓學生的課消失。"""
     teacher = _user(session, "t@example.edu", UserRole.teacher)
     student = _user(session, "s@example.edu")
-    draft = CoursePath(title="Draft", created_by=teacher.id)
-    session.add(draft)
+    for index, status in enumerate(
+        (
+            TeachingClassStatus.provisioning,
+            TeachingClassStatus.partial_failed,
+            TeachingClassStatus.archived,
+        )
+    ):
+        _enroll(session, _term_class(session, teacher, f"c{index}", status=status), student)
+
+    assert len(course_service.list_student_classes(session, user_id=student.id)) == 3
+
+
+def test_get_student_class_guards(session: Session) -> None:
+    teacher = _user(session, "t@example.edu", UserRole.teacher)
+    student = _user(session, "s@example.edu")
+    outsider = _user(session, "o@example.edu")
+    opened = _term_class(session, teacher, "opened", name="Linux")
+    not_opened = _term_class(session, teacher, "planning", first_active_at=None)
+    _enroll(session, opened, student)
+    _enroll(session, not_opened, student)
+
+    found = course_service.get_student_class_or_404(
+        session, user_id=student.id, class_id=opened.id
+    )
+    assert found.id == opened.id
+    detail = course_service.get_student_class_detail(
+        session, user_id=student.id, class_id=opened.id
+    )
+    assert (detail.id, detail.title) == (opened.id, "Linux")
+
+    for user_id, class_id in (
+        (student.id, uuid.uuid4()),  # 不存在
+        (student.id, not_opened.id),  # 還沒開放給學生
+        (outsider.id, opened.id),  # 不在名單上
+    ):
+        with pytest.raises(NotFoundError):
+            course_service.get_student_class_or_404(
+                session, user_id=user_id, class_id=class_id
+            )
+
+    enrollment = session.get(TeachingClassStudent, _enrollment_id(session, opened, student))
+    assert enrollment is not None
+    enrollment.status = "removed"
+    session.add(enrollment)
     session.commit()
     with pytest.raises(NotFoundError):
-        course_service.get_published_path_or_404(session, draft.id)
+        course_service.get_student_class_detail(
+            session, user_id=student.id, class_id=opened.id
+        )
 
-    unlinked = _published_path(session, owner=teacher, teaching_class=None)
-    course_service.require_path_enrollment(session, path=unlinked, user_id=student.id)
 
-    cls = _class(
-        session,
-        owner_id=teacher.id,
-        code="c1",
-        start_date=date(2026, 8, 1),
-        end_date=date(2026, 12, 31),
-        weekday=0,
-    )
-    linked = _published_path(session, owner=teacher, teaching_class=cls)
-    with pytest.raises(NotFoundError):
-        course_service.require_path_enrollment(session, path=linked, user_id=student.id)
-    _enroll(session, cls, student)
-    course_service.require_path_enrollment(session, path=linked, user_id=student.id)
+def _enrollment_id(
+    session: Session, teaching_class: TeachingClass, user: User
+) -> uuid.UUID:
+    from sqlmodel import select
+
+    return session.exec(
+        select(TeachingClassStudent.id).where(
+            TeachingClassStudent.class_id == teaching_class.id,
+            TeachingClassStudent.user_id == user.id,
+        )
+    ).one()
+
+
+# ── Schedule ───────────────────────────────────────────────────────────────
 
 
 def test_list_student_schedule_states(session: Session) -> None:
@@ -469,6 +206,7 @@ def test_list_student_schedule_states(session: Session) -> None:
         start_date=today - timedelta(days=7),
         end_date=today + timedelta(days=30),
         weekday=today.weekday(),
+        name="Later",
     )
     # Ends today; its weekday was yesterday, so next session is past end_date
     # and the schedule falls back to the most recent session.
@@ -499,16 +237,37 @@ def test_list_student_schedule_states(session: Session) -> None:
         weekday=today.weekday(),
         timezone="Not/AZone",
     )
-    for cls in (later_cls, past_cls, future_cls, orphan_cls):
+    # Opened once but no longer active (re-provisioning) → not on the schedule.
+    paused_cls = _class(
+        session,
+        owner_id=teacher.id,
+        code="paused",
+        start_date=today - timedelta(days=7),
+        end_date=today + timedelta(days=30),
+        weekday=today.weekday(),
+        status=TeachingClassStatus.provisioning,
+    )
+    # Active but never recorded as opened → students do not see it yet.
+    unopened_cls = _class(
+        session,
+        owner_id=teacher.id,
+        code="unopened",
+        start_date=today - timedelta(days=7),
+        end_date=today + timedelta(days=30),
+        weekday=today.weekday(),
+        first_active_at=None,
+    )
+    for cls in (later_cls, past_cls, future_cls, orphan_cls, paused_cls, unopened_cls):
         _enroll(session, cls, student)
-        _published_path(session, owner=teacher, teaching_class=cls)
 
     rows = course_service.list_student_schedule(
         session, user_id=student.id, now=morning
     )
-    by_class = {row.teaching_class_id: row for row in rows}
-    assert future_cls.id not in by_class
+    by_class = {row.id: row for row in rows}
+    assert set(by_class) == {later_cls.id, orphan_cls.id, past_cls.id}
+    assert by_class[later_cls.id].title == "Later"
     assert by_class[later_cls.id].state == "later"
+    assert by_class[later_cls.id].location == "Room A"
     assert by_class[orphan_cls.id].state == "later"
     assert by_class[past_cls.id].state == "available"
     assert by_class[past_cls.id].session_date == today - timedelta(days=1)
@@ -520,12 +279,19 @@ def test_list_student_schedule_states(session: Session) -> None:
     rows = course_service.list_student_schedule(
         session, user_id=student.id, now=afternoon
     )
-    states = {row.teaching_class_id: row.state for row in rows}
+    states = {row.id: row.state for row in rows}
     assert states[later_cls.id] == "ended"
 
     # 02:00 UTC == 10:00 Asia/Taipei: in session.
     rows = course_service.list_student_schedule(
         session, user_id=student.id, now=datetime(2026, 8, 26, 2, 0, tzinfo=UTC)
     )
-    assert {row.teaching_class_id: row.state for row in rows}[later_cls.id] == "now"
+    assert {row.id: row.state for row in rows}[later_cls.id] == "now"
     assert rows[0].state == "now"
+
+    # No enrolled class at all: nothing to look up, empty schedule.
+    stranger = _user(session, "x@example.edu")
+    assert (
+        course_service.list_student_schedule(session, user_id=stranger.id, now=morning)
+        == []
+    )

@@ -308,6 +308,7 @@ function useTabPages(key, limit, { enabled = true } = {}) {
 export default function RequestReviewPage() {
   const { t } = useTranslation("resource");
   const tabs = useTabs();
+  const statusMeta = useStatusMeta();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState("pending");
   const [query, setQuery] = useState("");
@@ -431,6 +432,16 @@ export default function RequestReviewPage() {
   /* 規格調整：機器已刪除（resource_vmid 已清空）就不能核准，後端也會擋 */
   const specResourceGone =
     selected?.source === "spec" && selected?.raw?.resource_exists === false;
+  /* 建立申請的「核准」不能按時，原因寫在按鈕旁：評估放不下用後端回的摘要與原因
+     （後端已依語系寫好），評估讀不到則說明是讀取失敗（錯誤本身顯示在詳情裡） */
+  let approveBlock = null;
+  if (isPending && selected?.source === "vm") {
+    if (context && !context.feasible) {
+      approveBlock = { summary: context.summary, reasons: context.reasons ?? [] };
+    } else if (contextError) {
+      approveBlock = { summary: t("RequestReviewPage.approveBlockedByContextError"), reasons: [] };
+    }
+  }
   /* 系統寫入的刪除標記（CONSUMED_REQUEST_MARKERS）不是審核人留的備註，不顯示 */
   const rawReviewComment = selected?.raw?.review_comment;
   const reviewNote =
@@ -447,16 +458,19 @@ export default function RequestReviewPage() {
         request.title,
         request.user,
         request.userSubtext,
-        request.status,
+        /* 比對畫面上顯示的狀態文字（跟徽章同一份），不是後端的英文代碼 */
+        statusMeta[request.status]?.label ?? request.status,
+        request.progressText,
         request.specText,
         request.timeText,
         request.gpuText,
       ]
+        .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return searchable.includes(q);
     });
-  }, [query, requests]);
+  }, [query, requests, statusMeta, t]);
 
   /* 批量核准／拒絕：只勾得到看得見的待審申請；換分頁、搜尋或刷新後看不到的自動取消勾選 */
   const selectableIds = visibleRequests
@@ -732,6 +746,16 @@ export default function RequestReviewPage() {
                         <span className={styles.doneText}>
                           {t("RequestReviewPage.specResourceGoneHint")}
                         </span>
+                      </div>
+                    )}
+                    {approveBlock && (
+                      <div className={styles.blockedHint} role="status">
+                        <strong>{approveBlock.summary}</strong>
+                        {approveBlock.reasons.length > 0 && (
+                          <ul>
+                            {approveBlock.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                          </ul>
+                        )}
                       </div>
                     )}
                     <label className={styles.commentField}>

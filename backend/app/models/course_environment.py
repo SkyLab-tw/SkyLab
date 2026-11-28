@@ -22,7 +22,6 @@ from .base import get_datetime_utc
 class CourseEnvironmentVersionStatus(str, enum.Enum):
     draft = "draft"
     published = "published"
-    retired = "retired"
 
 
 class CourseEnvironment(SQLModel, table=True):

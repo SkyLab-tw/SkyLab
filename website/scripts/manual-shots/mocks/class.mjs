@@ -373,9 +373,10 @@ export function installClasses(m, opts = {}) {
     ["GET", /^\/api\/v1\/resources\/(\d+)$/, ({ mt }) => ({ vmid: Number(mt[1]), name: `vm-${mt[1]}`, type: "lxc", status: "running", node: "pve-02" })],
 
     // AI assistant
-    ["POST", /^\/api\/v1\/ai\/navigation\/resolve$/, () => ({ __delay: 400, __body: { intent: "guide", confidence: 0.9, action: "answer", answer: aiAnswer(), suggestions: [], steps: [] } })],
-    ["POST", /^\/api\/v1\/ai\/contextual-help\/explain$/, () => ({ __delay: 400, __body: { intent: "next_step", answer: aiAnswer(), target: null, related: [], grounded_in: [], context_level: 2, context_version: 1 } })],
-    ["POST", /^\/api\/v1\/ai\/template-recommendation\/chat$/, () => ({ __delay: 400, __body: { reply: aiAnswer(), sources: [] } })],
+    // Every question goes to the single assistant endpoint; cards (pages, flow, plan) are optional.
+    ["POST", /^\/api\/v1\/ai\/assistant\/chat$/, () => ({ __delay: 400, __body: {
+      request_id: "mock-assistant-1", reply: aiAnswer(), pages: [], flow: null, plan: null, spotlight: null, choices: [], degraded: false,
+    } })],
   ]);
 
   function aiAnswer() {

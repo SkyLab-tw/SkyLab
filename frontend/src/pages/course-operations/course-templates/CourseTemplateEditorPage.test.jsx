@@ -140,6 +140,44 @@ it("draws a connection between two machines through the shared connection dialog
   } finally { vi.useRealTimers(); }
 });
 
+/* 後端發布時才擋的幾項，前端先說清楚：不跳確認框、不送出 */
+const dbNode = { id: "db", name: "DB", role: "database", type: "lxc", sourceType: "custom", customImageRef: "debian", cpu: 1, memory: 1, disk: 8 };
+const peerEdges = (count) => Array.from({ length: count }, (_, index) => ({ id: `edge-${index}`, source: "web", target: "db", direction: "one_way", protocol: "tcp", port: 1000 + index }));
+const publishBtn = () => [...host.querySelectorAll("button")].find((button) => button.textContent.includes("CourseTemplateEditorPage.publishLabel"));
+
+it.each([
+  ["a machine without a name", { nodes: [initial.nodes[0], { ...dbNode, name: "  " }] }, "CourseTemplateEditorPage.machineNameRequiredReason"],
+  ["a machine without a role", { nodes: [{ ...initial.nodes[0], role: "" }] }, "CourseTemplateEditorPage.machineRoleRequiredReason"],
+  ["more connections than the backend accepts", { nodes: [initial.nodes[0], dbNode], edges: peerEdges(7) }, "CourseTemplateEditorPage.tooManyConnections"],
+  ["more published services than the backend accepts", { publications: Array.from({ length: 7 }, (_, index) => ({ id: `pub-${index}`, nodeKey: "web", mode: "port_forward", port: 8000 + index, protocol: "tcp" })) }, "CourseTemplateEditorPage.tooManyPublications"],
+])("refuses to publish %s and says why", async (_label, patch, reason) => {
+  await renderNew({ ...initial, ...patch });
+  await act(async () => publishBtn().click());
+  expect(mocks.toast.error).toHaveBeenCalledWith(reason);
+  expect(mocks.confirm).not.toHaveBeenCalled();
+  expect(mocks.publish).not.toHaveBeenCalled();
+});
+
+it("stops the connection dialog from adding a connection past the limit", async () => {
+  vi.useFakeTimers();
+  try {
+    await renderNew({ ...initial, nodes: [initial.nodes[0], dbNode], edges: peerEdges(6) });
+    const addConnection = [...host.querySelectorAll("button")].find((button) => button.textContent.includes("CourseTemplateEditorPage.addConnectionBtn"));
+    await act(async () => addConnection.click());
+    const peer = [...document.querySelectorAll("[data-guide='connection-dialog-endpoints'] button")].find((button) => button.textContent.includes("ConnectionDialog.intentPeer"));
+    await act(async () => peer.click());
+    const port = document.querySelector("[data-guide='connection-dialog'] [data-port-input]");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(port, "3306");
+      port.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => document.querySelector("[data-guide='connection-dialog'] button[type='submit']").click());
+    await act(async () => vi.advanceTimersByTimeAsync(700));
+    expect(document.querySelector("[data-guide='connection-dialog']").textContent).toContain("CourseTemplateEditorPage.tooManyConnections");
+    expect(mocks.saveDraft.mock.calls.every(([, item]) => item.edges.length === 6)).toBe(true);
+  } finally { vi.useRealTimers(); }
+});
+
 it("removes manual save and publishes a new environment with the latest draft", async () => {
   await renderNew();
   expect(host.textContent).not.toContain("CourseTemplateEditorPage.saveDraftBtn");

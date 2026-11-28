@@ -45,11 +45,11 @@ vi.mock("../services/authSession", () => ({
   })),
 }));
 vi.mock("../services/webPush", () => ({ unsubscribePush: vi.fn(() => Promise.resolve()) }));
-vi.mock("../services/aiContextualHelp", () => ({
-  AiContextualHelpService: { resetSurfaces: vi.fn() },
+vi.mock("../services/aiAssistant", () => ({
+  AiAssistantService: { resetSurfaces: vi.fn() },
 }));
 
-import { AiContextualHelpService } from "../services/aiContextualHelp";
+import { AiAssistantService } from "../services/aiAssistant";
 import { AuthProvider, useAuth } from "./AuthContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -65,7 +65,8 @@ function Grab() {
 
 beforeEach(async () => {
   storage.sessionId = "s1";
-  AiContextualHelpService.resetSurfaces.mockClear();
+  AiAssistantService.resetSurfaces.mockClear();
+  sessionStorage.clear();
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -79,22 +80,48 @@ afterEach(async () => {
 
 test("身分依附的 AI 畫面清單快取在登出、換帳號登入時清掉，同一個 session 重驗不清", async () => {
   // 初次還原 s1：快取歸屬從「無」變成 s1
-  expect(AiContextualHelpService.resetSurfaces).toHaveBeenCalledTimes(1);
+  expect(AiAssistantService.resetSurfaces).toHaveBeenCalledTimes(1);
 
   // 同一個 session 重驗不必清
   await act(async () => { await auth.retrySession(); });
-  expect(AiContextualHelpService.resetSurfaces).toHaveBeenCalledTimes(1);
+  expect(AiAssistantService.resetSurfaces).toHaveBeenCalledTimes(1);
 
   await act(async () => { auth.logout(); });
-  expect(AiContextualHelpService.resetSurfaces).toHaveBeenCalledTimes(2);
+  expect(AiAssistantService.resetSurfaces).toHaveBeenCalledTimes(2);
 
   // 同一分頁用另一個帳號登入，新的 sessionId 也要清
   await act(async () => { await auth.login("student", "pw"); });
-  expect(AiContextualHelpService.resetSurfaces).toHaveBeenCalledTimes(3);
+  expect(AiAssistantService.resetSurfaces).toHaveBeenCalledTimes(3);
 });
 
 test("token 失效被踢出時也清快取", async () => {
-  expect(AiContextualHelpService.resetSurfaces).toHaveBeenCalledTimes(1);
+  expect(AiAssistantService.resetSurfaces).toHaveBeenCalledTimes(1);
   await act(async () => { window.dispatchEvent(new Event("auth:unauthorized")); });
-  expect(AiContextualHelpService.resetSurfaces).toHaveBeenCalledTimes(2);
+  expect(AiAssistantService.resetSurfaces).toHaveBeenCalledTimes(2);
+});
+
+const CHAT_KEY = "skylab:ai-assistant:chat:u";
+
+test("助手對話重新整理後還在：還原 session 與同一個 session 重驗都不清，登出才清", async () => {
+  // beforeEach 已經還原過 s1（相當於重新整理後的第一次驗證）；之後才寫入的對話要留著
+  sessionStorage.setItem(CHAT_KEY, "chat");
+  await act(async () => { await auth.retrySession(); });
+  expect(sessionStorage.getItem(CHAT_KEY)).toBe("chat");
+
+  await act(async () => { auth.logout(); });
+  expect(sessionStorage.getItem(CHAT_KEY)).toBeNull();
+});
+
+test("重新整理後第一次還原 session 不會清掉上一次留下的助手對話", async () => {
+  await act(async () => root.unmount());
+  sessionStorage.setItem(CHAT_KEY, "chat");
+  root = createRoot(host);
+  await act(async () => root.render(<AuthProvider><Grab /></AuthProvider>));
+  expect(sessionStorage.getItem(CHAT_KEY)).toBe("chat");
+});
+
+test("token 失效被踢出時連助手對話一起清", async () => {
+  sessionStorage.setItem(CHAT_KEY, "chat");
+  await act(async () => { window.dispatchEvent(new Event("auth:unauthorized")); });
+  expect(sessionStorage.getItem(CHAT_KEY)).toBeNull();
 });

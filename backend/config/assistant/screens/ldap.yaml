@@ -1,0 +1,107 @@
+# LDAP（/ldap）
+# 原「系統設定」的分頁，2026-09 升格為系統管理底下的獨立頁面。
+# label 一律沿用畫面上的文字，help 取自各欄既有的 hint / placeholder / 確認訊息。
+id: ldap
+path: /ldap
+title: LDAP
+access: admin
+order: 360
+purpose: LDAP / Active Directory 登入的連線、服務帳號與角色對映。
+when_to_use: 要讓師生用學校的 LDAP / Active Directory 帳號登入，或調整誰登入後成為教師、管理員。
+sections:
+  - LDAP / Active Directory 登入
+  - 服務帳號與使用者搜尋
+  - 帳號建立與角色對映
+features:
+  - 啟用 LDAP 登入後，登入頁會顯示「校園帳號」分頁，以校方目錄帳號驗證登入。
+  - 填伺服器 URI、服務帳號 DN 與密碼、使用者搜尋 Base DN 與過濾範本；平台先用服務帳號 bind 搜尋使用者，再以使用者密碼驗證。{username} 會代入登入時輸入的帳號。
+  - 登入成功後以 Email 屬性的值比對本地帳號；「自動建立帳號」關閉時，只有已存在的本地帳號能用 LDAP 登入，開啟時第一次登入會自動建立帳號（預設 student）。
+  - 角色對映：屬於管理員群組 DN 的人是 admin、屬於教師群組 DN 的人是 teacher，其他是 student；LDAP 帳號每次登入都會依群組重算角色。沒填管理員群組 DN 時，已是管理員的帳號不會被降級。
+  - 測試連線：按「測試連線」用目前表單的設定做一次服務帳號 bind，不會儲存；建議啟用前先測。
+  - 儲存：按「儲存 LDAP 設定」送出整頁，有修改時才能按；有修改時會出現「還原」，有未儲存的修改時離開頁面會先跳確認。改了伺服器 URI 或服務帳號 DN 時必須重新輸入服務帳號密碼，否則測試與儲存都會被拒絕。
+  - 設定第一次就載入失敗時顯示錯誤畫面，可以重試。
+elements:
+  - id: ldap.enabled
+    role: toggle
+    label: 啟用 LDAP 登入
+    help: 啟用後登入頁會顯示「校園帳號」分頁。啟用前建議先以「測試連線」驗證設定。
+    section: LDAP / Active Directory 登入
+  - id: ldap.server_uri
+    role: text
+    label: 伺服器 URI
+    help: 例：ldap://dc.example.edu:389 或 ldaps://...。
+    constraints:
+      - 必填
+    section: LDAP / Active Directory 登入
+  - id: ldap.connect_timeout
+    role: number
+    label: 連線逾時（秒）
+    constraints:
+      - 1 到 60
+    section: LDAP / Active Directory 登入
+  - id: ldap.use_starttls
+    role: toggle
+    label: 使用 StartTLS
+    help: 在 ldap:// 連線上升級為加密連線（ldaps:// 不需要）。
+    section: LDAP / Active Directory 登入
+  - id: ldap.bind_dn
+    role: text
+    label: 服務帳號 DN（Bind DN）
+    help: 平台用來 bind 並搜尋使用者的服務帳號，例：CN=svc-skylab,OU=Service,DC=example,DC=edu。改了這一欄必須重新輸入服務帳號密碼。
+    section: 服務帳號與使用者搜尋
+  - id: ldap.bind_password
+    role: text
+    label: 服務帳號密碼
+    help: 服務帳號的密碼；已設定時留空表示不變更。改了伺服器 URI 或服務帳號 DN 時必須重新輸入。
+    section: 服務帳號與使用者搜尋
+    sensitive: true
+  - id: ldap.user_search_base
+    role: text
+    label: 使用者搜尋 Base DN
+    help: 例：OU=Users,DC=example,DC=edu。
+    section: 服務帳號與使用者搜尋
+  - id: ldap.user_filter_template
+    role: text
+    label: 使用者過濾範本
+    help: '{username} 會代入登入時輸入的帳號，例：(sAMAccountName={username}) 或 (uid={username})。'
+    section: 服務帳號與使用者搜尋
+  - id: ldap.email_attribute
+    role: text
+    label: Email 屬性
+    help: 例：mail。登入時用這個屬性的值比對本地帳號，值不像 Email 時登入會被拒絕。
+    section: 服務帳號與使用者搜尋
+  - id: ldap.name_attribute
+    role: text
+    label: 姓名屬性
+    help: 例：displayName。
+    section: 服務帳號與使用者搜尋
+  - id: ldap.auto_create_users
+    role: toggle
+    label: 自動建立帳號
+    help: 開啟時第一次登入自動建立帳號（預設 student）；關閉後僅已存在的本地帳號可用 LDAP 登入。
+    section: 帳號建立與角色對映
+  - id: ldap.teacher_group_dn
+    role: text
+    label: 教師群組 DN（選填）
+    help: 使用者屬於此群組時是 teacher 角色，例：CN=Teachers,OU=Groups,DC=example,DC=edu。LDAP 帳號每次登入都會依群組重算角色。
+    section: 帳號建立與角色對映
+  - id: ldap.admin_group_dn
+    role: text
+    label: 管理員群組 DN（選填）
+    help: 使用者屬於此群組時是 admin 角色，例：CN=SkyLabAdmins,OU=Groups,DC=example,DC=edu。有填時被移出群組的管理員下次登入會降級；沒填時已是管理員的帳號不受影響。
+    section: 帳號建立與角色對映
+  - id: ldap.restore
+    role: button
+    label: 還原
+    help: 有修改時才出現，把表單改回目前已儲存的設定。
+  - id: ldap.test_connection
+    role: button
+    label: 測試連線
+    help: 用目前表單的設定實際做一次服務帳號 bind，不會儲存。
+  - id: ldap.save
+    role: button
+    label: 儲存 LDAP 設定
+    help: 送出整頁設定；沒有修改時不能按。
+related:
+  - path: /admin
+    when: 要查看或調整個別帳號

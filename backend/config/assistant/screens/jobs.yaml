@@ -1,0 +1,70 @@
+# 背景任務（/jobs）
+id: jobs
+path: /jobs
+title: 背景任務
+access: all
+order: 120
+purpose: 追蹤 VM 申請、規格變更、刪除、機器範本、重置、批次佈建、備份與還原等背景任務的狀態與進度，失敗的任務會顯示錯誤。一般使用者只看到自己的任務，管理員看得到全站。
+when_to_use: 想知道建立、規格變更、刪除、重置、備份、還原、機器範本或批次佈建等長時間工作跑到哪，或為什麼失敗。
+sections:
+  - 統計
+  - 篩選
+  - 任務清單
+features:
+  - 清單列出最近 30 天的任務（最多 200 筆），欄位有任務、類型、狀態、進度、建立時間、更新時間與申請人，會自動更新。
+  - 用「類型」篩選（全部類型、VM 申請、規格變更、刪除、機器範本、重置、批次佈建、備份、還原備份）與「狀態」篩選（全部狀態、進行中、等待中、執行中、已完成、失敗、受阻、已取消）；「進行中」包含等待中、執行中與受阻。沒有符合的任務時按「清除篩選」恢復。
+  - 兩組篩選平常是一排可以直接點的選項；畫面放不下時會收成一顆顯示目前選項的按鈕，點開再選。
+  - 「進行中」「已完成」「失敗」三個數字都只算目前篩選出來的清單。
+  - 畫面較窄時依序收起類型、申請人、更新時間、建立時間、進度欄：類型與申請人改顯示在「任務」欄，進度與兩個時間改顯示在「狀態」欄；任務與狀態一直都在。
+  - 這組篩選第一次載入就失敗時顯示錯誤畫面，可以重試，不會當成「沒有符合條件的任務」。
+  - 點一筆任務開啟詳細視窗，看狀態、進度、發起人、建立／更新／完成時間、訊息、詳細欄位、錯誤與輸出；任務還在跑時內容會自動更新。
+  - 這頁只能查看，沒有重試或取消任務的按鈕。
+elements:
+  - id: jobs.stat_scope
+    role: readonly
+    label: 目前篩選
+    help: 「進行中」「已完成」「失敗」三張統計卡上的說明：數字依目前篩選的清單計算，不是全站總數。
+    section: 統計
+  - id: jobs.kind_filter
+    role: select
+    label: 類型
+    help: 只看某一類任務：VM 申請、規格變更、刪除、機器範本、重置、批次佈建、備份或還原備份。畫面放不下時收成一顆顯示目前選項的按鈕，點開再選。
+    section: 篩選
+  - id: jobs.status_filter
+    role: select
+    label: 狀態
+    help: 只看某個狀態的任務；「進行中」包含等待中、執行中與受阻。畫面放不下時收成一顆顯示目前選項的按鈕，點開再選。
+    section: 篩選
+  - id: jobs.status_pending
+    role: readonly
+    label: 等待中
+    help: 已送出、還沒開始執行，例如申請還在等審核或排隊。
+    section: 任務清單
+  - id: jobs.status_running
+    role: readonly
+    label: 執行中
+    section: 任務清單
+  - id: jobs.status_blocked
+    role: readonly
+    label: 受阻
+    help: 目前只有規格變更會出現：已核准，等待申請人按「套用」。
+    section: 任務清單
+  - id: jobs.status_completed
+    role: readonly
+    label: 已完成
+    section: 任務清單
+  - id: jobs.status_failed
+    role: readonly
+    label: 失敗
+    help: 任務執行出錯（申請被拒絕也算），點這筆任務開啟詳細視窗看錯誤內容。
+    section: 任務清單
+  - id: jobs.status_cancelled
+    role: readonly
+    label: 已取消
+    help: 申請被取消，或申請時段過了還沒審核而失效。
+    section: 任務清單
+related:
+  - path: /my-requests
+    when: 開通失敗要重試申請
+  - path: /my-resources
+    when: 任務完成，要使用機器

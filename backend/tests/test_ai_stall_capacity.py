@@ -462,13 +462,12 @@ async def test_body_ingress_lifetime_and_prefix_bypass(monkeypatch):
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-@pytest.mark.parametrize("kind", ["classroom", "course"])
-async def test_actual_asgi_ws_db_lookup_keeps_http_loop_available(monkeypatch, kind):
+async def test_actual_asgi_ws_db_lookup_keeps_http_loop_available(monkeypatch):
     import uuid
 
     from fastapi import WebSocket
 
-    from app.api.websocket import classroom, course_progress
+    from app.api.websocket import classroom
 
     gate = threading.Event()
     entered = threading.Event()
@@ -476,7 +475,6 @@ async def test_actual_asgi_ws_db_lookup_keeps_http_loop_available(monkeypatch, k
     actor = user()
     actor.id = uuid.uuid4()
     actor.role = "teacher"
-    path_id = uuid.uuid4()
 
     class Session:
         def lookup(self, *_):
@@ -499,28 +497,19 @@ async def test_actual_asgi_ws_db_lookup_keeps_http_loop_available(monkeypatch, k
         await kwargs["websocket"].send_json({"ready": True})
         await kwargs["websocket"].close()
 
-    module = classroom if kind == "classroom" else course_progress
-    monkeypatch.setattr(module, "get_ws_current_user", authenticate)
-    if kind == "classroom":
-        monkeypatch.setattr(
-            classroom.classroom_service,
-            "get_class_ids_of_user",
-            lambda *_: [db.lookup()],
-        )
-        monkeypatch.setattr(classroom.classroom_presence_hub, "register", register)
-    else:
-        monkeypatch.setattr(course_progress.course_progress_hub, "register", register)
+    monkeypatch.setattr(classroom, "get_ws_current_user", authenticate)
+    monkeypatch.setattr(
+        classroom.classroom_service,
+        "get_class_ids_of_user",
+        lambda *_: [db.lookup()],
+    )
+    monkeypatch.setattr(classroom.classroom_presence_hub, "register", register)
 
     app = FastAPI()
 
     @app.websocket("/ws")
     async def endpoint(websocket: WebSocket):
-        if kind == "classroom":
-            await classroom.classroom_presence_proxy(websocket, "token")
-        else:
-            await course_progress.course_progress_proxy(
-                websocket, str(path_id), "token"
-            )
+        await classroom.classroom_presence_proxy(websocket, "token")
 
     @app.get("/health")
     async def health():

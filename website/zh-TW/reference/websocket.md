@@ -9,7 +9,6 @@
 | `/ws/jobs` | 呼叫者自己的任務紀錄（克隆、批次建置、重置、刪除）即時狀態，供任務頁使用。 | 存取 token 放在 `token` 查詢參數 |
 | `/ws/classroom` | 教室會話的信令通道：老師廣播、學生畫面分送與控制。 | 存取 token 放在 `token` 查詢參數 |
 | `/ws/classroom/{session_id}/watch` | 把一位學生的畫面以 VNC 分送到老師的教室畫面。 | 存取 token 放在 `token` 查詢參數 |
-| `/ws/courses/paths/{path_id}/progress` | 某條課程路徑的進度更新，供老師儀表板使用。 | 存取 token 放在 `token` 查詢參數 |
 
 注意事項：
 

@@ -132,6 +132,8 @@ def get_application_templates_cached(session: Session) -> list[dict[str, Any]]:
             "cores": item.cores,
             "memory_mb": item.memory_mb,
             "disk_gb": item.disk_gb,
+            # 申請表單只在來源需要 GPU 時才顯示 GPU 欄位，規劃挑來源時要知道
+            "requires_gpu": bool(item.requires_gpu),
         }
         for item in catalog
     ]

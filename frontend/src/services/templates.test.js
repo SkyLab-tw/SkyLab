@@ -30,6 +30,17 @@ beforeEach(() => {
 });
 
 describe("TemplatesService", () => {
+  test("get 讀單一範本（含是不是 Windows）", async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes(200, { id: "tpl-1", is_windows: true }));
+
+    await expect(TemplatesService.get("tpl-1")).resolves.toEqual({ id: "tpl-1", is_windows: true });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/v1/templates/tpl-1");
+    expect(url).not.toContain("/clone");
+    expect(init.method).toBe("GET");
+  });
+
   test("clone 以 POST 送出克隆參數", async () => {
     fetchMock.mockResolvedValueOnce(jsonRes(200, { tasks: [] }));
 

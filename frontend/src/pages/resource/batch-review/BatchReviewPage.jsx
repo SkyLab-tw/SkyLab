@@ -94,18 +94,18 @@ function uniqueJoin(values) {
 
 function toRow(jobs, t) {
   const first = jobs[0];
-  const isClassGroup = Boolean(first.teaching_class_id);
   const resourceTypes = [...new Set(jobs.map((job) => job.resource_type).filter(Boolean))];
 
   return {
-    id: isClassGroup ? `class-${first.teaching_class_id}-${first.status}` : `job-${first.id}`,
+    id: `class-${first.teaching_class_id}-${first.status}`,
     jobs,
-    classId: isClassGroup ? first.teaching_class_id : null,
+    classId: first.teaching_class_id,
     className: first.teaching_class_name ?? null,
     status: first.status,
     reviewStatus: REVIEW_STATUS_BY_STATUS[first.status] ?? "other",
+    /* 班級只有一個機器節點時，標題用它的主機名稱前綴 */
     title:
-      isClassGroup && jobs.length > 1
+      jobs.length > 1
         ? t("BatchReviewPage.classGroupLabel", {
             className: first.teaching_class_name ?? t("BatchReviewPage.defaultClassName"),
             count: jobs.length,
@@ -131,22 +131,18 @@ function toRow(jobs, t) {
   };
 }
 
-/** 同一個班級、同一個狀態的機器節點併成一列審核（本來就是一起核准的） */
+/** 批次一定屬於某個班級（後端的 teaching_class_id 必填）；
+    同一個班級、同一個狀態的機器節點併成一列審核（本來就是一起核准的） */
 function buildRows(jobs, t) {
-  const rows = [];
   const classGroups = new Map();
 
   for (const job of jobs) {
-    if (!job.teaching_class_id) {
-      rows.push(toRow([job], t));
-      continue;
-    }
     const key = `${job.teaching_class_id}::${job.status}`;
     const group = classGroups.get(key) ?? [];
     group.push(job);
     classGroups.set(key, group);
   }
-  for (const group of classGroups.values()) rows.push(toRow(group, t));
+  const rows = [...classGroups.values()].map((group) => toRow(group, t));
 
   return rows.sort(
     (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
@@ -215,6 +211,8 @@ const RECENT_PARAMS = Object.freeze({ limit: BATCH_LIST_LIMIT });
 const PENDING_PARAMS = Object.freeze({ status: "pending_review", limit: BATCH_LIST_LIMIT });
 /* 週期排程預覽取幾段時段（與 service 預設相同） */
 const PREVIEW_COUNT = 5;
+/* 後端的上限（schemas/batch_provision.py 的 review_comment）；輸入時就擋住，不必等送出才報錯 */
+const REVIEW_COMMENT_MAX_LENGTH = 500;
 const NO_JOBS = Object.freeze([]);
 
 function filterByTab(rows, tab) {
@@ -340,12 +338,10 @@ export default function BatchReviewPage() {
 
   const submitReview = async (decision) => {
     if (!selected || reviewing || selected.reviewStatus !== "pending") return;
-    const target = selected.classId
-      ? t("BatchReviewPage.reviewTargetClass", {
-          className: selected.className ?? t("BatchReviewPage.defaultClassName"),
-          count: selected.jobs.length,
-        })
-      : t("BatchReviewPage.reviewTargetDefault");
+    const target = t("BatchReviewPage.reviewTargetClass", {
+      className: selected.className ?? t("BatchReviewPage.defaultClassName"),
+      count: selected.jobs.length,
+    });
     const approved = decision === "approved";
     const ok = await confirm({
       title: approved ? t("BatchReviewPage.approveTitle") : t("BatchReviewPage.rejectTitle"),
@@ -360,11 +356,8 @@ export default function BatchReviewPage() {
     setReviewing(true);
     try {
       const body = { decision, review_comment: comment.trim() || null };
-      if (selected.classId) {
-        await BatchProvisionService.reviewClass(selected.classId, body);
-      } else {
-        await BatchProvisionService.review(selected.jobs[0].id, body);
-      }
+      /* 審核以班級為單位：同一個班級目前待審的機器節點一起處理 */
+      await BatchProvisionService.reviewClass(selected.classId, body);
       toast.success(
         approved ? t("BatchReviewPage.approvedToast") : t("BatchReviewPage.rejectedToast"),
       );
@@ -447,7 +440,7 @@ export default function BatchReviewPage() {
                     onClick={() => { setSelectedId(row.id); setComment(""); }}
                   >
                     <div className={styles.rowIcon}>
-                      <MIcon name={row.classId ? "school" : "dns"} size={20} />
+                      <MIcon name="school" size={20} />
                     </div>
                     <div className={styles.rowMain}>
                       <span className={styles.rowName}>{row.title}</span>
@@ -482,11 +475,7 @@ export default function BatchReviewPage() {
                   <div className={styles.infoGrid}>
                     <InfoRow
                       label={t("BatchReviewPage.infoLabelType")}
-                      value={
-                        selected.classId
-                          ? t("BatchReviewPage.typeClassBatch")
-                          : t("BatchReviewPage.typeSingleBatch")
-                      }
+                      value={t("BatchReviewPage.typeClassBatch")}
                     />
                     <InfoRow label={t("BatchReviewPage.infoLabelCourse")} value={selected.className} />
                     <InfoRow
@@ -605,6 +594,7 @@ export default function BatchReviewPage() {
                         onChange={(event) => setComment(event.target.value)}
                         disabled={reviewing}
                         placeholder={t("BatchReviewPage.commentPlaceholder")}
+                        maxLength={REVIEW_COMMENT_MAX_LENGTH}
                       />
                     </label>
                     <div className={styles.rowActions}>

@@ -19,7 +19,7 @@ If the summary cannot be loaded, the row is hidden instead of showing old number
 
 ### Find specific records
 
-1. Type in the search box ("Search action details, IP..."). It looks for your text in the **Details** column and runs on its own shortly after you stop typing.
+1. Type in the search box ("Search action details, IP..."). It looks for your text in the **Details** and **IP** columns and runs on its own shortly after you stop typing.
 2. Choose an action in the **All Actions** list. Each action is shown with its category in brackets, for example `[auth] login_failed`.
 3. Choose a person in the **All Users** list. It only lists users who appear in the log.
 4. Pick a **Start date** and an **End date**.
@@ -50,7 +50,7 @@ If the summary cannot be loaded, the row is hidden instead of showing old number
 
 | Field | Meaning | Notes |
 | --- | --- | --- |
-| Search | Part of the text in **Details** | Not case-sensitive; runs automatically after a short pause in typing |
+| Search | Part of the text in **Details** or **IP** | Not case-sensitive; runs automatically after a short pause in typing |
 | All Actions | One action type, shown as `[category] action` | Categories: auth, resource, request, user, firewall, gateway, system, ai, other |
 | All Users | One person who appears in the log | Automatic actions have no user |
 | Start date / End date | Date range, inclusive | Cannot be later than today |
